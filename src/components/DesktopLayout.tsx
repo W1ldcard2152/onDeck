@@ -137,8 +137,13 @@ const DesktopLayout: React.FC = () => {
 
           {/* Responsive Cards Grid */}
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4 md:gap-6 auto-rows-min">
-            {/* Dynamic Task Card */}
-            <TaskCard userId={user.id} />
+  {/* Dynamic Task Card */}
+  <TaskCard 
+    userId={user.id} 
+    onRefetch={() => {
+      // This will be called when the TaskCard needs to refresh
+    }} 
+  />
 
             {/* Projects Card */}
             <DashboardCard

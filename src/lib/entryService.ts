@@ -21,15 +21,23 @@ export class EntryService {
         throw new Error('Type is required');
       }
 
+      // Debug: Log user ID comparison
+      const { data: { user } } = await supabase.auth.getUser();
+      console.log('Auth check:', {
+        entry_user_id: entry.user_id,
+        auth_user_id: user?.id,
+        do_they_match: entry.user_id === user?.id
+      });
+
       // Create the item with explicit data structure
       const itemData = {
-        title: entry.title.trim(),  // Ensure title is trimmed
+        title: entry.title.trim(),
         user_id: entry.user_id,
         item_type: entry.type,
         is_archived: false
       };
 
-      console.log('Attempting to create item with data:', itemData);
+      console.log('Creating item with data:', itemData);
 
       const { data: createdItem, error: itemError } = await supabase
         .from('items')
@@ -48,26 +56,42 @@ export class EntryService {
       if (createdItem) {
         switch (entry.type) {
           case 'note': {
-            const { error: noteError } = await supabase
+            const noteData = {
+              id: createdItem.id,
+              content: entry.content || '',
+              description: entry.description || null
+            };
+            console.log('Creating note with data:', noteData);
+            
+            const { data: createdNote, error: noteError } = await supabase
               .from('notes')
-              .insert([{
-                id: createdItem.id,
-                content: entry.content || ''
-              }]);
+              .insert([noteData])
+              .select('*')
+              .single();
 
+            console.log('Note creation result:', { data: createdNote, error: noteError });
             if (noteError) throw noteError;
             break;
           }
           case 'task': {
-            const { error: taskError } = await supabase
+            const taskData = {
+              id: createdItem.id,
+              do_date: null,
+              due_date: entry.due_date,
+              status: 'active',
+              is_project_converted: false,
+              converted_project_id: null,
+              description: entry.description || null
+            };
+            console.log('Creating task with data:', taskData);
+            
+            const { data: createdTask, error: taskError } = await supabase
               .from('tasks')
-              .insert([{
-                id: createdItem.id,
-                due_date: entry.due_date,
-                status: 'active',
-                is_project_converted: false
-              }]);
+              .insert([taskData])
+              .select('*')
+              .single();
 
+            console.log('Task creation result:', { data: createdTask, error: taskError });
             if (taskError) throw taskError;
             break;
           }

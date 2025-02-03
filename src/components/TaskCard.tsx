@@ -6,10 +6,17 @@ import { DashboardCard } from './DashboardCard';
 
 interface TaskCardProps {
   userId: string;
+  onRefetch?: () => void;
 }
 
-export const TaskCard: React.FC<TaskCardProps> = ({ userId }) => {
-  const { tasks, isLoading, error } = useTasks(userId, 5);
+export const TaskCard: React.FC<TaskCardProps> = ({ userId, onRefetch }) => {
+  const { tasks, isLoading, error, refetch } = useTasks(userId, 5);
+
+  React.useEffect(() => {
+    if (onRefetch) {
+      onRefetch();
+    }
+  }, [onRefetch]);
 
   if (error) {
     return (
@@ -55,6 +62,9 @@ export const TaskCard: React.FC<TaskCardProps> = ({ userId }) => {
               >
                 <div className="flex flex-col">
                   <span className="font-medium">{task.items.title}</span>
+                  {task.description && (
+                    <span className="text-sm text-gray-600">{task.description}</span>
+                  )}
                   <span className="text-sm text-gray-500">
                     Due: {task.due_date ? new Date(task.due_date).toLocaleDateString() : 'No due date'}
                   </span>
