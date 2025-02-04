@@ -1,12 +1,11 @@
 'use client'
 
-import React from 'react';
-import AuthUI from './Auth';
+import React, { useEffect, useState } from 'react';
+import AuthUI from '../Auth';
 import { Search, Bell, Settings, Home, CheckSquare, BookOpen, 
-         FolderOpen, Calendar, Star, Database, Menu } from 'lucide-react';
-import { TaskCard } from './TaskCard';
-import { NewEntryForm } from './NewEntryForm';
-import { DashboardCard } from './DashboardCard';
+         FolderOpen, Calendar, Star, Database, Menu, Clock } from 'lucide-react';
+import { NewEntryForm } from '../NewEntryForm';
+import { DashboardCard } from '../DashboardCard';
 import { useSupabaseAuth } from '@/hooks/useSupabaseAuth';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import { 
@@ -16,8 +15,91 @@ import {
   DropdownMenuTrigger 
 } from '@/components/ui/dropdown-menu';
 import { useRouter } from 'next/navigation';
+import { isAfter, isBefore, startOfTomorrow, format } from 'date-fns';
 
-// Separate UserMenu component
+// Type definitions
+interface Task {
+  id: string;
+  do_date: string | null;
+  due_date: string | null;
+  status: string;
+  is_project_converted: boolean;
+  converted_project_id: string | null;
+}
+
+interface Item {
+  id: string;
+  user_id: string;
+  title: string;
+  created_at: string;
+  updated_at: string;
+  item_type: string;
+  is_archived: boolean;
+  archived_at: string | null;
+  archive_reason: string | null;
+}
+
+interface TaskWithDetails extends Task {
+  title: string;
+  created_at: string;
+  user_id: string;
+}
+
+interface TaskCardProps {
+  task: TaskWithDetails;
+}
+
+interface TaskListProps {
+  tasks: TaskWithDetails[];
+  title: string;
+}
+
+// Mock data - replace with API calls later
+const mockTasks: Task[] = [
+  {
+    id: "23704fce-8406-4f9f-a331-c5ca4d3c411c",
+    do_date: null,
+    due_date: null,
+    status: "active",
+    is_project_converted: false,
+    converted_project_id: null
+  },
+  {
+    id: "3c3b07c4-9bf2-4e74-9437-399767adef23",
+    do_date: null,
+    due_date: "2025-02-05",
+    status: "active",
+    is_project_converted: false,
+    converted_project_id: null
+  }
+];
+
+const mockItems: Item[] = [
+  {
+    id: "23704fce-8406-4f9f-a331-c5ca4d3c411c",
+    user_id: "25f70130-bc30-47ab-8ec3-165869870ff4",
+    title: "Example Task 1",
+    created_at: "2025-02-02 16:50:18.795016+00",
+    updated_at: "2025-02-02 16:50:18.795016+00",
+    item_type: "task",
+    is_archived: false,
+    archived_at: null,
+    archive_reason: null
+  },
+  {
+    id: "3c3b07c4-9bf2-4e74-9437-399767adef23",
+    user_id: "25f70130-bc30-47ab-8ec3-165869870ff4",
+    title: "Test Task 001",
+    created_at: "2025-02-02 18:02:26.727525+00",
+    updated_at: "2025-02-02 18:02:26.727525+00",
+    item_type: "task",
+    is_archived: false,
+    archived_at: null,
+    archive_reason: null
+  }
+];
+
+// UserMenu component
 export const UserMenu = () => {
   const supabase = createClientComponentClient();
   const router = useRouter();
@@ -39,7 +121,7 @@ export const UserMenu = () => {
   );
 };
 
-// Separate NavItem component
+// NavItem component
 interface NavItemProps {
   icon: React.ReactNode;
   label: string;
@@ -56,9 +138,116 @@ const NavItem: React.FC<NavItemProps> = ({ icon, label, active = false }) => {
   );
 };
 
+// Task Components
+const TaskCard: React.FC<TaskCardProps> = ({ task }) => {
+  const hasDueDate = Boolean(task.due_date);
+  const hasDoDate = Boolean(task.do_date);
+
+  return (
+    <div className="p-4 mb-2 bg-white rounded-lg shadow hover:shadow-md transition-shadow">
+      <h3 className="text-lg font-medium text-gray-900">{task.title}</h3>
+      
+      <div className="mt-2 flex flex-wrap gap-3">
+        {hasDoDate && task.do_date && (
+          <div className="flex items-center text-sm text-gray-600">
+            <Calendar className="w-4 h-4 mr-1" />
+            <span>Do: {format(new Date(task.do_date), 'MMM d, yyyy')}</span>
+          </div>
+        )}
+        
+        {hasDueDate && task.due_date && (
+          <div className="flex items-center text-sm text-gray-600">
+            <Clock className="w-4 h-4 mr-1" />
+            <span>Due: {format(new Date(task.due_date), 'MMM d, yyyy')}</span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+const TaskList: React.FC<TaskListProps> = ({ tasks, title }) => {
+  if (tasks.length === 0) {
+    return (
+      <div className="p-6">
+        <h2 className="text-xl font-semibold mb-4">{title}</h2>
+        <div className="text-gray-500 text-center py-8">No active tasks</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-6">
+      <h2 className="text-xl font-semibold mb-4">{title}</h2>
+      <div className="space-y-3">
+        {tasks.map((task) => (
+          <TaskCard key={task.id} task={task} />
+        ))}
+      </div>
+    </div>
+  );
+};
+
 // Main DesktopLayout component
 const DesktopLayout: React.FC = () => {
   const { user, loading } = useSupabaseAuth();
+  const [tasks, setTasks] = useState<TaskWithDetails[]>([]);
+  const [taskLoading, setTaskLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        const itemsMap = new Map(
+          mockItems.map(item => [item.id, item])
+        );
+
+        const combinedTasks: TaskWithDetails[] = mockTasks
+          .filter(task => !task.is_project_converted)
+          .map(task => {
+            const item = itemsMap.get(task.id);
+            if (!item) return null;
+
+            return {
+              ...task,
+              title: item.title,
+              created_at: item.created_at,
+              user_id: item.user_id
+            };
+          })
+          .filter((task): task is TaskWithDetails => task !== null);
+
+        setTasks(combinedTasks);
+        setTaskLoading(false);
+      } catch (err) {
+        console.error('Error loading tasks:', err);
+        setError('Failed to load tasks. Please try again later.');
+        setTaskLoading(false);
+      }
+    };
+
+    if (user) {
+      loadData();
+    }
+  }, [user]);
+
+  const activeTasks = tasks.filter(task => {
+    if (task.status !== 'active') return false;
+    if (task.is_project_converted) return false;
+    
+    const now = new Date();
+    const tomorrow = startOfTomorrow();
+
+    if (task.do_date && isAfter(new Date(task.do_date), tomorrow)) {
+      return false;
+    }
+
+    if (task.due_date && isBefore(new Date(task.due_date), now)) {
+      return false;
+    }
+
+    return true;
+  });
 
   if (loading) {
     return (
@@ -137,13 +326,31 @@ const DesktopLayout: React.FC = () => {
 
           {/* Responsive Cards Grid */}
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4 md:gap-6 auto-rows-min">
-  {/* Dynamic Task Card */}
-  <TaskCard 
-    userId={user.id} 
-    onRefetch={() => {
-      // This will be called when the TaskCard needs to refresh
-    }} 
-  />
+            {/* Active Tasks Card */}
+            <DashboardCard
+              title="Active Tasks"
+              content={
+                taskLoading ? (
+                  <div className="animate-pulse">
+                    <div className="h-24 bg-gray-200 rounded mb-3"></div>
+                    <div className="h-24 bg-gray-200 rounded"></div>
+                  </div>
+                ) : error ? (
+                  <div className="text-red-600 p-4">{error}</div>
+                ) : (
+                  <div className="space-y-3">
+                    {activeTasks.map((task) => (
+                      <TaskCard key={task.id} task={task} />
+                    ))}
+                    {activeTasks.length === 0 && (
+                      <div className="text-gray-500 text-center py-4">
+                        No active tasks
+                      </div>
+                    )}
+                  </div>
+                )
+              }
+            />
 
             {/* Projects Card */}
             <DashboardCard

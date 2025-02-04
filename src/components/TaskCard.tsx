@@ -1,82 +1,37 @@
 'use client'
 
 import React from 'react';
-import { useTasks } from '@/hooks/useTasks';
-import { DashboardCard } from './DashboardCard';
+import { TaskWithDetails } from '@/lib/types';
+import { format } from 'date-fns';
+import { Calendar, Clock } from 'lucide-react';
 
 interface TaskCardProps {
-  userId: string;
-  onRefetch?: () => void;
+  task: TaskWithDetails;
 }
 
-export const TaskCard: React.FC<TaskCardProps> = ({ userId, onRefetch }) => {
-  const { tasks, isLoading, error, refetch } = useTasks(userId, 5);
-
-  React.useEffect(() => {
-    if (onRefetch) {
-      onRefetch();
-    }
-  }, [onRefetch]);
-
-  if (error) {
-    return (
-      <DashboardCard
-        title="Active Tasks"
-        content={
-          <div className="text-red-500">
-            Failed to load tasks: {error.message}
-          </div>
-        }
-      />
-    );
-  }
-
-  if (isLoading) {
-    return (
-      <DashboardCard
-        title="Active Tasks"
-        content={
-          <div className="space-y-3">
-            <div className="h-12 bg-gray-100 animate-pulse rounded-lg" />
-            <div className="h-12 bg-gray-100 animate-pulse rounded-lg" />
-          </div>
-        }
-      />
-    );
-  }
+export const TaskCard: React.FC<TaskCardProps> = ({ task }) => {
+  const hasDueDate = Boolean(task.due_date);
+  const hasDoDate = Boolean(task.do_date);
 
   return (
-    <DashboardCard
-      title="Active Tasks"
-      content={
-        <div className="space-y-3">
-          {tasks.length === 0 ? (
-            <div className="text-gray-500 text-center py-4">
-              No active tasks
-            </div>
-          ) : (
-            tasks.map((task) => (
-              <div 
-                key={task.id}
-                className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
-              >
-                <div className="flex flex-col">
-                  <span className="font-medium">{task.items.title}</span>
-                  {task.description && (
-                    <span className="text-sm text-gray-600">{task.description}</span>
-                  )}
-                  <span className="text-sm text-gray-500">
-                    Due: {task.due_date ? new Date(task.due_date).toLocaleDateString() : 'No due date'}
-                  </span>
-                </div>
-                <div className="text-sm text-gray-500">
-                  {task.status}
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-      }
-    />
+    <div className="p-4 mb-2 bg-white rounded-lg shadow hover:shadow-md transition-shadow">
+      <h3 className="text-lg font-medium text-gray-900">{task.title}</h3>
+      
+      <div className="mt-2 flex flex-wrap gap-3">
+        {hasDoDate && (
+          <div className="flex items-center text-sm text-gray-600">
+            <Calendar className="w-4 h-4 mr-1" />
+            <span>Do: {format(new Date(task.do_date!), 'MMM d, yyyy')}</span>
+          </div>
+        )}
+        
+        {hasDueDate && (
+          <div className="flex items-center text-sm text-gray-600">
+            <Clock className="w-4 h-4 mr-1" />
+            <span>Due: {format(new Date(task.due_date!), 'MMM d, yyyy')}</span>
+          </div>
+        )}
+      </div>
+    </div>
   );
 };
