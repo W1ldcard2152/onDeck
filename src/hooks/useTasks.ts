@@ -1,24 +1,12 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { supabase } from '@/lib/supabase'
-
-interface Task {
-  id: string
-  do_date: string | null
-  due_date: string | null
-  status: string | null
-  is_project_converted: boolean | null
-  converted_project_id: string | null
-  description: string | null
-  items: {
-    title: string
-    user_id: string
-  }
-}
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
+import type { TaskWithDetails } from '@/lib/types'
+import type { Database } from '@/types/database.types'
 
 export function useTasks(userId: string, limit: number = 10) {
-  const [tasks, setTasks] = useState<Task[]>([])
+  const [tasks, setTasks] = useState<TaskWithDetails[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<Error | null>(null)
 
@@ -27,59 +15,77 @@ export function useTasks(userId: string, limit: number = 10) {
       console.log('Fetching tasks for user:', userId)
       setIsLoading(true)
       
-      // First, get items for this user
-      const { data: itemsData, error: itemsError } = await supabase
-        .from('items')
-        .select('id, title, user_id')
-        .eq('user_id', userId)
-        .eq('item_type', 'task');
-      
-      console.log('Items found:', itemsData);
-      
-      if (itemsError) throw itemsError;
-      
-      if (!itemsData?.length) {
-        setTasks([]);
-        return;
-      }
-      
-      // Then get tasks for these items
-      const itemIds = itemsData.map(item => item.id);
-      const { data: tasksData, error: tasksError } = await supabase
+      const supabase = createClientComponentClient<Database>()
+
+      // Query tasks and join with items using task.id = item.id
+      const { data: taskData, error: taskError } = await supabase
         .from('tasks')
-        .select('*')
-        .in('id', itemIds)
-        .order('due_date', { ascending: true });
-        
-      console.log('Tasks found:', tasksData);
-      
-      if (tasksError) throw tasksError;
-      
-      if (!tasksData) {
-        setTasks([]);
-        return;
+        .select(`
+          *,
+          item:items!inner (
+            id,
+            user_id,
+            title,
+            created_at,
+            updated_at,
+            item_type,
+            is_archived,
+            archived_at,
+            archive_reason
+          )
+        `)
+        .eq('items.user_id', userId)
+        .eq('items.item_type', 'task')
+        .eq('items.is_archived', false)
+        .eq('is_project_converted', false)
+        .order('due_date', { ascending: true })
+        .limit(limit)
+
+      console.log('Task query result:', {
+        success: !taskError,
+        count: taskData?.length,
+        data: taskData
+      })
+
+      if (taskError) {
+        throw taskError
       }
 
-      // Combine the data
-      const combinedTasks = tasksData.map(task => ({
-        ...task,
-        items: itemsData.find(item => item.id === task.id)
-      }));
+      if (!taskData) {
+        setTasks([])
+        return
+      }
 
-      console.log('Combined tasks:', combinedTasks);
+      // Transform the data into the expected format
+      const combinedTasks = taskData.map(task => ({
+        id: task.id,
+        do_date: task.do_date,
+        due_date: task.due_date,
+        status: task.status || 'active',
+        description: task.description,
+        is_project_converted: task.is_project_converted,
+        converted_project_id: task.converted_project_id,
+        item: task.item // This should now be a single item due to the foreign key relationship
+      })) as TaskWithDetails[]
+
+      console.log('Processed tasks:', {
+        count: combinedTasks.length,
+        tasks: combinedTasks
+      })
       
-      setTasks(combinedTasks as Task[]);
+      setTasks(combinedTasks)
+      
     } catch (e) {
-      console.error('Error in fetchTasks:', e);
-      setError(e instanceof Error ? e : new Error('An error occurred while fetching tasks'));
+      console.error('Error in fetchTasks:', e)
+      setError(e instanceof Error ? e : new Error('An error occurred while fetching tasks'))
     } finally {
-      setIsLoading(false);
+      setIsLoading(false)
     }
   }
 
   useEffect(() => {
-    fetchTasks();
-  }, [userId, limit]);
+    fetchTasks()
+  }, [userId, limit])
 
-  return { tasks, isLoading, error, refetch: fetchTasks };
+  return { tasks, isLoading, error, refetch: fetchTasks }
 }

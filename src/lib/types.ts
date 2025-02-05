@@ -1,4 +1,4 @@
-// src/lib/types.ts
+// types.ts
 export interface Task {
   id: string;
   do_date: string | null;
@@ -6,6 +6,7 @@ export interface Task {
   status: 'active' | 'completed' | 'archived';
   is_project_converted: boolean;
   converted_project_id: string | null;
+  description: string | null;
 }
 
 export interface Item {
@@ -21,7 +22,5 @@ export interface Item {
 }
 
 export interface TaskWithDetails extends Task {
-  title: string;
-  created_at: string;
-  user_id: string;
+  item: Item;
 }
