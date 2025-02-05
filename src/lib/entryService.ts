@@ -1,3 +1,4 @@
+// EntryService.ts
 'use client'
 
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
@@ -58,8 +59,8 @@ export class EntryService {
           case 'note': {
             const noteData = {
               id: createdItem.id,
-              content: entry.content || '',
-              description: entry.description || null
+              content: entry.content || ''
+              // Remove description as it's not in the notes table schema
             };
             console.log('Creating note with data:', noteData);
             

@@ -2,24 +2,8 @@
 
 import { useState, useEffect } from 'react'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
-import type { NoteWithDetails, Item } from '@/lib/types'
+import type { NoteWithDetails } from '@/lib/types'
 import type { Database } from '@/types/database.types'
-
-interface RawNoteResponse {
-  id: string;
-  content: string | null;
-  items: {
-    id: string;
-    user_id: string;
-    title: string;
-    created_at: string;
-    updated_at: string;
-    item_type: 'task' | 'note' | 'project';
-    is_archived: boolean;
-    archived_at: string | null;
-    archive_reason: string | null;
-  }[];
-}
 
 export function useNotes(userId: string, limit: number = 10) {
   const [notes, setNotes] = useState<NoteWithDetails[]>([])
@@ -33,19 +17,34 @@ export function useNotes(userId: string, limit: number = 10) {
       
       const supabase = createClientComponentClient<Database>()
 
-      // Query notes and their associated items
+      // Query notes and join with items
       const { data: noteData, error: noteError } = await supabase
         .from('notes')
         .select(`
-          id,
-          content,
-          items!inner (*)
+          *,
+          item:items!inner (
+            id,
+            user_id,
+            title,
+            created_at,
+            updated_at,
+            item_type,
+            is_archived,
+            archived_at,
+            archive_reason
+          )
         `)
         .eq('items.user_id', userId)
         .eq('items.item_type', 'note')
         .eq('items.is_archived', false)
-        .order('created_at', { foreignTable: 'items' })
+        .order('created_at', { foreignTable: 'items', ascending: false })
         .limit(limit)
+
+      console.log('Notes query result:', {
+        success: !noteError,
+        count: noteData?.length,
+        data: noteData
+      })
 
       if (noteError) {
         console.error('Note query error:', noteError)
@@ -58,27 +57,14 @@ export function useNotes(userId: string, limit: number = 10) {
         return
       }
 
-      console.log('Raw note data:', noteData)
-
       // Transform the data into the expected format
-      const combinedNotes: NoteWithDetails[] = (noteData as RawNoteResponse[])
-        .filter(note => note.items?.length > 0)
-        .map(note => ({
-          id: note.id,
-          content: note.content,
-          item: {
-            id: note.items[0].id,
-            user_id: note.items[0].user_id,
-            title: note.items[0].title,
-            created_at: note.items[0].created_at,
-            updated_at: note.items[0].updated_at,
-            item_type: note.items[0].item_type,
-            is_archived: note.items[0].is_archived,
-            archived_at: note.items[0].archived_at,
-            archive_reason: note.items[0].archive_reason
-          }
-        }))
+      const combinedNotes = noteData.map(note => ({
+        id: note.id,
+        content: note.content,
+        item: note.item
+      })) as NoteWithDetails[]
 
+      console.log('Processed notes:', combinedNotes)
       setNotes(combinedNotes)
       
     } catch (e) {

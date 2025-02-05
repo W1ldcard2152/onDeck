@@ -7,7 +7,8 @@ import { Search, Bell, Settings, Home, CheckSquare, BookOpen,
 import { NewEntryForm } from '../NewEntryForm';
 import { DashboardCard } from '../DashboardCard';
 import { useSupabaseAuth } from '@/hooks/useSupabaseAuth';
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+// Update Supabase import to use the React client
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import { 
   DropdownMenu, 
   DropdownMenuContent, 
@@ -20,10 +21,12 @@ import { useTasks } from '@/hooks/useTasks';
 import { useNotes } from '@/hooks/useNotes';
 import { TaskCard } from '../TaskCard';
 import { NoteCard } from '../NoteCard';
+import { TaskTable } from '../TaskTable';
 import type { TaskWithDetails } from '@/lib/types';
+import type { Database } from '@/types/database.types';
 
 const UserMenu = () => {
-  const supabase = createClientComponentClient();
+  const supabase = createClientComponentClient<Database>();
   const router = useRouter();
 
   const handleSignOut = async () => {
@@ -33,7 +36,9 @@ const UserMenu = () => {
 
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger className="w-8 h-8 bg-gray-200 rounded-full cursor-pointer hover:ring-2 hover:ring-gray-300 transition-all" />
+      <DropdownMenuTrigger asChild>
+        <button className="w-8 h-8 bg-gray-200 rounded-full cursor-pointer hover:ring-2 hover:ring-gray-300 transition-all" />
+      </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
         <DropdownMenuItem onClick={handleSignOut}>
           Sign out
@@ -52,14 +57,14 @@ interface NavItemProps {
 
 const NavItem: React.FC<NavItemProps> = ({ icon, label, active = false, onClick }) => {
   return (
-    <div 
+    <button 
       onClick={onClick}
-      className={`flex items-center px-3 py-2 rounded-lg cursor-pointer
+      className={`flex w-full items-center px-3 py-2 rounded-lg cursor-pointer text-left
         ${active ? 'bg-blue-600' : 'hover:bg-gray-800'}`}
     >
       <span className="mr-3">{icon}</span>
       <span>{label}</span>
-    </div>
+    </button>
   );
 };
 
@@ -85,11 +90,14 @@ const DesktopLayout: React.FC = () => {
   return <AuthenticatedLayout userId={user.id} />;
 };
 
-const AuthenticatedLayout: React.FC<{ userId: string }> = ({ userId }) => {
+interface AuthenticatedLayoutProps {
+  userId: string;
+}
+
+const AuthenticatedLayout: React.FC<AuthenticatedLayoutProps> = ({ userId }) => {
   const [activeSection, setActiveSection] = React.useState<'dashboard' | 'tasks' | 'notes'>('dashboard');
-  const { tasks, isLoading: taskLoading, error: taskError } = useTasks(userId);
+  const { tasks, isLoading: taskLoading, error: taskError, refetch } = useTasks(userId);
   const { notes, isLoading: notesLoading, error: notesError } = useNotes(userId);
-  const router = useRouter();
 
   const activeTasks = React.useMemo(() => {
     return (tasks || []).filter((task): task is TaskWithDetails => {
@@ -169,13 +177,34 @@ const AuthenticatedLayout: React.FC<{ userId: string }> = ({ userId }) => {
       
       case 'tasks':
         return (
-          <div className="bg-white rounded-xl shadow-sm p-6">
-            <h2 className="text-lg font-semibold mb-4">All Tasks</h2>
-            {/* Table view will go here */}
-            <div className="space-y-3">
-              {activeTasks.map((task) => (
-                <TaskCard key={task.id} task={task} />
-              ))}
+          <div className="bg-white rounded-xl shadow-sm">
+            <div className="p-6 border-b">
+              <div className="flex items-center justify-between">
+                <h2 className="text-lg font-semibold">All Tasks</h2>
+                <NewEntryForm onEntryCreated={() => refetch()} />
+              </div>
+            </div>
+            <div className="p-6">
+              {taskLoading ? (
+                <div className="animate-pulse space-y-4">
+                  <div className="h-8 bg-gray-200 rounded w-full"></div>
+                  <div className="h-8 bg-gray-200 rounded w-full"></div>
+                  <div className="h-8 bg-gray-200 rounded w-full"></div>
+                </div>
+              ) : taskError ? (
+                <div className="text-red-600 p-4">
+                  {taskError instanceof Error ? taskError.message : 'Error loading tasks'}
+                </div>
+              ) : !tasks || tasks.length === 0 ? (
+                <div className="text-gray-500 text-center py-8">
+                  No tasks yet. Create your first task to get started!
+                </div>
+              ) : (
+                <TaskTable 
+                  tasks={tasks} 
+                  onTaskUpdate={refetch}
+                />
+              )}
             </div>
           </div>
         );
@@ -183,8 +212,10 @@ const AuthenticatedLayout: React.FC<{ userId: string }> = ({ userId }) => {
       case 'notes':
         return (
           <div className="bg-white rounded-xl shadow-sm p-6">
-            <h2 className="text-lg font-semibold mb-4">All Notes</h2>
-            {/* Table view will go here */}
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold">All Notes</h2>
+              <NewEntryForm onEntryCreated={() => refetch()} />
+            </div>
             <div className="space-y-3">
               {notes?.map((note) => (
                 <NoteCard key={note.id} note={note} />
@@ -234,7 +265,10 @@ const AuthenticatedLayout: React.FC<{ userId: string }> = ({ userId }) => {
       <div className="flex-1 flex flex-col min-w-0">
         <header className="h-16 bg-white border-b flex items-center justify-between px-4">
           <div className="flex items-center flex-1">
-            <button className="md:hidden p-2 mr-2 hover:bg-gray-100 rounded-lg">
+            <button 
+              type="button"
+              className="md:hidden p-2 mr-2 hover:bg-gray-100 rounded-lg"
+            >
               <Menu size={20} className="text-gray-600" />
             </button>
             <div className="relative w-full max-w-md">
@@ -248,10 +282,16 @@ const AuthenticatedLayout: React.FC<{ userId: string }> = ({ userId }) => {
           </div>
           
           <div className="flex items-center space-x-4">
-            <button className="p-2 hover:bg-gray-100 rounded-lg">
+            <button 
+              type="button"
+              className="p-2 hover:bg-gray-100 rounded-lg"
+            >
               <Bell size={20} className="text-gray-600" />
             </button>
-            <button className="p-2 hover:bg-gray-100 rounded-lg">
+            <button 
+              type="button"
+              className="p-2 hover:bg-gray-100 rounded-lg"
+            >
               <Settings size={20} className="text-gray-600" />
             </button>
             <UserMenu />
@@ -265,7 +305,6 @@ const AuthenticatedLayout: React.FC<{ userId: string }> = ({ userId }) => {
                activeSection === 'tasks' ? 'Tasks' : 
                activeSection === 'notes' ? 'Notes' : ''}
             </h1>
-            <NewEntryForm onEntryCreated={() => {}} />
           </div>
 
           {renderContent()}
