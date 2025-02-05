@@ -3,7 +3,7 @@
 import React from 'react';
 import AuthUI from '../Auth';
 import { Search, Bell, Settings, Home, CheckSquare, BookOpen, 
-         FolderOpen, Calendar, Star, Database, Menu } from 'lucide-react';
+         FolderOpen, Calendar, Star, Menu } from 'lucide-react';
 import { NewEntryForm } from '../NewEntryForm';
 import { DashboardCard } from '../DashboardCard';
 import { useSupabaseAuth } from '@/hooks/useSupabaseAuth';
@@ -17,10 +17,11 @@ import {
 import { useRouter } from 'next/navigation';
 import { isAfter, isBefore, startOfTomorrow } from 'date-fns';
 import { useTasks } from '@/hooks/useTasks';
+import { useNotes } from '@/hooks/useNotes';
 import { TaskCard } from '../TaskCard';
+import { NoteCard } from '../NoteCard';
 import type { TaskWithDetails } from '@/lib/types';
 
-// UserMenu component
 const UserMenu = () => {
   const supabase = createClientComponentClient();
   const router = useRouter();
@@ -42,22 +43,29 @@ const UserMenu = () => {
   );
 };
 
-// NavItem component
 interface NavItemProps {
   icon: React.ReactNode;
   label: string;
   active?: boolean;
+  onClick?: () => void;
 }
 
-const NavItem: React.FC<NavItemProps> = ({ icon, label, active = false }) => {
+const NavItem: React.FC<NavItemProps> = ({ icon, label, active = false, onClick }) => {
   return (
-    <div className={`flex items-center px-3 py-2 rounded-lg cursor-pointer
-      ${active ? 'bg-blue-600' : 'hover:bg-gray-800'}`}>
+    <div 
+      onClick={onClick}
+      className={`flex items-center px-3 py-2 rounded-lg cursor-pointer
+        ${active ? 'bg-blue-600' : 'hover:bg-gray-800'}`}
+    >
       <span className="mr-3">{icon}</span>
       <span>{label}</span>
     </div>
   );
 };
+
+const NavDivider = () => (
+  <div className="my-2 border-t border-gray-700" />
+);
 
 const DesktopLayout: React.FC = () => {
   const { user, loading } = useSupabaseAuth();
@@ -78,46 +86,25 @@ const DesktopLayout: React.FC = () => {
 };
 
 const AuthenticatedLayout: React.FC<{ userId: string }> = ({ userId }) => {
+  const [activeSection, setActiveSection] = React.useState<'dashboard' | 'tasks' | 'notes'>('dashboard');
   const { tasks, isLoading: taskLoading, error: taskError } = useTasks(userId);
+  const { notes, isLoading: notesLoading, error: notesError } = useNotes(userId);
+  const router = useRouter();
 
   const activeTasks = React.useMemo(() => {
-    // Add debug logging
-    console.log('Filtering tasks:', {
-      inputTasks: tasks,
-      tasksLength: tasks?.length
-    });
-  
     return (tasks || []).filter((task): task is TaskWithDetails => {
-      if (!task) {
-        console.log('Task is null or undefined');
-        return false;
-      }
-      
-      if (!task.item) {
-        console.log('Task has no item:', task);
-        return false;
-      }
-  
-      if (task.status !== 'active') {
-        console.log('Task not active:', task.status);
-        return false;
-      }
-      
-      if (task.is_project_converted) {
-        console.log('Task is project converted');
-        return false;
-      }
+      if (!task) return false;
+      if (task.status !== 'active') return false;
+      if (task.is_project_converted) return false;
       
       const now = new Date();
       const tomorrow = startOfTomorrow();
   
       if (task.do_date && isAfter(new Date(task.do_date), tomorrow)) {
-        console.log('Task do_date is after tomorrow');
         return false;
       }
   
       if (task.due_date && isBefore(new Date(task.due_date), now)) {
-        console.log('Task due_date is before now');
         return false;
       }
   
@@ -125,46 +112,87 @@ const AuthenticatedLayout: React.FC<{ userId: string }> = ({ userId }) => {
     });
   }, [tasks]);
 
-  const renderTasksContent = () => {
-    if (taskLoading) {
-      return (
-        <div className="animate-pulse">
-          <div className="h-24 bg-gray-200 rounded mb-3"></div>
-          <div className="h-24 bg-gray-200 rounded"></div>
-        </div>
-      );
+  const renderContent = () => {
+    switch (activeSection) {
+      case 'dashboard':
+        return (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6 auto-rows-min">
+            <DashboardCard
+              title="Active Tasks"
+              content={
+                <div className="space-y-3">
+                  {taskLoading ? (
+                    <div className="animate-pulse space-y-3">
+                      <div className="h-24 bg-gray-200 rounded"></div>
+                      <div className="h-24 bg-gray-200 rounded"></div>
+                    </div>
+                  ) : taskError ? (
+                    <div className="text-red-600 p-4">
+                      {taskError instanceof Error ? taskError.message : 'Error loading tasks'}
+                    </div>
+                  ) : activeTasks.length === 0 ? (
+                    <div className="text-gray-500 text-center py-4">No active tasks</div>
+                  ) : (
+                    activeTasks.slice(0, 5).map((task) => (
+                      <TaskCard key={task.id} task={task} />
+                    ))
+                  )}
+                </div>
+              }
+            />
+            
+            <DashboardCard
+              title="Recent Notes"
+              content={
+                <div className="space-y-3">
+                  {notesLoading ? (
+                    <div className="animate-pulse space-y-3">
+                      <div className="h-24 bg-gray-200 rounded"></div>
+                      <div className="h-24 bg-gray-200 rounded"></div>
+                    </div>
+                  ) : notesError ? (
+                    <div className="text-red-600 p-4">
+                      {notesError instanceof Error ? notesError.message : 'Error loading notes'}
+                    </div>
+                  ) : !notes || notes.length === 0 ? (
+                    <div className="text-gray-500 text-center py-4">No notes yet</div>
+                  ) : (
+                    notes.slice(0, 5).map((note) => (
+                      <NoteCard key={note.id} note={note} preview={true} />
+                    ))
+                  )}
+                </div>
+              }
+            />
+          </div>
+        );
+      
+      case 'tasks':
+        return (
+          <div className="bg-white rounded-xl shadow-sm p-6">
+            <h2 className="text-lg font-semibold mb-4">All Tasks</h2>
+            {/* Table view will go here */}
+            <div className="space-y-3">
+              {activeTasks.map((task) => (
+                <TaskCard key={task.id} task={task} />
+              ))}
+            </div>
+          </div>
+        );
+      
+      case 'notes':
+        return (
+          <div className="bg-white rounded-xl shadow-sm p-6">
+            <h2 className="text-lg font-semibold mb-4">All Notes</h2>
+            {/* Table view will go here */}
+            <div className="space-y-3">
+              {notes?.map((note) => (
+                <NoteCard key={note.id} note={note} />
+              ))}
+            </div>
+          </div>
+        );
     }
-  
-    if (taskError) {
-      return (
-        <div className="text-red-600 p-4">
-          {taskError instanceof Error ? taskError.message : 'An error occurred loading tasks'}
-        </div>
-      );
-    }
-  
-    // Add debug logging
-    console.log('Rendering tasks:', {
-      totalTasks: tasks?.length,
-      activeTasks: activeTasks.length,
-      firstActiveTask: activeTasks[0],
-    });
-  
-    if (!activeTasks || activeTasks.length === 0) {
-      return (
-        <div className="text-gray-500 text-center py-4">
-          No active tasks
-        </div>
-      );
-    }
-  
-    return (
-      <div className="space-y-3">
-        {activeTasks.map((task) => (
-          <TaskCard key={task.id} task={task} />
-        ))}
-      </div>
-    );
   };
 
   return (
@@ -176,13 +204,30 @@ const AuthenticatedLayout: React.FC<{ userId: string }> = ({ userId }) => {
         </div>
 
         <nav className="space-y-2">
-          <NavItem icon={<Home size={20} />} label="Dashboard" active={true} />
-          <NavItem icon={<CheckSquare size={20} />} label="Tasks" />
+          <NavItem 
+            icon={<Home size={20} />} 
+            label="Dashboard" 
+            active={activeSection === 'dashboard'} 
+            onClick={() => setActiveSection('dashboard')}
+          />
+          <NavItem 
+            icon={<CheckSquare size={20} />} 
+            label="Tasks" 
+            active={activeSection === 'tasks'}
+            onClick={() => setActiveSection('tasks')}
+          />
+          <NavItem 
+            icon={<BookOpen size={20} />} 
+            label="Notes" 
+            active={activeSection === 'notes'}
+            onClick={() => setActiveSection('notes')}
+          />
+          
+          <NavDivider />
+          
           <NavItem icon={<FolderOpen size={20} />} label="Projects" />
-          <NavItem icon={<BookOpen size={20} />} label="Notes" />
-          <NavItem icon={<Calendar size={20} />} label="Journal" />
           <NavItem icon={<Star size={20} />} label="Habits" />
-          <NavItem icon={<Database size={20} />} label="Vault" />
+          <NavItem icon={<Calendar size={20} />} label="Journal" />
         </nav>
       </div>
 
@@ -215,59 +260,15 @@ const AuthenticatedLayout: React.FC<{ userId: string }> = ({ userId }) => {
 
         <main className="flex-1 p-4 md:p-6 overflow-auto">
           <div className="flex items-center justify-between mb-6">
-            <h1 className="text-2xl font-semibold">Dashboard</h1>
+            <h1 className="text-2xl font-semibold">
+              {activeSection === 'dashboard' ? 'Dashboard' : 
+               activeSection === 'tasks' ? 'Tasks' : 
+               activeSection === 'notes' ? 'Notes' : ''}
+            </h1>
             <NewEntryForm onEntryCreated={() => {}} />
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4 md:gap-6 auto-rows-min">
-            <DashboardCard
-              title="Active Tasks"
-              content={renderTasksContent()}
-            />
-
-            <DashboardCard
-              title="Current Projects"
-              content={
-                <div className="space-y-3">
-                  <div className="p-3 bg-gray-50 rounded-lg">
-                    <div className="flex justify-between mb-2">
-                      <span>Personal Website</span>
-                      <span className="text-sm text-gray-500">75%</span>
-                    </div>
-                    <div className="w-full bg-gray-200 rounded-full h-2">
-                      <div className="bg-blue-600 h-2 rounded-full" style={{width: '75%'}}></div>
-                    </div>
-                  </div>
-                </div>
-              }
-            />
-
-            <DashboardCard
-              title="Recent Notes"
-              content={
-                <div className="space-y-3">
-                  <div className="p-3 bg-gray-50 rounded-lg">
-                    <div className="text-sm text-gray-500 mb-1">Project Ideas</div>
-                    <div className="line-clamp-2">Some notes about potential project ideas and implementation details...</div>
-                  </div>
-                </div>
-              }
-            />
-
-            <DashboardCard
-              title="Daily Habits"
-              content={
-                <div className="space-y-3">
-                  <div className="p-3 bg-gray-50 rounded-lg">
-                    <div className="flex items-center justify-between">
-                      <span>Morning Routine</span>
-                      <span className="text-sm text-green-500">Done</span>
-                    </div>
-                  </div>
-                </div>
-              }
-            />
-          </div>
+          {renderContent()}
         </main>
       </div>
     </div>

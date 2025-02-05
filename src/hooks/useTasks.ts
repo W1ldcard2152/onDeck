@@ -17,7 +17,7 @@ export function useTasks(userId: string, limit: number = 10) {
       
       const supabase = createClientComponentClient<Database>()
 
-      // Query tasks and join with items using task.id = item.id
+      // Query tasks and join with items
       const { data: taskData, error: taskError } = await supabase
         .from('tasks')
         .select(`
@@ -38,6 +38,7 @@ export function useTasks(userId: string, limit: number = 10) {
         .eq('items.item_type', 'task')
         .eq('items.is_archived', false)
         .eq('is_project_converted', false)
+        .or('due_date.gte.now, due_date.is.null')
         .order('due_date', { ascending: true })
         .limit(limit)
 
@@ -65,15 +66,21 @@ export function useTasks(userId: string, limit: number = 10) {
         description: task.description,
         is_project_converted: task.is_project_converted,
         converted_project_id: task.converted_project_id,
-        item: task.item // This should now be a single item due to the foreign key relationship
+        item: task.item
       })) as TaskWithDetails[]
 
-      console.log('Processed tasks:', {
-        count: combinedTasks.length,
-        tasks: combinedTasks
-      })
-      
-      setTasks(combinedTasks)
+      // Sort tasks: tasks with due dates first, sorted by date
+      // then tasks without due dates, sorted by creation date
+      const sortedTasks = combinedTasks.sort((a, b) => {
+        if (a.due_date && b.due_date) {
+          return new Date(a.due_date).getTime() - new Date(b.due_date).getTime();
+        }
+        if (a.due_date) return -1;
+        if (b.due_date) return 1;
+        return new Date(a.item.created_at).getTime() - new Date(b.item.created_at).getTime();
+      });
+
+      setTasks(sortedTasks)
       
     } catch (e) {
       console.error('Error in fetchTasks:', e)

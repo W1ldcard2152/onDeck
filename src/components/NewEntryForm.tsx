@@ -16,9 +16,6 @@ import type { EntryType } from '@/types/database.types';
 import { DayPicker } from "react-day-picker";
 import "react-day-picker/dist/style.css";
 
-// Import the calendar styles
-import 'react-day-picker/dist/style.css';
-
 interface NewEntryFormProps {
   onEntryCreated?: (entry: any) => void;
 }
@@ -28,17 +25,15 @@ export const NewEntryForm: React.FC<NewEntryFormProps> = ({ onEntryCreated }) =>
   const [open, setOpen] = useState(false);
   const [type, setType] = useState<EntryType>('task');
   const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
+  const [content, setContent] = useState('');
   const [dueDate, setDueDate] = useState<Date>();
   const [priority, setPriority] = useState('medium');
   const [status] = useState('active');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [content, setContent] = useState('');
 
   const resetForm = () => {
     setTitle('');
-    setDescription('');
     setContent('');
     setDueDate(undefined);
     setPriority('medium');
@@ -68,11 +63,10 @@ export const NewEntryForm: React.FC<NewEntryFormProps> = ({ onEntryCreated }) =>
         title: title.trim(),
         type,
         user_id: user.id,
-        description: description.trim() || null,
-        content: content.trim() || null,
-        due_date: dueDate?.toISOString() || null,
-        status,
-        priority: type === 'task' || type === 'project' ? priority : null,
+        content: type === 'note' ? content.trim() : null,
+        due_date: type === 'task' ? dueDate?.toISOString() || null : null,
+        status: type === 'task' ? status : null,
+        priority: type === 'task' ? priority : null,
       };
 
       const data = await EntryService.createEntry(newEntry);
@@ -119,36 +113,35 @@ export const NewEntryForm: React.FC<NewEntryFormProps> = ({ onEntryCreated }) =>
   const renderTypeSpecificFields = () => {
     switch (type) {
       case 'task':
-      case 'project':
         return (
           <>
             <div className="space-y-2">
-  <Label>Due Date</Label>
-  <Popover>
-    <PopoverTrigger asChild>
-      <Button
-        variant="outline"
-        className={cn(
-          "w-full justify-start text-left font-normal",
-          !dueDate && "text-muted-foreground"
-        )}
-      >
-        <CalendarIcon className="mr-2 h-4 w-4" />
-        {dueDate ? format(dueDate, "PPP") : "Pick a date"}
-      </Button>
-    </PopoverTrigger>
-    <PopoverContent className="w-auto p-0">
-      <div className="border rounded-md bg-white p-3">
-        <DayPicker
-          mode="single"
-          selected={dueDate}
-          onSelect={setDueDate}
-          showOutsideDays={true}
-        />
-      </div>
-    </PopoverContent>
-  </Popover>
-</div>
+              <Label>Due Date</Label>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className={cn(
+                      "w-full justify-start text-left font-normal",
+                      !dueDate && "text-muted-foreground"
+                    )}
+                  >
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {dueDate ? format(dueDate, "PPP") : "Pick a date"}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0">
+                  <div className="border rounded-md bg-white p-3">
+                    <DayPicker
+                      mode="single"
+                      selected={dueDate}
+                      onSelect={setDueDate}
+                      showOutsideDays={true}
+                    />
+                  </div>
+                </PopoverContent>
+              </Popover>
+            </div>
             <div className="space-y-2">
               <Label htmlFor="priority">Priority</Label>
               <Select value={priority} onValueChange={setPriority}>
@@ -165,7 +158,6 @@ export const NewEntryForm: React.FC<NewEntryFormProps> = ({ onEntryCreated }) =>
           </>
         );
       case 'note':
-      case 'journal':
         return (
           <div className="space-y-2">
             <Label htmlFor="content">Content</Label>
@@ -217,10 +209,7 @@ export const NewEntryForm: React.FC<NewEntryFormProps> = ({ onEntryCreated }) =>
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="task">Task</SelectItem>
-                <SelectItem value="project">Project</SelectItem>
                 <SelectItem value="note">Note</SelectItem>
-                <SelectItem value="habit">Habit</SelectItem>
-                <SelectItem value="journal">Journal</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -233,17 +222,6 @@ export const NewEntryForm: React.FC<NewEntryFormProps> = ({ onEntryCreated }) =>
               onChange={(e) => setTitle(e.target.value)}
               placeholder="Enter title"
               required
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="description">Description</Label>
-            <Textarea
-              id="description"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Enter description"
-              className="h-24"
             />
           </div>
 

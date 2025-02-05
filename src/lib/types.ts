@@ -24,3 +24,13 @@ export interface Item {
 export interface TaskWithDetails extends Task {
   item: Item;
 }
+
+// types.ts
+export interface Note {
+  id: string;
+  content: string | null;
+}
+
+export interface NoteWithDetails extends Note {
+  item: Item;
+}
