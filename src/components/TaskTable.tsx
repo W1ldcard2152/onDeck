@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { format } from 'date-fns';
-import { Check, MoreHorizontal } from 'lucide-react';
+import { Check, MoreHorizontal, Link } from 'lucide-react';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import {
   Table,
@@ -18,11 +18,11 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
-import type { TaskWithDetails } from '@/lib/types';
+import { Badge } from "@/components/ui/badge";
 import type { Database } from '@/types/database.types';
 
 interface TaskTableProps {
-  tasks: TaskWithDetails[];
+  tasks: Database['public']['Tables']['entries']['Row'][];
   onTaskUpdate: () => void;
 }
 
@@ -31,30 +31,31 @@ export const TaskTable: React.FC<TaskTableProps> = ({ tasks, onTaskUpdate }) => 
   const [error, setError] = useState<string | null>(null);
   const supabase = createClientComponentClient<Database>();
 
-  // Sort tasks: active first, then by due date, then by creation date
-  const sortedTasks = [...tasks].sort((a, b) => {
-    // First by status
-    if (a.status === 'active' && b.status !== 'active') return -1;
-    if (a.status !== 'active' && b.status === 'active') return 1;
-    
-    // Then by due date
-    if (a.due_date && b.due_date) {
-      return new Date(a.due_date).getTime() - new Date(b.due_date).getTime();
+  const getPriorityColor = (priority: string | null) => {
+    switch (priority) {
+      case 'high': return 'bg-orange-100 text-orange-800';
+      case 'medium': return 'bg-yellow-100 text-yellow-800';
+      case 'low': return 'bg-blue-100 text-blue-800';
+      default: return 'bg-gray-100 text-gray-800';
     }
-    if (a.due_date) return -1;
-    if (b.due_date) return 1;
-    
-    // Finally by creation date
-    return new Date(b.item.created_at).getTime() - new Date(a.item.created_at).getTime();
-  });
+  };
 
-  const updateTaskStatus = async (taskId: string, newStatus: 'active' | 'completed') => {
+  const getStatusColor = (status: string | null) => {
+    switch (status) {
+      case 'on_deck': return 'bg-yellow-100 text-yellow-800';
+      case 'active': return 'bg-green-100 text-green-800';
+      case 'completed': return 'bg-gray-100 text-gray-800';
+      default: return 'bg-gray-100 text-gray-800';
+    }
+  };
+
+  const updateTaskStatus = async (taskId: string, newStatus: Database['public']['Tables']['entries']['Row']['status']) => {
     setLoading(prev => ({ ...prev, [taskId]: true }));
     setError(null);
     
     try {
       const { error: updateError } = await supabase
-        .from('tasks')
+        .from('entries')
         .update({ status: newStatus })
         .eq('id', taskId);
 
@@ -69,25 +70,22 @@ export const TaskTable: React.FC<TaskTableProps> = ({ tasks, onTaskUpdate }) => 
     }
   };
 
-  const archiveTask = async (taskId: string) => {
+  const updateTaskPriority = async (taskId: string, newPriority: Database['public']['Tables']['entries']['Row']['priority']) => {
     setLoading(prev => ({ ...prev, [taskId]: true }));
     setError(null);
     
     try {
-      const { error: archiveError } = await supabase
-        .from('items')
-        .update({ 
-          is_archived: true,
-          archived_at: new Date().toISOString()
-        })
+      const { error: updateError } = await supabase
+        .from('entries')
+        .update({ priority: newPriority })
         .eq('id', taskId);
 
-      if (archiveError) throw archiveError;
+      if (updateError) throw updateError;
       onTaskUpdate();
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Error archiving task';
+      const message = err instanceof Error ? err.message : 'Error updating task priority';
       setError(message);
-      console.error('Error archiving task:', err);
+      console.error('Error updating task priority:', err);
     } finally {
       setLoading(prev => ({ ...prev, [taskId]: false }));
     }
@@ -106,36 +104,99 @@ export const TaskTable: React.FC<TaskTableProps> = ({ tasks, onTaskUpdate }) => 
           <TableRow>
             <TableHead className="w-12">Status</TableHead>
             <TableHead>Title</TableHead>
+            <TableHead>Priority</TableHead>
+            <TableHead>Assigned Date</TableHead>
             <TableHead>Description</TableHead>
             <TableHead>Due Date</TableHead>
+            <TableHead>Linked Project</TableHead>
             <TableHead className="w-12 text-right">Actions</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
-          {sortedTasks.map((task) => {
-            const isCompleted = task.status !== 'active';
+          {tasks.map((task) => {
+            const isCompleted = task.status === 'completed';
             return (
               <TableRow 
                 key={task.id}
                 className={isCompleted ? 'bg-gray-50' : ''}
               >
                 <TableCell>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className={`h-8 w-8 ${isCompleted ? 'text-green-600' : 'text-gray-400 hover:text-gray-600'}`}
-                    onClick={() => updateTaskStatus(task.id, isCompleted ? 'active' : 'completed')}
-                    disabled={loading[task.id]}
-                  >
-                    <Check className="h-4 w-4" />
-                    <span className="sr-only">
-                      Mark as {isCompleted ? 'active' : 'completed'}
-                    </span>
-                  </Button>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" className="p-0 h-auto hover:bg-transparent">
+                        <Badge 
+                          className={`${getStatusColor(task.status)} border-0 cursor-pointer hover:opacity-80`}
+                        >
+                          {task.status || 'on_deck'}
+                        </Badge>
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent>
+                      <DropdownMenuItem
+                        onClick={() => updateTaskStatus(task.id, 'on_deck')}
+                        className={task.status === 'on_deck' ? 'bg-yellow-50' : ''}
+                      >
+                        On Deck
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={() => updateTaskStatus(task.id, 'active')}
+                        className={task.status === 'active' ? 'bg-green-50' : ''}
+                      >
+                        Active
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={() => updateTaskStatus(task.id, 'completed')}
+                        className={task.status === 'completed' ? 'bg-gray-50' : ''}
+                      >
+                        Completed
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </TableCell>
                 <TableCell className={isCompleted ? 'text-gray-500' : ''}>
-                  {task.item.title}
+                  {task.title}
+                </TableCell>
+                <TableCell>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" className="p-0 h-auto hover:bg-transparent">
+                        <Badge 
+                          className={`${getPriorityColor(task.priority)} border-0 cursor-pointer hover:opacity-80`}
+                        >
+                          {task.priority || 'none'}
+                        </Badge>
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent>
+                      <DropdownMenuItem
+                        onClick={() => updateTaskPriority(task.id, null)}
+                        className={!task.priority ? 'bg-gray-50' : ''}
+                      >
+                        None
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={() => updateTaskPriority(task.id, 'low')}
+                        className={task.priority === 'low' ? 'bg-blue-50' : ''}
+                      >
+                        Low
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={() => updateTaskPriority(task.id, 'medium')}
+                        className={task.priority === 'medium' ? 'bg-yellow-50' : ''}
+                      >
+                        Medium
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={() => updateTaskPriority(task.id, 'high')}
+                        className={task.priority === 'high' ? 'bg-orange-50' : ''}
+                      >
+                        High
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </TableCell>
+                <TableCell className={isCompleted ? 'text-gray-500' : ''}>
+                  {task.assigned_date ? format(new Date(task.assigned_date), 'MMM d, yyyy') : '-'}
                 </TableCell>
                 <TableCell className={isCompleted ? 'text-gray-500' : ''}>
                   {task.description || '-'}
@@ -143,11 +204,18 @@ export const TaskTable: React.FC<TaskTableProps> = ({ tasks, onTaskUpdate }) => 
                 <TableCell className={isCompleted ? 'text-gray-500' : ''}>
                   {task.due_date ? format(new Date(task.due_date), 'MMM d, yyyy') : '-'}
                 </TableCell>
+                <TableCell>
+                  {task.project_id && (
+                    <div className="flex items-center text-blue-600">
+                      <Link className="h-4 w-4 mr-1" />
+                      Project {task.project_id.slice(0, 8)}
+                    </div>
+                  )}
+                </TableCell>
                 <TableCell className="text-right">
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <Button 
-                        type="button"
                         variant="ghost"
                         size="icon"
                         className="h-8 w-8"
@@ -159,16 +227,14 @@ export const TaskTable: React.FC<TaskTableProps> = ({ tasks, onTaskUpdate }) => 
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
                       <DropdownMenuItem
-                        onClick={() => updateTaskStatus(task.id, isCompleted ? 'active' : 'completed')}
+                        onClick={() => updateTaskStatus(task.id, 'active')}
                       >
-                        Mark as {isCompleted ? 'Active' : 'Completed'}
+                        Mark Active
                       </DropdownMenuItem>
-                      <DropdownMenuSeparator />
                       <DropdownMenuItem
-                        className="text-red-600"
-                        onClick={() => archiveTask(task.id)}
+                        onClick={() => updateTaskStatus(task.id, 'completed')}
                       >
-                        Archive
+                        Mark Completed
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>

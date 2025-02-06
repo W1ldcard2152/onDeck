@@ -10,11 +10,8 @@ interface TaskCardProps {
 }
 
 export const TaskCard: React.FC<TaskCardProps> = ({ task }) => {
-  // Add debug logging
-  console.log('Rendering TaskCard:', { task });
-
+  const hasAssignedDate = Boolean(task.assigned_date);
   const hasDueDate = Boolean(task.due_date);
-  const hasDoDate = Boolean(task.do_date);
 
   return (
     <div className="p-4 mb-2 bg-white rounded-lg shadow hover:shadow-md transition-shadow">
@@ -25,10 +22,10 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task }) => {
       )}
       
       <div className="mt-2 flex flex-wrap gap-3">
-        {hasDoDate && task.do_date && (
+        {hasAssignedDate && task.assigned_date && (
           <div className="flex items-center text-sm text-gray-600">
             <Calendar className="w-4 h-4 mr-1" />
-            <span>Do: {format(new Date(task.do_date), 'MMM d, yyyy')}</span>
+            <span>Assigned: {format(new Date(task.assigned_date), 'MMM d, yyyy')}</span>
           </div>
         )}
         

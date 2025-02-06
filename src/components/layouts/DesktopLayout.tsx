@@ -108,7 +108,7 @@ const AuthenticatedLayout: React.FC<AuthenticatedLayoutProps> = ({ userId }) => 
       const now = new Date();
       const tomorrow = startOfTomorrow();
   
-      if (task.do_date && isAfter(new Date(task.do_date), tomorrow)) {
+      if (task.assigned_date && isAfter(new Date(task.assigned_date), tomorrow)) {
         return false;
       }
   

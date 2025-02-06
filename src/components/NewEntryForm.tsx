@@ -6,15 +6,15 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Calendar } from '@/components/ui/calendar';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { CalendarIcon, Plus } from 'lucide-react';
 import { useSupabaseAuth } from '@/hooks/useSupabaseAuth';
 import { EntryService } from '@/lib/entryService';
-import type { EntryType } from '@/types/database.types';
+import type { TaskStatus } from '@/types/database.types';
 import { DayPicker } from "react-day-picker";
 import "react-day-picker/dist/style.css";
+import { EntryType } from '@/lib/types';
 
 interface NewEntryFormProps {
   onEntryCreated?: (entry: any) => void;
@@ -23,12 +23,14 @@ interface NewEntryFormProps {
 export const NewEntryForm: React.FC<NewEntryFormProps> = ({ onEntryCreated }) => {
   const { user } = useSupabaseAuth();
   const [open, setOpen] = useState(false);
-  const [type, setType] = useState<EntryType>('task');
+  const [type, setType] = useState<'task' | 'note'>('task');
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [dueDate, setDueDate] = useState<Date>();
-  const [priority, setPriority] = useState('medium');
-  const [status] = useState('active');
+  const [assignedDate, setAssignedDate] = useState<Date>();
+  const [priority, setPriority] = useState<'low' | 'medium' | 'high' | null>(null);
+  const [status, setStatus] = useState<TaskStatus>('on_deck');
+  const [description, setDescription] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -36,7 +38,10 @@ export const NewEntryForm: React.FC<NewEntryFormProps> = ({ onEntryCreated }) =>
     setTitle('');
     setContent('');
     setDueDate(undefined);
-    setPriority('medium');
+    setAssignedDate(undefined);
+    setPriority(null);
+    setStatus('on_deck');
+    setDescription('');
     setType('task');
     setError(null);
   };
@@ -52,21 +57,17 @@ export const NewEntryForm: React.FC<NewEntryFormProps> = ({ onEntryCreated }) =>
       return;
     }
 
-    if (!title.trim()) {
-      setError('Title is required');
-      setIsSubmitting(false);
-      return;
-    }
-
     try {
       const newEntry = {
         title: title.trim(),
         type,
         user_id: user.id,
         content: type === 'note' ? content.trim() : null,
-        due_date: type === 'task' ? dueDate?.toISOString() || null : null,
+        due_date: dueDate?.toISOString() || null,
+        assigned_date: assignedDate?.toISOString() || null,
         status: type === 'task' ? status : null,
         priority: type === 'task' ? priority : null,
+        description: type === 'task' ? description.trim() : null,
       };
 
       const data = await EntryService.createEntry(newEntry);
@@ -85,29 +86,34 @@ export const NewEntryForm: React.FC<NewEntryFormProps> = ({ onEntryCreated }) =>
     }
   };
 
-  const renderDatePicker = () => (
-    <Popover>
-      <PopoverTrigger asChild>
-        <Button
-          variant="outline"
-          className={cn(
-            "w-full justify-start text-left font-normal",
-            !dueDate && "text-muted-foreground"
-          )}
-        >
-          <CalendarIcon className="mr-2 h-4 w-4" />
-          {dueDate ? format(dueDate, "PPP") : "Pick a date"}
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent className="w-auto p-0" align="start">
-        <Calendar
-          mode="single"
-          selected={dueDate}
-          onSelect={setDueDate}
-          initialFocus
-        />
-      </PopoverContent>
-    </Popover>
+  const renderDatePicker = (selectedDate: Date | undefined, onDateChange: (date: Date | undefined) => void, label: string) => (
+    <div className="space-y-2">
+      <Label>{label}</Label>
+      <Popover>
+        <PopoverTrigger asChild>
+          <Button
+            variant="outline"
+            className={cn(
+              "w-full justify-start text-left font-normal",
+              !selectedDate && "text-muted-foreground"
+            )}
+          >
+            <CalendarIcon className="mr-2 h-4 w-4" />
+            {selectedDate ? format(selectedDate, "PPP") : `Pick ${label.toLowerCase()}`}
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-auto p-0">
+          <div className="border rounded-md bg-white p-3">
+            <DayPicker
+              mode="single"
+              selected={selectedDate}
+              onSelect={onDateChange}
+              showOutsideDays={true}
+            />
+          </div>
+        </PopoverContent>
+      </Popover>
+    </div>
   );
 
   const renderTypeSpecificFields = () => {
@@ -115,45 +121,47 @@ export const NewEntryForm: React.FC<NewEntryFormProps> = ({ onEntryCreated }) =>
       case 'task':
         return (
           <>
+            {renderDatePicker(assignedDate, setAssignedDate, "Assigned Date")}
+            {renderDatePicker(dueDate, setDueDate, "Due Date")}
+            
             <div className="space-y-2">
-              <Label>Due Date</Label>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant="outline"
-                    className={cn(
-                      "w-full justify-start text-left font-normal",
-                      !dueDate && "text-muted-foreground"
-                    )}
-                  >
-                    <CalendarIcon className="mr-2 h-4 w-4" />
-                    {dueDate ? format(dueDate, "PPP") : "Pick a date"}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0">
-                  <div className="border rounded-md bg-white p-3">
-                    <DayPicker
-                      mode="single"
-                      selected={dueDate}
-                      onSelect={setDueDate}
-                      showOutsideDays={true}
-                    />
-                  </div>
-                </PopoverContent>
-              </Popover>
+              <Label htmlFor="status">Status</Label>
+              <Select value={status} onValueChange={(value: 'on_deck' | 'active' | 'completed') => setStatus(value)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="on_deck">On Deck</SelectItem>
+                  <SelectItem value="active">Active</SelectItem>
+                  <SelectItem value="completed">Completed</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
+
             <div className="space-y-2">
               <Label htmlFor="priority">Priority</Label>
-              <Select value={priority} onValueChange={setPriority}>
+              <Select value={priority || 'none'} onValueChange={(value: 'low' | 'medium' | 'high' | 'none') => setPriority(value === 'none' ? null : value)}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select priority" />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="none">None</SelectItem>
                   <SelectItem value="low">Low</SelectItem>
                   <SelectItem value="medium">Medium</SelectItem>
                   <SelectItem value="high">High</SelectItem>
                 </SelectContent>
               </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="description">Description</Label>
+              <Textarea
+                id="description"
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="Enter description"
+                className="h-32"
+              />
             </div>
           </>
         );
