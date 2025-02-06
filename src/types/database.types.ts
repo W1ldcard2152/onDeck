@@ -1,5 +1,5 @@
 export type TaskStatus = 'on_deck' | 'active' | 'completed';
-export type Priority = 'low' | 'medium' | 'high' | null;
+export type Priority = 'low' | 'normal' | 'high';
 
 export interface Database {
   public: {
@@ -15,6 +15,8 @@ export interface Database {
           is_archived: boolean;
           archived_at: string | null;
           archive_reason: string | null;
+          status: TaskStatus;
+          priority: Priority | null;
         };
         Insert: {
           id?: string;
@@ -26,6 +28,8 @@ export interface Database {
           is_archived?: boolean;
           archived_at?: string | null;
           archive_reason?: string | null;
+          status?: TaskStatus;
+          priority?: Priority | null;
         };
         Update: {
           id?: string;
@@ -37,6 +41,8 @@ export interface Database {
           is_archived?: boolean;
           archived_at?: string | null;
           archive_reason?: string | null;
+          status?: TaskStatus;
+          priority?: Priority | null;
         };
       };
       tasks: {

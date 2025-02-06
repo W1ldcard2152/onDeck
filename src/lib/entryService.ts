@@ -1,19 +1,21 @@
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import type { Database } from '@/types/database.types'
-import type { TaskStatus } from '@/types/database.types'
+import type { TaskStatus, Priority } from '@/types/database.types'
+
+interface CreateEntryParams {
+  title: string;
+  type: 'task' | 'note';
+  user_id: string;
+  content?: string | null;
+  due_date?: string | null;
+  assigned_date?: string | null;
+  status?: TaskStatus;
+  priority?: Priority | null;
+  description?: string | null;
+}
 
 export class EntryService {
-  static async createEntry(entry: {
-    title: string;
-    type: 'task' | 'note';
-    user_id: string;
-    content?: string | null;
-    due_date?: string | null;
-    assigned_date?: string | null;
-    status?: TaskStatus | null;
-    priority?: 'low' | 'medium' | 'high' | null;
-    description?: string | null;
-  }) {
+  static async createEntry(entry: CreateEntryParams) {
     const supabase = createClientComponentClient<Database>()
     
     try {
@@ -21,7 +23,6 @@ export class EntryService {
       if (!entry.user_id) throw new Error('User ID is required');
       if (!entry.type) throw new Error('Type is required');
 
-      // First create the base item
       const { data: itemData, error: itemError } = await supabase
         .from('items')
         .insert([{
@@ -36,19 +37,22 @@ export class EntryService {
       if (itemError) throw itemError;
       if (!itemData) throw new Error('Failed to create item');
 
-      // If it's a task, create the task record
       if (entry.type === 'task') {
+        const taskData = {
+          id: itemData.id,
+          due_date: entry.due_date || null,
+          assigned_date: entry.assigned_date || null,
+          status: entry.status || 'on_deck',
+          description: entry.description || null,
+          is_project_converted: false,
+          priority: entry.priority || 'normal'
+        };
+
         const { error: taskError } = await supabase
           .from('tasks')
-          .insert([{
-            id: itemData.id,  // Use the same ID as the item
-            due_date: entry.due_date || null,
-            assigned_date: entry.assigned_date || null,
-            status: entry.status || 'on_deck',
-            description: entry.description || null,
-            is_project_converted: false,
-            priority: entry.priority || null
-          }]);
+          .insert([taskData])
+          .select()
+          .single();
 
         if (taskError) throw taskError;
       }
@@ -64,21 +68,26 @@ export class EntryService {
   static async updateTaskStatus(taskId: string, status: TaskStatus) {
     const supabase = createClientComponentClient<Database>();
     
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from('tasks')
       .update({ status })
-      .eq('id', taskId);
-
+      .eq('id', taskId)
+      .select()
+      .single();
+    
     if (error) throw error;
+    return data;
   }
 
-  static async updateTaskPriority(taskId: string, priority: 'low' | 'medium' | 'high' | null) {
+  static async updateTaskPriority(taskId: string, priority: Priority) {
     const supabase = createClientComponentClient<Database>();
     
     const { error } = await supabase
       .from('tasks')
       .update({ priority })
-      .eq('id', taskId);
+      .eq('id', taskId)
+      .select()
+      .single();
 
     if (error) throw error;
   }

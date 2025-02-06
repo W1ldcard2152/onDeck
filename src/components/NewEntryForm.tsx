@@ -11,24 +11,25 @@ import { cn } from '@/lib/utils';
 import { CalendarIcon, Plus } from 'lucide-react';
 import { useSupabaseAuth } from '@/hooks/useSupabaseAuth';
 import { EntryService } from '@/lib/entryService';
-import type { TaskStatus } from '@/types/database.types';
+import type { TaskStatus, Priority } from '@/types/database.types';
 import { DayPicker } from "react-day-picker";
 import "react-day-picker/dist/style.css";
-import { EntryType } from '@/lib/types';
 
 interface NewEntryFormProps {
   onEntryCreated?: (entry: any) => void;
 }
 
+type EntryType = 'task' | 'note';
+
 export const NewEntryForm: React.FC<NewEntryFormProps> = ({ onEntryCreated }) => {
   const { user } = useSupabaseAuth();
   const [open, setOpen] = useState(false);
-  const [type, setType] = useState<'task' | 'note'>('task');
+  const [type, setType] = useState<EntryType>('task');
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [dueDate, setDueDate] = useState<Date>();
   const [assignedDate, setAssignedDate] = useState<Date>();
-  const [priority, setPriority] = useState<'low' | 'medium' | 'high' | null>(null);
+  const [priority, setPriority] = useState<Priority>('normal');
   const [status, setStatus] = useState<TaskStatus>('on_deck');
   const [description, setDescription] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -39,7 +40,7 @@ export const NewEntryForm: React.FC<NewEntryFormProps> = ({ onEntryCreated }) =>
     setContent('');
     setDueDate(undefined);
     setAssignedDate(undefined);
-    setPriority(null);
+    setPriority('normal');
     setStatus('on_deck');
     setDescription('');
     setType('task');
@@ -65,8 +66,8 @@ export const NewEntryForm: React.FC<NewEntryFormProps> = ({ onEntryCreated }) =>
         content: type === 'note' ? content.trim() : null,
         due_date: dueDate?.toISOString() || null,
         assigned_date: assignedDate?.toISOString() || null,
-        status: type === 'task' ? status : null,
-        priority: type === 'task' ? priority : null,
+        status: type === 'task' ? status : undefined,
+        priority: type === 'task' ? priority : undefined,
         description: type === 'task' ? description.trim() : null,
       };
 
@@ -126,7 +127,14 @@ export const NewEntryForm: React.FC<NewEntryFormProps> = ({ onEntryCreated }) =>
             
             <div className="space-y-2">
               <Label htmlFor="status">Status</Label>
-              <Select value={status} onValueChange={(value: 'on_deck' | 'active' | 'completed') => setStatus(value)}>
+              <Select 
+                value={status} 
+                onValueChange={(value) => {
+                  if (value === 'on_deck' || value === 'active' || value === 'completed') {
+                    setStatus(value);
+                  }
+                }}
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="Select status" />
                 </SelectTrigger>
@@ -140,14 +148,20 @@ export const NewEntryForm: React.FC<NewEntryFormProps> = ({ onEntryCreated }) =>
 
             <div className="space-y-2">
               <Label htmlFor="priority">Priority</Label>
-              <Select value={priority || 'none'} onValueChange={(value: 'low' | 'medium' | 'high' | 'none') => setPriority(value === 'none' ? null : value)}>
+              <Select 
+                value={priority} 
+                onValueChange={(value) => {
+                  if (value === 'low' || value === 'normal' || value === 'high') {
+                    setPriority(value);
+                  }
+                }}
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="Select priority" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none">None</SelectItem>
                   <SelectItem value="low">Low</SelectItem>
-                  <SelectItem value="medium">Medium</SelectItem>
+                  <SelectItem value="normal">Normal</SelectItem>
                   <SelectItem value="high">High</SelectItem>
                 </SelectContent>
               </Select>
@@ -198,7 +212,7 @@ export const NewEntryForm: React.FC<NewEntryFormProps> = ({ onEntryCreated }) =>
         <DialogHeader>
           <DialogTitle>Create New Entry</DialogTitle>
           <DialogDescription>
-            Create a new task, project, note, habit, or journal entry.
+            Create a new task or note.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -210,7 +224,11 @@ export const NewEntryForm: React.FC<NewEntryFormProps> = ({ onEntryCreated }) =>
             <Label htmlFor="type">Type</Label>
             <Select
               value={type}
-              onValueChange={(value: EntryType) => setType(value)}
+              onValueChange={(value) => {
+                if (value === 'task' || value === 'note') {
+                  setType(value);
+                }
+              }}
             >
               <SelectTrigger>
                 <SelectValue placeholder="Select type" />

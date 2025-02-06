@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { format } from 'date-fns';
 import { Check, MoreHorizontal, Link } from 'lucide-react';
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import {
   Table,
   TableBody,
@@ -14,13 +14,13 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import type { Database } from '@/types/database.types';
 import type { TaskWithDetails } from '@/lib/types';
+import type { Priority, TaskStatus } from '@/types/database.types';
 
 interface TaskTableProps {
   tasks: TaskWithDetails[];
@@ -32,16 +32,16 @@ export const TaskTable: React.FC<TaskTableProps> = ({ tasks, onTaskUpdate }) => 
   const [error, setError] = useState<string | null>(null);
   const supabase = createClientComponentClient<Database>();
 
-  const getPriorityColor = (priority: string | null) => {
+  const getPriorityColor = (priority: Priority) => {
     switch (priority) {
-      case 'high': return 'bg-orange-100 text-orange-800';
-      case 'medium': return 'bg-yellow-100 text-yellow-800';
-      case 'low': return 'bg-blue-100 text-blue-800';
-      default: return 'bg-gray-100 text-gray-800';
+      case 'high': return 'bg-red-100 text-red-800';
+      case 'normal': return 'bg-blue-100 text-blue-800';
+      case 'low': return 'bg-gray-100 text-gray-800';
+      default: return 'bg-blue-100 text-blue-800';
     }
   };
 
-  const getStatusColor = (status: string | null) => {
+  const getStatusColor = (status: TaskStatus) => {
     switch (status) {
       case 'on_deck': return 'bg-yellow-100 text-yellow-800';
       case 'active': return 'bg-green-100 text-green-800';
@@ -50,17 +50,25 @@ export const TaskTable: React.FC<TaskTableProps> = ({ tasks, onTaskUpdate }) => 
     }
   };
 
-  const updateTaskStatus = async (taskId: string, newStatus: Database['public']['Tables']['tasks']['Row']['status']) => {
+  const updateTaskStatus = async (taskId: string, newStatus: TaskStatus) => {
     setLoading(prev => ({ ...prev, [taskId]: true }));
     setError(null);
     
     try {
-      const { error: updateError } = await supabase
+      const { error: taskError } = await supabase
         .from('tasks')
         .update({ status: newStatus })
         .eq('id', taskId);
 
-      if (updateError) throw updateError;
+      if (taskError) throw taskError;
+
+      const { error: itemError } = await supabase
+        .from('items')
+        .update({ updated_at: new Date().toISOString() })
+        .eq('id', taskId);
+
+      if (itemError) throw itemError;
+
       onTaskUpdate();
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Error updating task status';
@@ -71,17 +79,25 @@ export const TaskTable: React.FC<TaskTableProps> = ({ tasks, onTaskUpdate }) => 
     }
   };
 
-  const updateTaskPriority = async (taskId: string, newPriority: Database['public']['Tables']['tasks']['Row']['priority']) => {
+  const updateTaskPriority = async (taskId: string, newPriority: 'low' | 'normal' | 'high') => {
     setLoading(prev => ({ ...prev, [taskId]: true }));
     setError(null);
     
     try {
-      const { error: updateError } = await supabase
+      const { error: taskError } = await supabase
         .from('tasks')
         .update({ priority: newPriority })
         .eq('id', taskId);
 
-      if (updateError) throw updateError;
+      if (taskError) throw taskError;
+
+      const { error: itemError } = await supabase
+        .from('items')
+        .update({ updated_at: new Date().toISOString() })
+        .eq('id', taskId);
+
+      if (itemError) throw itemError;
+
       onTaskUpdate();
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Error updating task priority';
@@ -116,6 +132,10 @@ export const TaskTable: React.FC<TaskTableProps> = ({ tasks, onTaskUpdate }) => 
         <TableBody>
           {tasks.map((task) => {
             const isCompleted = task.status === 'completed';
+            const isLoading = loading[task.id];
+            const status = task.status || 'on_deck';
+            const priority = task.priority || 'normal';
+            
             return (
               <TableRow 
                 key={task.id}
@@ -124,32 +144,42 @@ export const TaskTable: React.FC<TaskTableProps> = ({ tasks, onTaskUpdate }) => 
                 <TableCell>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" className="p-0 h-auto hover:bg-transparent">
+                      <Button 
+                        variant="ghost" 
+                        className="p-0 h-auto hover:bg-transparent"
+                        disabled={isLoading}
+                      >
                         <Badge 
-                          className={`${getStatusColor(task.status)} border-0 cursor-pointer hover:opacity-80`}
+                          className={`${getStatusColor(status)} border-0 cursor-pointer hover:opacity-80`}
                         >
-                          {task.status || 'on_deck'}
+                          {isLoading ? 'Updating...' : status}
                         </Badge>
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent>
                       <DropdownMenuItem
                         onClick={() => updateTaskStatus(task.id, 'on_deck')}
-                        className={task.status === 'on_deck' ? 'bg-yellow-50' : ''}
+                        className={status === 'on_deck' ? 'bg-yellow-50' : ''}
+                        disabled={isLoading}
                       >
                         On Deck
+                        {status === 'on_deck' && <Check className="ml-2 h-4 w-4" />}
                       </DropdownMenuItem>
                       <DropdownMenuItem
                         onClick={() => updateTaskStatus(task.id, 'active')}
-                        className={task.status === 'active' ? 'bg-green-50' : ''}
+                        className={status === 'active' ? 'bg-green-50' : ''}
+                        disabled={isLoading}
                       >
                         Active
+                        {status === 'active' && <Check className="ml-2 h-4 w-4" />}
                       </DropdownMenuItem>
                       <DropdownMenuItem
                         onClick={() => updateTaskStatus(task.id, 'completed')}
-                        className={task.status === 'completed' ? 'bg-gray-50' : ''}
+                        className={status === 'completed' ? 'bg-gray-50' : ''}
+                        disabled={isLoading}
                       >
                         Completed
+                        {status === 'completed' && <Check className="ml-2 h-4 w-4" />}
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
@@ -160,38 +190,42 @@ export const TaskTable: React.FC<TaskTableProps> = ({ tasks, onTaskUpdate }) => 
                 <TableCell>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" className="p-0 h-auto hover:bg-transparent">
+                      <Button 
+                        variant="ghost" 
+                        className="p-0 h-auto hover:bg-transparent"
+                        disabled={isLoading}
+                      >
                         <Badge 
-                          className={`${getPriorityColor(task.priority)} border-0 cursor-pointer hover:opacity-80`}
+                          className={`${getPriorityColor(priority)} border-0 cursor-pointer hover:opacity-80`}
                         >
-                          {task.priority || 'none'}
+                          {isLoading ? 'Updating...' : priority}
                         </Badge>
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent>
                       <DropdownMenuItem
-                        onClick={() => updateTaskPriority(task.id, null)}
-                        className={!task.priority ? 'bg-gray-50' : ''}
-                      >
-                        None
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
                         onClick={() => updateTaskPriority(task.id, 'low')}
-                        className={task.priority === 'low' ? 'bg-blue-50' : ''}
+                        className={priority === 'low' ? 'bg-gray-50' : ''}
+                        disabled={isLoading}
                       >
                         Low
+                        {priority === 'low' && <Check className="ml-2 h-4 w-4" />}
                       </DropdownMenuItem>
                       <DropdownMenuItem
-                        onClick={() => updateTaskPriority(task.id, 'medium')}
-                        className={task.priority === 'medium' ? 'bg-yellow-50' : ''}
+                        onClick={() => updateTaskPriority(task.id, 'normal')}
+                        className={priority === 'normal' ? 'bg-blue-50' : ''}
+                        disabled={isLoading}
                       >
-                        Medium
+                        Normal
+                        {priority === 'normal' && <Check className="ml-2 h-4 w-4" />}
                       </DropdownMenuItem>
                       <DropdownMenuItem
                         onClick={() => updateTaskPriority(task.id, 'high')}
-                        className={task.priority === 'high' ? 'bg-orange-50' : ''}
+                        className={priority === 'high' ? 'bg-red-50' : ''}
+                        disabled={isLoading}
                       >
                         High
+                        {priority === 'high' && <Check className="ml-2 h-4 w-4" />}
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
@@ -206,10 +240,10 @@ export const TaskTable: React.FC<TaskTableProps> = ({ tasks, onTaskUpdate }) => 
                   {task.due_date ? format(new Date(task.due_date), 'MMM d, yyyy') : '-'}
                 </TableCell>
                 <TableCell>
-                  {task.project_id && (
+                  {task.converted_project_id && (
                     <div className="flex items-center text-blue-600">
                       <Link className="h-4 w-4 mr-1" />
-                      Project {task.project_id.slice(0, 8)}
+                      Project {task.converted_project_id.slice(0, 8)}
                     </div>
                   )}
                 </TableCell>
@@ -220,7 +254,7 @@ export const TaskTable: React.FC<TaskTableProps> = ({ tasks, onTaskUpdate }) => 
                         variant="ghost"
                         size="icon"
                         className="h-8 w-8"
-                        disabled={loading[task.id]}
+                        disabled={isLoading}
                       >
                         <MoreHorizontal className="h-4 w-4" />
                         <span className="sr-only">Open menu</span>
@@ -229,11 +263,13 @@ export const TaskTable: React.FC<TaskTableProps> = ({ tasks, onTaskUpdate }) => 
                     <DropdownMenuContent align="end">
                       <DropdownMenuItem
                         onClick={() => updateTaskStatus(task.id, 'active')}
+                        disabled={isLoading}
                       >
                         Mark Active
                       </DropdownMenuItem>
                       <DropdownMenuItem
                         onClick={() => updateTaskStatus(task.id, 'completed')}
+                        disabled={isLoading}
                       >
                         Mark Completed
                       </DropdownMenuItem>
