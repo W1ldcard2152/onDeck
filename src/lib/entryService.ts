@@ -21,28 +21,39 @@ export class EntryService {
       if (!entry.user_id) throw new Error('User ID is required');
       if (!entry.type) throw new Error('Type is required');
 
-      const { data: { user } } = await supabase.auth.getUser();
-      
-      const itemData = {
-        title: entry.title.trim(),
-        user_id: entry.user_id,
-        type: entry.type,
-        status: entry.status || 'on_deck',
-        priority: entry.priority || null,
-        description: entry.description || null,
-        due_date: entry.due_date || null,
-        assigned_date: entry.assigned_date || null,
-        content: entry.type === 'note' ? entry.content : null,
-      };
-
-      const { data: createdEntry, error } = await supabase
-        .from('entries')
-        .insert([itemData])
+      // First create the base item
+      const { data: itemData, error: itemError } = await supabase
+        .from('items')
+        .insert([{
+          title: entry.title.trim(),
+          user_id: entry.user_id,
+          item_type: entry.type,
+          is_archived: false
+        }])
         .select()
         .single();
 
-      if (error) throw error;
-      return createdEntry;
+      if (itemError) throw itemError;
+      if (!itemData) throw new Error('Failed to create item');
+
+      // If it's a task, create the task record
+      if (entry.type === 'task') {
+        const { error: taskError } = await supabase
+          .from('tasks')
+          .insert([{
+            id: itemData.id,  // Use the same ID as the item
+            due_date: entry.due_date || null,
+            assigned_date: entry.assigned_date || null,
+            status: entry.status || 'on_deck',
+            description: entry.description || null,
+            is_project_converted: false,
+            priority: entry.priority || null
+          }]);
+
+        if (taskError) throw taskError;
+      }
+
+      return itemData;
 
     } catch (error) {
       console.error('EntryService createEntry error:', error);
@@ -54,10 +65,9 @@ export class EntryService {
     const supabase = createClientComponentClient<Database>();
     
     const { error } = await supabase
-      .from('entries')
+      .from('tasks')
       .update({ status })
-      .eq('id', taskId)
-      .eq('type', 'task');
+      .eq('id', taskId);
 
     if (error) throw error;
   }
@@ -66,10 +76,9 @@ export class EntryService {
     const supabase = createClientComponentClient<Database>();
     
     const { error } = await supabase
-      .from('entries')
+      .from('tasks')
       .update({ priority })
-      .eq('id', taskId)
-      .eq('type', 'task');
+      .eq('id', taskId);
 
     if (error) throw error;
   }

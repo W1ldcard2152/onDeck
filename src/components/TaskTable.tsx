@@ -20,9 +20,10 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import type { Database } from '@/types/database.types';
+import type { TaskWithDetails } from '@/lib/types';
 
 interface TaskTableProps {
-  tasks: Database['public']['Tables']['entries']['Row'][];
+  tasks: TaskWithDetails[];
   onTaskUpdate: () => void;
 }
 
@@ -49,13 +50,13 @@ export const TaskTable: React.FC<TaskTableProps> = ({ tasks, onTaskUpdate }) => 
     }
   };
 
-  const updateTaskStatus = async (taskId: string, newStatus: Database['public']['Tables']['entries']['Row']['status']) => {
+  const updateTaskStatus = async (taskId: string, newStatus: Database['public']['Tables']['tasks']['Row']['status']) => {
     setLoading(prev => ({ ...prev, [taskId]: true }));
     setError(null);
     
     try {
       const { error: updateError } = await supabase
-        .from('entries')
+        .from('tasks')
         .update({ status: newStatus })
         .eq('id', taskId);
 
@@ -70,13 +71,13 @@ export const TaskTable: React.FC<TaskTableProps> = ({ tasks, onTaskUpdate }) => 
     }
   };
 
-  const updateTaskPriority = async (taskId: string, newPriority: Database['public']['Tables']['entries']['Row']['priority']) => {
+  const updateTaskPriority = async (taskId: string, newPriority: Database['public']['Tables']['tasks']['Row']['priority']) => {
     setLoading(prev => ({ ...prev, [taskId]: true }));
     setError(null);
     
     try {
       const { error: updateError } = await supabase
-        .from('entries')
+        .from('tasks')
         .update({ priority: newPriority })
         .eq('id', taskId);
 
@@ -154,7 +155,7 @@ export const TaskTable: React.FC<TaskTableProps> = ({ tasks, onTaskUpdate }) => 
                   </DropdownMenu>
                 </TableCell>
                 <TableCell className={isCompleted ? 'text-gray-500' : ''}>
-                  {task.title}
+                  {task.item.title}
                 </TableCell>
                 <TableCell>
                   <DropdownMenu>
