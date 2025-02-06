@@ -299,13 +299,14 @@ const AuthenticatedLayout: React.FC<AuthenticatedLayoutProps> = ({ userId }) => 
         </header>
 
         <main className="flex-1 p-4 md:p-6 overflow-auto">
-          <div className="flex items-center justify-between mb-6">
-            <h1 className="text-2xl font-semibold">
-              {activeSection === 'dashboard' ? 'Dashboard' : 
-               activeSection === 'tasks' ? 'Tasks' : 
-               activeSection === 'notes' ? 'Notes' : ''}
-            </h1>
-          </div>
+        <div className="flex items-center justify-between mb-6">
+  <h1 className="text-2xl font-semibold">
+    {activeSection === 'dashboard' ? 'Dashboard' : 
+     activeSection === 'tasks' ? 'Tasks' : 
+     activeSection === 'notes' ? 'Notes' : ''}
+  </h1>
+  <NewEntryForm onEntryCreated={() => refetch()} />
+</div>
 
           {renderContent()}
         </main>
