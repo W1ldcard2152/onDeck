@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { format } from 'date-fns';
-import { Check, MoreHorizontal, Link, ChevronDown, ChevronUp } from 'lucide-react';
+import { Check, MoreHorizontal, Link, ChevronDown, ChevronUp, ChevronRight } from 'lucide-react';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import {
   Table,
@@ -36,85 +36,24 @@ interface TaskTableProps {
   onTaskUpdate: () => void;
 }
 
+interface TaskTableBaseProps {
+  tasks: TaskWithDetails[];
+  onTaskUpdate: () => void;
+  sorts: SortState[];
+  onSort: (field: SortField) => void;
+  tableType: 'active' | 'completed';
+}
 
-export const TaskTable = ({ tasks, onTaskUpdate }: TaskTableProps): JSX.Element => {
+const TaskTableBase: React.FC<TaskTableBaseProps> = ({ 
+  tasks, 
+  onTaskUpdate,
+  sorts,
+  onSort,
+  tableType
+}) => {
   const [loading, setLoading] = useState<Record<string, boolean>>({});
   const [error, setError] = useState<string | null>(null);
-  const [sorts, setSorts] = useState<SortState[]>([]);
   const supabase = createClientComponentClient<Database>();
-
-  const getIconClasses = (level: number): string => {
-    switch(level) {
-      case 1: return "h-5 w-5";
-      case 2: return "h-4 w-4";
-      case 3: return "h-3 w-3";
-      default: return "h-4 w-4";
-    }
-  };
-
-  const handleSort = (field: SortField): void => {
-    setSorts(prevSorts => {
-      const existingIndex = prevSorts.findIndex(sort => sort.field === field);
-
-      if (existingIndex === -1) {
-        if (prevSorts.length >= 3) return prevSorts;
-        return [...prevSorts, { field, direction: 'asc', level: prevSorts.length + 1 }];
-      }
-
-      const existing = prevSorts[existingIndex];
-      const newSorts = [...prevSorts];
-
-      if (existing.direction === 'asc') {
-        newSorts[existingIndex] = { ...existing, direction: 'desc' };
-      } else {
-        newSorts.splice(existingIndex, 1);
-        return newSorts.map((sort, index) => ({
-          ...sort,
-          level: index + 1
-        }));
-      }
-
-      return newSorts;
-    });
-  };
-
-  const getSortIcon = (field: SortField): JSX.Element | null => {
-    const sort = sorts.find(s => s.field === field);
-    if (!sort) return null;
-
-    const getIconColor = (level: number): string => {
-      switch(level) {
-        case 1: return "text-blue-600";
-        case 2: return "text-blue-400";
-        case 3: return "text-blue-300";
-        default: return "text-blue-600";
-      }
-    };
-
-    const getIconSize = (level: number): string => {
-      switch(level) {
-        case 1: return "h-5 w-5";
-        case 2: return "h-4 w-4";
-        case 3: return "h-3 w-3";
-        default: return "h-4 w-4";
-      }
-    };
-
-    return (
-      <span className="ml-2 inline-flex items-center gap-1" title={`Sort level ${sort.level}`}>
-        <div className={`flex items-center ${getIconColor(sort.level)}`}>
-          {sort.direction === 'asc' ? (
-            <ChevronUp className={getIconSize(sort.level)} />
-          ) : (
-            <ChevronDown className={getIconSize(sort.level)} />
-          )}
-          {sort.level > 1 && (
-            <span className="text-xs ml-0.5">{sort.level}</span>
-          )}
-        </div>
-      </span>
-    );
-  };
 
   const getPriorityColor = (priority: Priority): string => {
     switch (priority) {
@@ -131,6 +70,64 @@ export const TaskTable = ({ tasks, onTaskUpdate }: TaskTableProps): JSX.Element 
       case 'active': return 'bg-green-100 text-green-800';
       case 'completed': return 'bg-gray-100 text-gray-800';
       default: return 'bg-gray-100 text-gray-800';
+    }
+  };
+
+  const getSortIcon = (field: SortField): JSX.Element | null => {
+    const sort = sorts.find(s => s.field === field);
+    if (!sort) return null;
+
+    const getIconColor = (level: number): string => {
+      switch(level) {
+        case 1: return "text-blue-600";
+        case 2: return "text-blue-400";
+        case 3: return "text-blue-300";
+        default: return "text-blue-600";
+      }
+    };
+
+    return (
+      <span className="ml-2 inline-flex items-center gap-1" title={`Sort level ${sort.level}`}>
+        <div className={`flex items-center ${getIconColor(sort.level)}`}>
+          {sort.direction === 'asc' ? (
+            <ChevronUp className="h-4 w-4" />
+          ) : (
+            <ChevronDown className="h-4 w-4" />
+          )}
+          {sort.level > 1 && (
+            <span className="text-xs ml-0.5">{sort.level}</span>
+          )}
+        </div>
+      </span>
+    );
+  };
+
+  const updateTaskStatus = async (taskId: string, newStatus: TaskStatus): Promise<void> => {
+    setLoading(prev => ({ ...prev, [taskId]: true }));
+    setError(null);
+    
+    try {
+      const { error: taskError } = await supabase
+        .from('tasks')
+        .update({ status: newStatus })
+        .eq('id', taskId);
+
+      if (taskError) throw taskError;
+
+      const { error: itemError } = await supabase
+        .from('items')
+        .update({ updated_at: new Date().toISOString() })
+        .eq('id', taskId);
+
+      if (itemError) throw itemError;
+
+      onTaskUpdate();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Error updating task status';
+      setError(message);
+      console.error('Error updating task status:', err);
+    } finally {
+      setLoading(prev => ({ ...prev, [taskId]: false }));
     }
   };
 
@@ -163,81 +160,8 @@ export const TaskTable = ({ tasks, onTaskUpdate }: TaskTableProps): JSX.Element 
     }
   };
 
-  const updateTaskStatus = async (taskId: string, newStatus: TaskStatus): Promise<void> => {
-    setLoading(prev => ({ ...prev, [taskId]: true }));
-    setError(null);
-    
-    try {
-      const { error: taskError } = await supabase
-        .from('tasks')
-        .update({ status: newStatus })
-        .eq('id', taskId);
-
-      if (taskError) throw taskError;
-
-      const { error: itemError } = await supabase
-        .from('items')
-        .update({ updated_at: new Date().toISOString() })
-        .eq('id', taskId);
-
-      if (itemError) throw itemError;
-
-      onTaskUpdate();
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Error updating task status';
-      setError(message);
-      console.error('Error updating task status:', err);
-    } finally {
-      setLoading(prev => ({ ...prev, [taskId]: false }));
-    }
-  };
-
-  const sortedTasks = [...tasks].sort((a, b) => {
-    for (const sort of sorts) {
-      let comparison = 0;
-      
-      switch (sort.field) {
-        case 'status': {
-          const statusOrder: Record<TaskStatus, number> = { 'active': 0, 'on_deck': 1, 'completed': 2 };
-          const aStatus = a.status || 'on_deck';
-          const bStatus = b.status || 'on_deck';
-          comparison = statusOrder[aStatus] - statusOrder[bStatus];
-          break;
-        }
-        case 'title': {
-          comparison = (a.item.title || '').localeCompare(b.item.title || '');
-          break;
-        }
-        case 'priority': {
-          const priorityOrder: Record<Priority, number> = { 'high': 0, 'normal': 1, 'low': 2 };
-          const aPriority: Priority = a.priority || 'normal';
-          const bPriority: Priority = b.priority || 'normal';
-          comparison = priorityOrder[aPriority] - priorityOrder[bPriority];
-          break;
-        }
-        case 'assigned_date': {
-          const aAssigned = a.assigned_date ? new Date(a.assigned_date).getTime() : 0;
-          const bAssigned = b.assigned_date ? new Date(b.assigned_date).getTime() : 0;
-          comparison = aAssigned - bAssigned;
-          break;
-        }
-        case 'due_date': {
-          const aDue = a.due_date ? new Date(a.due_date).getTime() : 0;
-          const bDue = b.due_date ? new Date(b.due_date).getTime() : 0;
-          comparison = aDue - bDue;
-          break;
-        }
-      }
-
-      if (comparison !== 0) {
-        return sort.direction === 'asc' ? comparison : -comparison;
-      }
-    }
-    return 0;
-  });
-
   return (
-    <div className="w-full">
+    <>
       {error && (
         <div className="mb-4 p-4 text-sm text-red-600 bg-red-50 rounded-lg">
           {error}
@@ -248,68 +172,89 @@ export const TaskTable = ({ tasks, onTaskUpdate }: TaskTableProps): JSX.Element 
         <TableHeader>
           <TableRow>
             <TableHead>
-              <Button 
-                variant="ghost" 
-                onClick={() => handleSort('status')}
-                className="hover:bg-gray-100"
-              >
-                Status {getSortIcon('status')}
-              </Button>
+              {tableType === 'active' ? (
+                <Button 
+                  variant="ghost" 
+                  onClick={() => onSort('status')}
+                  className="hover:bg-gray-100"
+                >
+                  Status {getSortIcon('status')}
+                </Button>
+              ) : (
+                <span className="text-sm font-medium">Status</span>
+              )}
             </TableHead>
             <TableHead>
-              <Button 
-                variant="ghost" 
-                onClick={() => handleSort('title')}
-                className="hover:bg-gray-100"
-              >
-                Title {getSortIcon('title')}
-              </Button>
+              {tableType === 'active' ? (
+                <Button 
+                  variant="ghost" 
+                  onClick={() => onSort('title')}
+                  className="hover:bg-gray-100"
+                >
+                  Title {getSortIcon('title')}
+                </Button>
+              ) : (
+                <span className="text-sm font-medium">Title</span>
+              )}
             </TableHead>
             <TableHead>
-              <Button 
-                variant="ghost" 
-                onClick={() => handleSort('priority')}
-                className="hover:bg-gray-100"
-              >
-                Priority {getSortIcon('priority')}
-              </Button>
+              {tableType === 'active' ? (
+                <Button 
+                  variant="ghost" 
+                  onClick={() => onSort('priority')}
+                  className="hover:bg-gray-100"
+                >
+                  Priority {getSortIcon('priority')}
+                </Button>
+              ) : (
+                <span className="text-sm font-medium">Priority</span>
+              )}
             </TableHead>
             <TableHead>
-              <Button 
-                variant="ghost" 
-                onClick={() => handleSort('assigned_date')}
-                className="hover:bg-gray-100"
-              >
-                Assigned Date {getSortIcon('assigned_date')}
-              </Button>
+              {tableType === 'active' ? (
+                <Button 
+                  variant="ghost" 
+                  onClick={() => onSort('assigned_date')}
+                  className="hover:bg-gray-100"
+                >
+                  Assigned Date {getSortIcon('assigned_date')}
+                </Button>
+              ) : (
+                <span className="text-sm font-medium">Assigned Date</span>
+              )}
             </TableHead>
-            <TableHead>Description</TableHead>
             <TableHead>
-              <Button 
-                variant="ghost" 
-                onClick={() => handleSort('due_date')}
-                className="hover:bg-gray-100"
-              >
-                Due Date {getSortIcon('due_date')}
-              </Button>
+              <span className="text-sm font-medium">Description</span>
             </TableHead>
-            <TableHead>Linked Project</TableHead>
-            <TableHead className="w-12 text-right">Actions</TableHead>
+            <TableHead>
+              {tableType === 'active' ? (
+                <Button 
+                  variant="ghost" 
+                  onClick={() => onSort('due_date')}
+                  className="hover:bg-gray-100"
+                >
+                  Due Date {getSortIcon('due_date')}
+                </Button>
+              ) : (
+                <span className="text-sm font-medium">Due Date</span>
+              )}
+            </TableHead>
+            <TableHead>
+              <span className="text-sm font-medium">Linked Project</span>
+            </TableHead>
+            <TableHead className="w-12 text-right">
+              <span className="text-sm font-medium">Actions</span>
+            </TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
-          {sortedTasks.map((task) => {
-            const isCompleted = task.status === 'completed';
+          {tasks.map((task) => {
             const isLoading = loading[task.id];
             const status = task.status || 'on_deck';
             const priority = task.priority || 'normal';
             
             return (
-              <TableRow 
-                key={task.id}
-                className={isCompleted ? 'bg-gray-50' : ''}
-              >
-                {/* Rest of your existing row content */}
+              <TableRow key={task.id}>
                 <TableCell>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
@@ -326,11 +271,25 @@ export const TaskTable = ({ tasks, onTaskUpdate }: TaskTableProps): JSX.Element 
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent>
-                      {/* Your existing dropdown content */}
+                      {tableType === 'active' ? (
+                        <DropdownMenuItem
+                          onClick={() => updateTaskStatus(task.id, 'completed')}
+                          disabled={isLoading}
+                        >
+                          Mark Completed
+                        </DropdownMenuItem>
+                      ) : (
+                        <DropdownMenuItem
+                          onClick={() => updateTaskStatus(task.id, 'active')}
+                          disabled={isLoading}
+                        >
+                          Mark Active
+                        </DropdownMenuItem>
+                      )}
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </TableCell>
-                <TableCell className={isCompleted ? 'text-gray-500' : ''}>
+                <TableCell>
                   {task.item.title}
                 </TableCell>
                 <TableCell>
@@ -376,13 +335,13 @@ export const TaskTable = ({ tasks, onTaskUpdate }: TaskTableProps): JSX.Element 
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </TableCell>
-                <TableCell className={isCompleted ? 'text-gray-500' : ''}>
+                <TableCell>
                   {task.assigned_date ? format(new Date(task.assigned_date), 'MMM d, yyyy') : '-'}
                 </TableCell>
-                <TableCell className={isCompleted ? 'text-gray-500' : ''}>
+                <TableCell>
                   {task.description || '-'}
                 </TableCell>
-                <TableCell className={isCompleted ? 'text-gray-500' : ''}>
+                <TableCell>
                   {task.due_date ? format(new Date(task.due_date), 'MMM d, yyyy') : '-'}
                 </TableCell>
                 <TableCell>
@@ -408,16 +367,10 @@ export const TaskTable = ({ tasks, onTaskUpdate }: TaskTableProps): JSX.Element 
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
                       <DropdownMenuItem
-                        onClick={() => updateTaskStatus(task.id, 'active')}
+                        onClick={() => updateTaskStatus(task.id, tableType === 'active' ? 'completed' : 'active')}
                         disabled={isLoading}
                       >
-                        Mark Active
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onClick={() => updateTaskStatus(task.id, 'completed')}
-                        disabled={isLoading}
-                      >
-                        Mark Completed
+                        {tableType === 'active' ? 'Mark Completed' : 'Mark Active'}
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
@@ -427,6 +380,134 @@ export const TaskTable = ({ tasks, onTaskUpdate }: TaskTableProps): JSX.Element 
           })}
         </TableBody>
       </Table>
+    </>
+  );
+};
+
+export const TaskTable: React.FC<TaskTableProps> = ({ tasks, onTaskUpdate }) => {
+  const [showCompleted, setShowCompleted] = useState(false);
+  const [sorts, setSorts] = useState<SortState[]>([]);
+
+  const handleSort = (field: SortField): void => {
+    setSorts(prevSorts => {
+      const existingIndex = prevSorts.findIndex(sort => sort.field === field);
+
+      if (existingIndex === -1) {
+        if (prevSorts.length >= 3) return prevSorts;
+        return [...prevSorts, { field, direction: 'asc', level: prevSorts.length + 1 }];
+      }
+
+      const existing = prevSorts[existingIndex];
+      const newSorts = [...prevSorts];
+
+      if (existing.direction === 'asc') {
+        newSorts[existingIndex] = { ...existing, direction: 'desc' };
+      } else {
+        newSorts.splice(existingIndex, 1);
+        return newSorts.map((sort, index) => ({
+          ...sort,
+          level: index + 1
+        }));
+      }
+
+      return newSorts;
+    });
+  };
+
+  const sortTasks = (tasksToSort: TaskWithDetails[]): TaskWithDetails[] => {
+    return [...tasksToSort].sort((a, b) => {
+      for (const sort of sorts) {
+        let comparison = 0;
+        
+        switch (sort.field) {
+          case 'status': {
+            const statusOrder: Record<TaskStatus, number> = { 'active': 0, 'on_deck': 1, 'completed': 2 };
+            const aStatus = a.status || 'on_deck';
+            const bStatus = b.status || 'on_deck';
+            comparison = statusOrder[aStatus] - statusOrder[bStatus];
+            break;
+          }
+          case 'title': {
+            comparison = (a.item.title || '').localeCompare(b.item.title || '');
+            break;
+          }
+          case 'priority': {
+            const priorityOrder: Record<Priority, number> = { 'high': 0, 'normal': 1, 'low': 2 };
+            const aPriority: Priority = a.priority || 'normal';
+            const bPriority: Priority = b.priority || 'normal';
+            comparison = priorityOrder[aPriority] - priorityOrder[bPriority];
+            break;
+          }
+          case 'assigned_date': {
+            const aAssigned = a.assigned_date ? new Date(a.assigned_date).getTime() : 0;
+            const bAssigned = b.assigned_date ? new Date(b.assigned_date).getTime() : 0;
+            comparison = aAssigned - bAssigned;
+            break;
+          }
+          case 'due_date': {
+            const aDue = a.due_date ? new Date(a.due_date).getTime() : 0;
+            const bDue = b.due_date ? new Date(b.due_date).getTime() : 0;
+            comparison = aDue - bDue;
+            break;
+          }
+        }
+
+        if (comparison !== 0) {
+          return sort.direction === 'asc' ? comparison : -comparison;
+        }
+      }
+      return 0;
+    });
+  };
+
+  const activeTasks = sortTasks(tasks.filter(task => 
+    task.status === 'active' || task.status === 'on_deck'
+  ));
+  
+  const completedTasks = tasks.filter(task => 
+    task.status === 'completed'
+  );
+
+  const completedCount = completedTasks.length;
+
+  return (
+    <div className="space-y-6">
+      <div className="bg-white rounded-lg shadow">
+        <TaskTableBase 
+          tasks={activeTasks}
+          onTaskUpdate={onTaskUpdate}
+          sorts={sorts}
+          onSort={handleSort}
+          tableType="active"
+        />
+      </div>
+
+      <div className="bg-white rounded-lg shadow">
+        <div 
+          className="p-4 border-b cursor-pointer hover:bg-gray-50 transition-colors"
+          onClick={() => setShowCompleted(!showCompleted)}
+        >
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-2">
+              <ChevronRight 
+                className={`h-5 w-5 transition-transform ${showCompleted ? 'rotate-90' : ''}`}
+              />
+              <h3 className="text-lg font-medium">Completed Tasks</h3>
+              <Badge variant="secondary">{completedCount}</Badge>
+            </div>
+          </div>
+        </div>
+        
+        {showCompleted && completedTasks.length > 0 && (
+          <TaskTableBase 
+            tasks={completedTasks}
+            onTaskUpdate={onTaskUpdate}
+            sorts={sorts}
+            onSort={handleSort}
+            tableType="completed"
+          />
+        )}
+      </div>
     </div>
   );
 };
