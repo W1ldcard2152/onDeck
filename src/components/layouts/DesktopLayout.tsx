@@ -1,6 +1,7 @@
 'use client'
 
 import React from 'react';
+import { ChevronUp, ChevronDown } from 'lucide-react';
 import AuthUI from '../Auth';
 import { Search, Bell, Settings, Home, CheckSquare, BookOpen, 
          FolderOpen, Calendar, Star, Menu } from 'lucide-react';
@@ -175,39 +176,47 @@ const AuthenticatedLayout: React.FC<AuthenticatedLayoutProps> = ({ userId }) => 
           </div>
         );
       
-      case 'tasks':
-        return (
-          <div className="bg-white rounded-xl shadow-sm">
-            <div className="p-6 border-b">
-              <div className="flex items-center justify-between">
-                <h2 className="text-lg font-semibold">All Tasks</h2>
-                <NewEntryForm onEntryCreated={() => refetch()} />
+        case 'tasks':
+          return (
+            <div className="bg-white rounded-xl shadow-sm">
+              <div className="p-6 border-b">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-2 text-sm text-gray-600">
+                    <span>Sort by clicking column headers</span>
+                    <div className="flex items-center space-x-1 ml-2 px-2 py-1 bg-gray-100 rounded">
+                      <ChevronUp className="h-4 w-4 text-blue-600" />
+                      <span className="text-xs">1</span>
+                      <ChevronDown className="h-3 w-3 text-blue-400" />
+                      <span className="text-xs">2</span>
+                      <span className="text-gray-500">= multi-column sort</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="p-6">
+                {taskLoading ? (
+                  <div className="animate-pulse space-y-4">
+                    <div className="h-8 bg-gray-200 rounded w-full"></div>
+                    <div className="h-8 bg-gray-200 rounded w-full"></div>
+                    <div className="h-8 bg-gray-200 rounded w-full"></div>
+                  </div>
+                ) : taskError ? (
+                  <div className="text-red-600 p-4">
+                    {taskError instanceof Error ? taskError.message : 'Error loading tasks'}
+                  </div>
+                ) : !tasks || tasks.length === 0 ? (
+                  <div className="text-gray-500 text-center py-8">
+                    No tasks yet. Create your first task to get started!
+                  </div>
+                ) : (
+                  <TaskTable 
+                    tasks={tasks} 
+                    onTaskUpdate={refetch}
+                  />
+                )}
               </div>
             </div>
-            <div className="p-6">
-              {taskLoading ? (
-                <div className="animate-pulse space-y-4">
-                  <div className="h-8 bg-gray-200 rounded w-full"></div>
-                  <div className="h-8 bg-gray-200 rounded w-full"></div>
-                  <div className="h-8 bg-gray-200 rounded w-full"></div>
-                </div>
-              ) : taskError ? (
-                <div className="text-red-600 p-4">
-                  {taskError instanceof Error ? taskError.message : 'Error loading tasks'}
-                </div>
-              ) : !tasks || tasks.length === 0 ? (
-                <div className="text-gray-500 text-center py-8">
-                  No tasks yet. Create your first task to get started!
-                </div>
-              ) : (
-                <TaskTable 
-                  tasks={tasks} 
-                  onTaskUpdate={refetch}
-                />
-              )}
-            </div>
-          </div>
-        );
+          );
       
       case 'notes':
         return (
@@ -300,11 +309,11 @@ const AuthenticatedLayout: React.FC<AuthenticatedLayoutProps> = ({ userId }) => 
 
         <main className="flex-1 p-4 md:p-6 overflow-auto">
         <div className="flex items-center justify-between mb-6">
-  <h1 className="text-2xl font-semibold">
-    {activeSection === 'dashboard' ? 'Dashboard' : 
-     activeSection === 'tasks' ? 'Tasks' : 
-     activeSection === 'notes' ? 'Notes' : ''}
-  </h1>
+        <h1 className="text-2xl font-semibold">
+  {activeSection === 'dashboard' ? 'Dashboard' : 
+   activeSection === 'tasks' ? 'Task Manager' : // Changed from 'Tasks' to 'Task Manager'
+   activeSection === 'notes' ? 'Notes' : ''}
+</h1>
   <NewEntryForm onEntryCreated={() => refetch()} />
 </div>
 

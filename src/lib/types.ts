@@ -1,5 +1,5 @@
 export type TaskStatus = 'on_deck' | 'active' | 'completed';
-export type Priority = 'low' | 'medium' | 'high' | null;
+export type Priority = 'low' | 'normal' | 'high' | null;
 export type EntryType = 'task' | 'note';
 
 export interface Item {
