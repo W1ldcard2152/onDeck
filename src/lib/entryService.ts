@@ -23,13 +23,18 @@ export class EntryService {
       if (!entry.user_id) throw new Error('User ID is required');
       if (!entry.type) throw new Error('Type is required');
 
+      const now = new Date().toISOString();
+
+      // Create the item first
       const { data: itemData, error: itemError } = await supabase
         .from('items')
         .insert([{
           title: entry.title.trim(),
           user_id: entry.user_id,
           item_type: entry.type,
-          is_archived: false
+          is_archived: false,
+          created_at: now,
+          updated_at: now
         }])
         .select()
         .single();
@@ -37,6 +42,7 @@ export class EntryService {
       if (itemError) throw itemError;
       if (!itemData) throw new Error('Failed to create item');
 
+      // Handle task-specific data
       if (entry.type === 'task') {
         const taskData = {
           id: itemData.id,
@@ -55,6 +61,22 @@ export class EntryService {
           .single();
 
         if (taskError) throw taskError;
+      }
+      
+      // Handle note-specific data
+      if (entry.type === 'note') {
+        const noteData = {
+          id: itemData.id,
+          content: entry.content?.trim() || null
+        };
+
+        const { error: noteError } = await supabase
+          .from('notes')
+          .insert([noteData])
+          .select()
+          .single();
+
+        if (noteError) throw noteError;
       }
 
       return itemData;

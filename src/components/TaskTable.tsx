@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
+import TruncatedCell from './TruncatedCell';
 import { format } from 'date-fns';
 import { Check, MoreHorizontal, Link, ChevronDown, ChevronUp, ChevronRight } from 'lucide-react';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import { NewEntryForm } from '@/components/NewEntryForm';
 import {
   Table,
   TableBody,
@@ -44,63 +46,17 @@ interface TaskTableBaseProps {
   tableType: 'active' | 'completed';
 }
 
-const TaskTableBase: React.FC<TaskTableBaseProps> = ({ 
+const TaskTableBase = ({ 
   tasks, 
   onTaskUpdate,
   sorts,
   onSort,
   tableType
-}) => {
+}: TaskTableBaseProps) => {
   const [loading, setLoading] = useState<Record<string, boolean>>({});
   const [error, setError] = useState<string | null>(null);
+  const [taskToEdit, setTaskToEdit] = useState<TaskWithDetails | null>(null);
   const supabase = createClientComponentClient<Database>();
-
-  const getPriorityColor = (priority: Priority): string => {
-    switch (priority) {
-      case 'high': return 'bg-red-100 text-red-800';
-      case 'normal': return 'bg-blue-100 text-blue-800';
-      case 'low': return 'bg-gray-100 text-gray-800';
-      default: return 'bg-blue-100 text-blue-800';
-    }
-  };
-
-  const getStatusColor = (status: TaskStatus): string => {
-    switch (status) {
-      case 'on_deck': return 'bg-yellow-100 text-yellow-800';
-      case 'active': return 'bg-green-100 text-green-800';
-      case 'completed': return 'bg-gray-100 text-gray-800';
-      default: return 'bg-gray-100 text-gray-800';
-    }
-  };
-
-  const getSortIcon = (field: SortField): JSX.Element | null => {
-    const sort = sorts.find(s => s.field === field);
-    if (!sort) return null;
-
-    const getIconColor = (level: number): string => {
-      switch(level) {
-        case 1: return "text-blue-600";
-        case 2: return "text-blue-400";
-        case 3: return "text-blue-300";
-        default: return "text-blue-600";
-      }
-    };
-
-    return (
-      <span className="ml-2 inline-flex items-center gap-1" title={`Sort level ${sort.level}`}>
-        <div className={`flex items-center ${getIconColor(sort.level)}`}>
-          {sort.direction === 'asc' ? (
-            <ChevronUp className="h-4 w-4" />
-          ) : (
-            <ChevronDown className="h-4 w-4" />
-          )}
-          {sort.level > 1 && (
-            <span className="text-xs ml-0.5">{sort.level}</span>
-          )}
-        </div>
-      </span>
-    );
-  };
 
   const updateTaskStatus = async (taskId: string, newStatus: TaskStatus): Promise<void> => {
     setLoading(prev => ({ ...prev, [taskId]: true }));
@@ -160,231 +116,315 @@ const TaskTableBase: React.FC<TaskTableBaseProps> = ({
     }
   };
 
+  const getPriorityColor = (priority: Priority): string => {
+    switch (priority) {
+      case 'high': return 'bg-red-100 text-red-800';
+      case 'normal': return 'bg-blue-100 text-blue-800';
+      case 'low': return 'bg-gray-100 text-gray-800';
+      default: return 'bg-blue-100 text-blue-800';
+    }
+  };
+
+  const getStatusColor = (status: TaskStatus): string => {
+    switch (status) {
+      case 'on_deck': return 'bg-yellow-100 text-yellow-800';
+      case 'active': return 'bg-green-100 text-green-800';
+      case 'completed': return 'bg-gray-100 text-gray-800';
+      default: return 'bg-gray-100 text-gray-800';
+    }
+  };
+
+  const getSortIcon = (field: SortField): JSX.Element | null => {
+    const sort = sorts.find(s => s.field === field);
+    if (!sort) return null;
+
+    const getIconColor = (level: number): string => {
+      switch(level) {
+        case 1: return "text-blue-600";
+        case 2: return "text-blue-400";
+        case 3: return "text-blue-300";
+        default: return "text-blue-600";
+      }
+    };
+
+    return (
+      <span className="ml-2 inline-flex items-center gap-1" title={`Sort level ${sort.level}`}>
+        <div className={`flex items-center ${getIconColor(sort.level)}`}>
+          {sort.direction === 'asc' ? (
+            <ChevronUp className="h-4 w-4" />
+          ) : (
+            <ChevronDown className="h-4 w-4" />
+          )}
+          {sort.level > 1 && (
+            <span className="text-xs ml-0.5">{sort.level}</span>
+          )}
+        </div>
+      </span>
+    );
+  };
+
   return (
-    <>
+    <div>
       {error && (
         <div className="mb-4 p-4 text-sm text-red-600 bg-red-50 rounded-lg">
           {error}
         </div>
       )}
       
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>
-              {tableType === 'active' ? (
-                <Button 
-                  variant="ghost" 
-                  onClick={() => onSort('status')}
-                  className="hover:bg-gray-100"
-                >
-                  Status {getSortIcon('status')}
-                </Button>
-              ) : (
-                <span className="text-sm font-medium">Status</span>
-              )}
-            </TableHead>
-            <TableHead>
-              {tableType === 'active' ? (
-                <Button 
-                  variant="ghost" 
-                  onClick={() => onSort('title')}
-                  className="hover:bg-gray-100"
-                >
-                  Title {getSortIcon('title')}
-                </Button>
-              ) : (
-                <span className="text-sm font-medium">Title</span>
-              )}
-            </TableHead>
-            <TableHead>
-              {tableType === 'active' ? (
-                <Button 
-                  variant="ghost" 
-                  onClick={() => onSort('priority')}
-                  className="hover:bg-gray-100"
-                >
-                  Priority {getSortIcon('priority')}
-                </Button>
-              ) : (
-                <span className="text-sm font-medium">Priority</span>
-              )}
-            </TableHead>
-            <TableHead>
-              {tableType === 'active' ? (
-                <Button 
-                  variant="ghost" 
-                  onClick={() => onSort('assigned_date')}
-                  className="hover:bg-gray-100"
-                >
-                  Assigned Date {getSortIcon('assigned_date')}
-                </Button>
-              ) : (
-                <span className="text-sm font-medium">Assigned Date</span>
-              )}
-            </TableHead>
-            <TableHead>
-              <span className="text-sm font-medium">Description</span>
-            </TableHead>
-            <TableHead>
-              {tableType === 'active' ? (
-                <Button 
-                  variant="ghost" 
-                  onClick={() => onSort('due_date')}
-                  className="hover:bg-gray-100"
-                >
-                  Due Date {getSortIcon('due_date')}
-                </Button>
-              ) : (
-                <span className="text-sm font-medium">Due Date</span>
-              )}
-            </TableHead>
-            <TableHead>
-              <span className="text-sm font-medium">Linked Project</span>
-            </TableHead>
-            <TableHead className="w-12 text-right">
-              <span className="text-sm font-medium">Actions</span>
-            </TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {tasks.map((task) => {
-            const isLoading = loading[task.id];
-            const status = task.status || 'on_deck';
-            const priority = task.priority || 'normal';
-            
-            return (
-              <TableRow key={task.id}>
-                <TableCell>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button 
-                        variant="ghost" 
-                        className="p-0 h-auto hover:bg-transparent"
-                        disabled={isLoading}
-                      >
-                        <Badge 
-                          className={`${getStatusColor(status)} border-0 cursor-pointer hover:opacity-80`}
-                        >
-                          {isLoading ? 'Updating...' : status}
-                        </Badge>
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent>
-                      {tableType === 'active' ? (
-                        <DropdownMenuItem
-                          onClick={() => updateTaskStatus(task.id, 'completed')}
+      <div className="relative">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>
+                {tableType === 'active' ? (
+                  <Button 
+                    variant="ghost" 
+                    onClick={() => onSort('status')}
+                    className="hover:bg-gray-100"
+                  >
+                    Status {getSortIcon('status')}
+                  </Button>
+                ) : (
+                  <span className="text-sm font-medium">Status</span>
+                )}
+              </TableHead>
+              <TableHead>
+                {tableType === 'active' ? (
+                  <Button 
+                    variant="ghost" 
+                    onClick={() => onSort('title')}
+                    className="hover:bg-gray-100"
+                  >
+                    Title {getSortIcon('title')}
+                  </Button>
+                ) : (
+                  <span className="text-sm font-medium">Title</span>
+                )}
+              </TableHead>
+              <TableHead>
+                {tableType === 'active' ? (
+                  <Button 
+                    variant="ghost" 
+                    onClick={() => onSort('priority')}
+                    className="hover:bg-gray-100"
+                  >
+                    Priority {getSortIcon('priority')}
+                  </Button>
+                ) : (
+                  <span className="text-sm font-medium">Priority</span>
+                )}
+              </TableHead>
+              <TableHead>
+                {tableType === 'active' ? (
+                  <Button 
+                    variant="ghost" 
+                    onClick={() => onSort('assigned_date')}
+                    className="hover:bg-gray-100"
+                  >
+                    Assigned Date {getSortIcon('assigned_date')}
+                  </Button>
+                ) : (
+                  <span className="text-sm font-medium">Assigned Date</span>
+                )}
+              </TableHead>
+              <TableHead>
+                <span className="text-sm font-medium">Description</span>
+              </TableHead>
+              <TableHead>
+                {tableType === 'active' ? (
+                  <Button 
+                    variant="ghost" 
+                    onClick={() => onSort('due_date')}
+                    className="hover:bg-gray-100"
+                  >
+                    Due Date {getSortIcon('due_date')}
+                  </Button>
+                ) : (
+                  <span className="text-sm font-medium">Due Date</span>
+                )}
+              </TableHead>
+              <TableHead>
+                <span className="text-sm font-medium">Linked Project</span>
+              </TableHead>
+              <TableHead className="w-12 text-right">
+                <span className="text-sm font-medium">Actions</span>
+              </TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {tasks.map((task) => {
+              const isLoading = loading[task.id];
+              const status = task.status || 'on_deck';
+              const priority = task.priority || 'normal';
+              
+              return (
+                <TableRow key={task.id}>
+                  <TableCell>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button 
+                          variant="ghost" 
+                          className="p-0 h-auto hover:bg-transparent"
                           disabled={isLoading}
                         >
-                          Mark Completed
-                        </DropdownMenuItem>
-                      ) : (
-                        <DropdownMenuItem
-                          onClick={() => updateTaskStatus(task.id, 'active')}
+                          <Badge 
+                            className={`${getStatusColor(status)} border-0 cursor-pointer hover:opacity-80`}
+                          >
+                            {isLoading ? 'Updating...' : status}
+                          </Badge>
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent>
+                        {tableType === 'active' ? (
+                          <>
+                            <DropdownMenuItem
+                              onClick={() => updateTaskStatus(task.id, status === 'on_deck' ? 'active' : 'on_deck')}
+                              disabled={isLoading}
+                            >
+                              Mark {status === 'on_deck' ? 'active' : 'on deck'}
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() => updateTaskStatus(task.id, 'completed')}
+                              disabled={isLoading}
+                            >
+                              Mark completed
+                            </DropdownMenuItem>
+                          </>
+                        ) : (
+                          <>
+                            <DropdownMenuItem
+                              onClick={() => updateTaskStatus(task.id, 'active')}
+                              disabled={isLoading}
+                            >
+                              Mark active
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() => updateTaskStatus(task.id, 'on_deck')}
+                              disabled={isLoading}
+                            >
+                              Mark on deck
+                            </DropdownMenuItem>
+                          </>
+                        )}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </TableCell>
+                  <TableCell>
+                    {task.item.title}
+                  </TableCell>
+                  <TableCell>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button 
+                          variant="ghost" 
+                          className="p-0 h-auto hover:bg-transparent"
                           disabled={isLoading}
                         >
-                          Mark Active
-                        </DropdownMenuItem>
-                      )}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </TableCell>
-                <TableCell>
-                  {task.item.title}
-                </TableCell>
-                <TableCell>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button 
-                        variant="ghost" 
-                        className="p-0 h-auto hover:bg-transparent"
-                        disabled={isLoading}
-                      >
-                        <Badge 
-                          className={`${getPriorityColor(priority)} border-0 cursor-pointer hover:opacity-80`}
+                          <Badge 
+                            className={`${getPriorityColor(priority)} border-0 cursor-pointer hover:opacity-80`}
+                          >
+                            {isLoading ? 'Updating...' : priority}
+                          </Badge>
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent>
+                        <DropdownMenuItem
+                          onClick={() => updateTaskPriority(task.id, 'low')}
+                          className={priority === 'low' ? 'bg-gray-50' : ''}
+                          disabled={isLoading}
                         >
-                          {isLoading ? 'Updating...' : priority}
-                        </Badge>
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent>
-                      <DropdownMenuItem
-                        onClick={() => updateTaskPriority(task.id, 'low')}
-                        className={priority === 'low' ? 'bg-gray-50' : ''}
-                        disabled={isLoading}
-                      >
-                        Low
-                        {priority === 'low' && <Check className="ml-2 h-4 w-4" />}
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onClick={() => updateTaskPriority(task.id, 'normal')}
-                        className={priority === 'normal' ? 'bg-blue-50' : ''}
-                        disabled={isLoading}
-                      >
-                        Normal
-                        {priority === 'normal' && <Check className="ml-2 h-4 w-4" />}
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onClick={() => updateTaskPriority(task.id, 'high')}
-                        className={priority === 'high' ? 'bg-red-50' : ''}
-                        disabled={isLoading}
-                      >
-                        High
-                        {priority === 'high' && <Check className="ml-2 h-4 w-4" />}
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </TableCell>
-                <TableCell>
-                  {task.assigned_date ? format(new Date(task.assigned_date), 'MMM d, yyyy') : '-'}
-                </TableCell>
-                <TableCell>
-                  {task.description || '-'}
-                </TableCell>
-                <TableCell>
-                  {task.due_date ? format(new Date(task.due_date), 'MMM d, yyyy') : '-'}
-                </TableCell>
-                <TableCell>
-                  {task.converted_project_id && (
-                    <div className="flex items-center text-blue-600">
-                      <Link className="h-4 w-4 mr-1" />
-                      Project {task.converted_project_id.slice(0, 8)}
-                    </div>
-                  )}
-                </TableCell>
-                <TableCell className="text-right">
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button 
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8"
-                        disabled={isLoading}
-                      >
-                        <MoreHorizontal className="h-4 w-4" />
-                        <span className="sr-only">Open menu</span>
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem
-                        onClick={() => updateTaskStatus(task.id, tableType === 'active' ? 'completed' : 'active')}
-                        disabled={isLoading}
-                      >
-                        {tableType === 'active' ? 'Mark Completed' : 'Mark Active'}
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </TableCell>
-              </TableRow>
-            );
-          })}
-        </TableBody>
-      </Table>
-    </>
+                          Low
+                          {priority === 'low' && <Check className="ml-2 h-4 w-4" />}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() => updateTaskPriority(task.id, 'normal')}
+                          className={priority === 'normal' ? 'bg-blue-50' : ''}
+                          disabled={isLoading}
+                        >
+                          Normal
+                          {priority === 'normal' && <Check className="ml-2 h-4 w-4" />}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() => updateTaskPriority(task.id, 'high')}
+                          className={priority === 'high' ? 'bg-red-50' : ''}
+                          disabled={isLoading}
+                        >
+                          High
+                          {priority === 'high' && <Check className="ml-2 h-4 w-4" />}
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </TableCell>
+                  <TableCell>
+                    {task.assigned_date ? format(new Date(task.assigned_date), 'MMM d, yyyy') : '-'}
+                  </TableCell>
+                  <TableCell className="max-w-[12rem] truncate">
+                    <TruncatedCell content={task.description} maxLength={60} />
+                  </TableCell>
+                  <TableCell>
+                    {task.due_date ? format(new Date(task.due_date), 'MMM d, yyyy') : '-'}
+                  </TableCell>
+                  <TableCell>
+                    {task.converted_project_id && (
+                      <div className="flex items-center text-blue-600">
+                        <Link className="h-4 w-4 mr-1" />
+                        Project {task.converted_project_id.slice(0, 8)}
+                      </div>
+                    )}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button 
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          disabled={isLoading}
+                        >
+                          <MoreHorizontal className="h-4 w-4" />
+                          <span className="sr-only">Open menu</span>
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem
+                          onClick={() => setTaskToEdit(task)}
+                          disabled={isLoading}
+                        >
+                          Edit Task
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() => updateTaskStatus(task.id, tableType === 'active' ?
+                            'completed' : 'active')}
+                          disabled={isLoading}
+                        >
+                          {tableType === 'active' ? 'Mark Completed' : 'Mark Active'}
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
+
+        {taskToEdit && (
+          <NewEntryForm
+            initialData={taskToEdit}
+            isEditing={true}
+            onEntryCreated={() => {
+              onTaskUpdate();
+              setTaskToEdit(null);
+            }}
+            onClose={() => setTaskToEdit(null)}
+          />
+        )}
+      </div>
+    </div>
   );
 };
 
-export const TaskTable: React.FC<TaskTableProps> = ({ tasks, onTaskUpdate }) => {
+const TaskTable = ({ tasks, onTaskUpdate }: TaskTableProps) => {
   const [showCompleted, setShowCompleted] = useState(false);
   const [sorts, setSorts] = useState<SortState[]>([]);
 
@@ -511,3 +551,6 @@ export const TaskTable: React.FC<TaskTableProps> = ({ tasks, onTaskUpdate }) => 
     </div>
   );
 };
+
+export { TaskTable };
+export default TaskTable;

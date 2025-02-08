@@ -2,13 +2,13 @@
 
 import React from 'react';
 import { ChevronUp, ChevronDown } from 'lucide-react';
+import { addDays, isWithinInterval } from 'date-fns';
 import AuthUI from '../Auth';
 import { Search, Bell, Settings, Home, CheckSquare, BookOpen, 
          FolderOpen, Calendar, Star, Menu } from 'lucide-react';
 import { NewEntryForm } from '../NewEntryForm';
 import { DashboardCard } from '../DashboardCard';
 import { useSupabaseAuth } from '@/hooks/useSupabaseAuth';
-// Update Supabase import to use the React client
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import { 
   DropdownMenu, 
@@ -17,12 +17,12 @@ import {
   DropdownMenuTrigger 
 } from '@/components/ui/dropdown-menu';
 import { useRouter } from 'next/navigation';
-import { isAfter, isBefore, startOfTomorrow } from 'date-fns';
 import { useTasks } from '@/hooks/useTasks';
 import { useNotes } from '@/hooks/useNotes';
 import { TaskCard } from '../TaskCard';
 import { NoteCard } from '../NoteCard';
 import { TaskTable } from '../TaskTable';
+import { NotesTable } from '../NotesTable'; 
 import type { TaskWithDetails } from '@/lib/types';
 import type { Database } from '@/types/database.types';
 
@@ -95,143 +95,204 @@ interface AuthenticatedLayoutProps {
   userId: string;
 }
 
-const AuthenticatedLayout: React.FC<AuthenticatedLayoutProps> = ({ userId }) => {
+const AuthenticatedLayout: React.FC<{ userId: string }> = ({ userId }) => {
   const [activeSection, setActiveSection] = React.useState<'dashboard' | 'tasks' | 'notes'>('dashboard');
   const { tasks, isLoading: taskLoading, error: taskError, refetch } = useTasks(userId);
   const { notes, isLoading: notesLoading, error: notesError } = useNotes(userId);
 
-  const activeTasks = React.useMemo(() => {
-    return (tasks || []).filter((task): task is TaskWithDetails => {
+  // Memoized dashboard data
+  const dashboardTasks = React.useMemo(() => {
+    if (!tasks) return [];
+    const today = new Date();
+    const threeDaysFromNow = addDays(today, 3);
+
+    return tasks.filter((task): task is TaskWithDetails => {
       if (!task) return false;
-      if (task.status !== 'active') return false;
+      if (task.status === 'completed') return false;
       if (task.is_project_converted) return false;
+
+      // Include if task is active
+      if (task.status === 'active') return true;
+
+      // Include if task is high priority
+      if (task.priority === 'high') return true;
+
+      // Include if task has a due date within next 3 days
+      if (task.due_date) {
+        const dueDate = new Date(task.due_date);
+        return isWithinInterval(dueDate, { start: today, end: threeDaysFromNow });
+      }
+
+      return false;
+    }).sort((a, b) => {
+      // Sort by status (active first)
+      if (a.status !== b.status) {
+        return a.status === 'active' ? -1 : 1;
+      }
       
-      const now = new Date();
-      const tomorrow = startOfTomorrow();
-  
-      if (task.assigned_date && isAfter(new Date(task.assigned_date), tomorrow)) {
-        return false;
+      // Then by priority (high first)
+      const priorityOrder = { high: 0, normal: 1, low: 2 };
+      if (a.priority !== b.priority) {
+        return (priorityOrder[a.priority || 'normal'] - priorityOrder[b.priority || 'normal']);
       }
-  
-      if (task.due_date && isBefore(new Date(task.due_date), now)) {
-        return false;
+      
+      // Then by due date (earliest first)
+      if (a.due_date && b.due_date) {
+        return new Date(a.due_date).getTime() - new Date(b.due_date).getTime();
       }
-  
-      return true;
+      if (a.due_date) return -1;
+      if (b.due_date) return 1;
+      
+      return 0;
     });
   }, [tasks]);
+
+  const dashboardNotes = React.useMemo(() => {
+    if (!notes) return [];
+    
+    return notes
+      .filter(note => !note.item.is_archived)
+      .sort((a, b) => 
+        new Date(b.item.created_at).getTime() - new Date(a.item.created_at).getTime()
+      )
+      .slice(0, 5);
+  }, [notes]);
+
+  const renderDashboard = () => (
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6 auto-rows-min">
+      <DashboardCard
+        title="Active & Important Tasks"
+        content={
+          <div className="space-y-3">
+            {taskLoading ? (
+              <div className="animate-pulse space-y-3">
+                <div className="h-24 bg-gray-200 rounded"></div>
+                <div className="h-24 bg-gray-200 rounded"></div>
+              </div>
+            ) : taskError ? (
+              <div className="text-red-600 p-4">
+                {taskError instanceof Error ? taskError.message : 'Error loading tasks'}
+              </div>
+            ) : dashboardTasks.length === 0 ? (
+              <div className="text-gray-500 text-center py-4">No active or important tasks</div>
+            ) : (
+              dashboardTasks.map((task) => (
+                <div key={task.id} className="relative">
+                  {task.priority === 'high' && (
+                    <div className="absolute -left-2 top-1/2 -translate-y-1/2 w-1 h-8 bg-red-500 rounded-full" />
+                  )}
+                  <TaskCard task={task} />
+                </div>
+              ))
+            )}
+          </div>
+        }
+      />
+      
+      <DashboardCard
+        title="Recent Notes"
+        content={
+          <div className="space-y-3">
+            {notesLoading ? (
+              <div className="animate-pulse space-y-3">
+                <div className="h-24 bg-gray-200 rounded"></div>
+                <div className="h-24 bg-gray-200 rounded"></div>
+              </div>
+            ) : notesError ? (
+              <div className="text-red-600 p-4">
+                {notesError instanceof Error ? notesError.message : 'Error loading notes'}
+              </div>
+            ) : !dashboardNotes || dashboardNotes.length === 0 ? (
+              <div className="text-gray-500 text-center py-4">No notes yet</div>
+            ) : (
+              dashboardNotes.map((note) => (
+                <NoteCard key={note.id} note={note} preview={true} />
+              ))
+            )}
+          </div>
+        }
+      />
+    </div>
+  );
+
+  const renderTasks = () => (
+    <div className="bg-white rounded-xl shadow-sm">
+      <div className="p-6 border-b">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-2 text-sm text-gray-600">
+            <span>Sort by clicking column headers</span>
+            <div className="flex items-center space-x-1 ml-2 px-2 py-1 bg-gray-100 rounded">
+              <ChevronUp className="h-4 w-4 text-blue-600" />
+              <span className="text-xs">1</span>
+              <ChevronDown className="h-3 w-3 text-blue-400" />
+              <span className="text-xs">2</span>
+              <span className="text-gray-500">= multi-column sort</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div className="p-6">
+        {taskLoading ? (
+          <div className="animate-pulse space-y-4">
+            <div className="h-8 bg-gray-200 rounded w-full"></div>
+            <div className="h-8 bg-gray-200 rounded w-full"></div>
+            <div className="h-8 bg-gray-200 rounded w-full"></div>
+          </div>
+        ) : taskError ? (
+          <div className="text-red-600 p-4">
+            {taskError instanceof Error ? taskError.message : 'Error loading tasks'}
+          </div>
+        ) : !tasks || tasks.length === 0 ? (
+          <div className="text-gray-500 text-center py-8">
+            No tasks yet. Create your first task to get started!
+          </div>
+        ) : (
+          <TaskTable 
+            tasks={tasks} 
+            onTaskUpdate={refetch}
+          />
+        )}
+      </div>
+    </div>
+  );
+
+  const renderNotes = () => (
+    <div className="bg-white rounded-xl shadow-sm p-6">
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-lg font-semibold">All Notes</h2>
+      </div>
+      <div className="space-y-3">
+        {notesLoading ? (
+          <div className="animate-pulse space-y-3">
+            <div className="h-24 bg-gray-200 rounded"></div>
+            <div className="h-24 bg-gray-200 rounded"></div>
+          </div>
+        ) : notesError ? (
+          <div className="text-red-600 p-4">
+            {notesError instanceof Error ? notesError.message : 'Error loading notes'}
+          </div>
+        ) : !notes || notes.length === 0 ? (
+          <div className="text-gray-500 text-center py-4">No notes yet</div>
+        ) : (
+          <NotesTable 
+            notes={notes}
+            onNoteUpdate={refetch}
+          />
+        )}
+      </div>
+    </div>
+  );
 
   const renderContent = () => {
     switch (activeSection) {
       case 'dashboard':
-        return (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6 auto-rows-min">
-            <DashboardCard
-              title="Active Tasks"
-              content={
-                <div className="space-y-3">
-                  {taskLoading ? (
-                    <div className="animate-pulse space-y-3">
-                      <div className="h-24 bg-gray-200 rounded"></div>
-                      <div className="h-24 bg-gray-200 rounded"></div>
-                    </div>
-                  ) : taskError ? (
-                    <div className="text-red-600 p-4">
-                      {taskError instanceof Error ? taskError.message : 'Error loading tasks'}
-                    </div>
-                  ) : activeTasks.length === 0 ? (
-                    <div className="text-gray-500 text-center py-4">No active tasks</div>
-                  ) : (
-                    activeTasks.slice(0, 5).map((task) => (
-                      <TaskCard key={task.id} task={task} />
-                    ))
-                  )}
-                </div>
-              }
-            />
-            
-            <DashboardCard
-              title="Recent Notes"
-              content={
-                <div className="space-y-3">
-                  {notesLoading ? (
-                    <div className="animate-pulse space-y-3">
-                      <div className="h-24 bg-gray-200 rounded"></div>
-                      <div className="h-24 bg-gray-200 rounded"></div>
-                    </div>
-                  ) : notesError ? (
-                    <div className="text-red-600 p-4">
-                      {notesError instanceof Error ? notesError.message : 'Error loading notes'}
-                    </div>
-                  ) : !notes || notes.length === 0 ? (
-                    <div className="text-gray-500 text-center py-4">No notes yet</div>
-                  ) : (
-                    notes.slice(0, 5).map((note) => (
-                      <NoteCard key={note.id} note={note} preview={true} />
-                    ))
-                  )}
-                </div>
-              }
-            />
-          </div>
-        );
-      
-        case 'tasks':
-          return (
-            <div className="bg-white rounded-xl shadow-sm">
-              <div className="p-6 border-b">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-2 text-sm text-gray-600">
-                    <span>Sort by clicking column headers</span>
-                    <div className="flex items-center space-x-1 ml-2 px-2 py-1 bg-gray-100 rounded">
-                      <ChevronUp className="h-4 w-4 text-blue-600" />
-                      <span className="text-xs">1</span>
-                      <ChevronDown className="h-3 w-3 text-blue-400" />
-                      <span className="text-xs">2</span>
-                      <span className="text-gray-500">= multi-column sort</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <div className="p-6">
-                {taskLoading ? (
-                  <div className="animate-pulse space-y-4">
-                    <div className="h-8 bg-gray-200 rounded w-full"></div>
-                    <div className="h-8 bg-gray-200 rounded w-full"></div>
-                    <div className="h-8 bg-gray-200 rounded w-full"></div>
-                  </div>
-                ) : taskError ? (
-                  <div className="text-red-600 p-4">
-                    {taskError instanceof Error ? taskError.message : 'Error loading tasks'}
-                  </div>
-                ) : !tasks || tasks.length === 0 ? (
-                  <div className="text-gray-500 text-center py-8">
-                    No tasks yet. Create your first task to get started!
-                  </div>
-                ) : (
-                  <TaskTable 
-                    tasks={tasks} 
-                    onTaskUpdate={refetch}
-                  />
-                )}
-              </div>
-            </div>
-          );
-      
+        return renderDashboard();
+      case 'tasks':
+        return renderTasks();
       case 'notes':
-        return (
-          <div className="bg-white rounded-xl shadow-sm p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold">All Notes</h2>
-              <NewEntryForm onEntryCreated={() => refetch()} />
-            </div>
-            <div className="space-y-3">
-              {notes?.map((note) => (
-                <NoteCard key={note.id} note={note} />
-              ))}
-            </div>
-          </div>
-        );
+        return renderNotes();
+      default:
+        return <div>Select a section to view content</div>;
     }
   };
 

@@ -1,6 +1,22 @@
 export type TaskStatus = 'on_deck' | 'active' | 'completed';
 export type Priority = 'low' | 'normal' | 'high';
 
+export interface NoteWithDetails {
+  id: string;
+  content: string | null;
+  item: {
+    id: string;
+    user_id: string;
+    title: string;
+    created_at: string;
+    updated_at: string;
+    item_type: string;
+    is_archived: boolean;
+    archived_at: string | null;
+    archive_reason: string | null;
+  };
+}
+
 export interface Database {
   public: {
     Tables: {
@@ -43,6 +59,23 @@ export interface Database {
           archive_reason?: string | null;
           status?: TaskStatus;
           priority?: Priority | null;
+        };
+      };
+      notes: {
+        Row: {
+          id: string;
+          content: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id: string;  // Must match items.id
+          content?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          content?: string | null;
+          created_at?: string;
         };
       };
       tasks: {

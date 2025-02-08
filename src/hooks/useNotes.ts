@@ -1,5 +1,3 @@
-'use client'
-
 import { useState, useEffect } from 'react'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import type { NoteWithDetails } from '@/lib/types'
@@ -17,55 +15,58 @@ export function useNotes(userId: string, limit: number = 10) {
       
       const supabase = createClientComponentClient<Database>()
 
-      // Query notes and join with items
-      const { data: noteData, error: noteError } = await supabase
+      // Query items first, then notes
+      const { data: itemsData, error: itemsError } = await supabase
+        .from('items')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('item_type', 'note')
+        .order('created_at', { ascending: false })
+        .limit(limit);
+
+      console.log('Items query response:', { itemsData, itemsError });
+
+      if (itemsError) throw itemsError;
+      if (!itemsData || itemsData.length === 0) {
+        console.log('No items found');
+        setNotes([]);
+        return;
+      }
+
+      // Get the note content for each item
+      const itemIds = itemsData.map(item => item.id);
+      const { data: notesData, error: notesError } = await supabase
         .from('notes')
-        .select(`
-          *,
-          item:items!inner (
-            id,
-            user_id,
-            title,
-            created_at,
-            updated_at,
-            item_type,
-            is_archived,
-            archived_at,
-            archive_reason
-          )
-        `)
-        .eq('items.user_id', userId)
-        .eq('items.item_type', 'note')
-        .eq('items.is_archived', false)
-        .order('created_at', { foreignTable: 'items', ascending: false })
-        .limit(limit)
+        .select('*')
+        .in('id', itemIds);
 
-      console.log('Notes query result:', {
-        success: !noteError,
-        count: noteData?.length,
-        data: noteData
-      })
+      console.log('Notes query response:', { notesData, notesError });
 
-      if (noteError) {
-        console.error('Note query error:', noteError)
-        throw noteError
-      }
+      if (notesError) throw notesError;
 
-      if (!noteData) {
-        console.log('No note data returned')
-        setNotes([])
-        return
-      }
+      // Combine items and notes
+      const combinedNotes = itemsData.map(item => {
+        const noteContent = notesData?.find(note => note.id === item.id)?.content || null;
+        
+        return {
+          id: item.id,
+          content: noteContent,
+          item: {
+            id: item.id,
+            user_id: item.user_id,
+            title: item.title,
+            created_at: item.created_at,
+            updated_at: item.updated_at,
+            item_type: item.item_type,
+            is_archived: item.is_archived,
+            archived_at: item.archived_at,
+            archive_reason: item.archive_reason
+          }
+        };
+      });
 
-      // Transform the data into the expected format
-      const combinedNotes = noteData.map(note => ({
-        id: note.id,
-        content: note.content,
-        item: note.item
-      })) as NoteWithDetails[]
-
-      console.log('Processed notes:', combinedNotes)
-      setNotes(combinedNotes)
+      console.log('Combined notes:', combinedNotes);
+      setNotes(combinedNotes);
       
     } catch (e) {
       console.error('Error in fetchNotes:', e)

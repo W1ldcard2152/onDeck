@@ -32,3 +32,9 @@ export interface TaskWithDetails {
   converted_project_id: string | null;
   item: Item;
 }
+
+export interface NoteWithDetails {
+  id: string;
+  content: string | null;
+  item: Item;
+}

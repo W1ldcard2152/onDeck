@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -12,18 +12,29 @@ import { CalendarIcon, Plus } from 'lucide-react';
 import { useSupabaseAuth } from '@/hooks/useSupabaseAuth';
 import { EntryService } from '@/lib/entryService';
 import type { TaskStatus, Priority } from '@/types/database.types';
+import type { TaskWithDetails } from '@/lib/types';
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import { DayPicker } from "react-day-picker";
 import "react-day-picker/dist/style.css";
 
 interface NewEntryFormProps {
   onEntryCreated?: (entry: any) => void;
+  initialData?: TaskWithDetails;
+  isEditing?: boolean;
+  onClose?: () => void;
 }
 
 type EntryType = 'task' | 'note';
 
-export const NewEntryForm: React.FC<NewEntryFormProps> = ({ onEntryCreated }) => {
+export const NewEntryForm: React.FC<NewEntryFormProps> = ({ 
+  onEntryCreated, 
+  initialData,
+  isEditing = false,
+  onClose 
+}) => {
   const { user } = useSupabaseAuth();
-  const [open, setOpen] = useState(false);
+  const supabase = createClientComponentClient();
+  const [open, setOpen] = useState(isEditing);
   const [type, setType] = useState<EntryType>('task');
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
@@ -34,6 +45,22 @@ export const NewEntryForm: React.FC<NewEntryFormProps> = ({ onEntryCreated }) =>
   const [description, setDescription] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Initialize form with task data when editing
+  useEffect(() => {
+    if (initialData && isEditing) {
+      setTitle(initialData.item.title);
+      setDescription(initialData.description || '');
+      setPriority(initialData.priority || 'normal');
+      setStatus(initialData.status || 'on_deck');
+      if (initialData.due_date) {
+        setDueDate(new Date(initialData.due_date));
+      }
+      if (initialData.assigned_date) {
+        setAssignedDate(new Date(initialData.assigned_date));
+      }
+    }
+  }, [initialData, isEditing]);
 
   const resetForm = () => {
     setTitle('');
@@ -59,29 +86,61 @@ export const NewEntryForm: React.FC<NewEntryFormProps> = ({ onEntryCreated }) =>
     }
 
     try {
-      const newEntry = {
-        title: title.trim(),
-        type,
-        user_id: user.id,
-        content: type === 'note' ? content.trim() : null,
-        due_date: dueDate?.toISOString() || null,
-        assigned_date: assignedDate?.toISOString() || null,
-        status: type === 'task' ? status : undefined,
-        priority: type === 'task' ? priority : undefined,
-        description: type === 'task' ? description.trim() : null,
-      };
+      if (isEditing && initialData) {
+        // Update existing task
+        const { error: taskError } = await supabase
+          .from('tasks')
+          .update({
+            due_date: dueDate?.toISOString() || null,
+            assigned_date: assignedDate?.toISOString() || null,
+            status: status,
+            description: description.trim() || null,
+            priority: priority
+          })
+          .eq('id', initialData.id);
 
-      const data = await EntryService.createEntry(newEntry);
-      
-      if (data && onEntryCreated) {
-        onEntryCreated(data);
+        if (taskError) throw taskError;
+
+        const { error: itemError } = await supabase
+          .from('items')
+          .update({
+            title: title.trim(),
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', initialData.id);
+
+        if (itemError) throw itemError;
+
+        if (onEntryCreated) {
+          onEntryCreated({ id: initialData.id });
+        }
+      } else {
+        // Create new entry
+        const newEntry = {
+          title: title.trim(),
+          type,
+          user_id: user.id,
+          content: type === 'note' ? content.trim() : null,
+          due_date: dueDate?.toISOString() || null,
+          assigned_date: assignedDate?.toISOString() || null,
+          status: type === 'task' ? status : undefined,
+          priority: type === 'task' ? priority : undefined,
+          description: type === 'task' ? description.trim() : null,
+        };
+
+        const data = await EntryService.createEntry(newEntry);
+        
+        if (data && onEntryCreated) {
+          onEntryCreated(data);
+        }
       }
 
       setOpen(false);
       resetForm();
+      if (onClose) onClose();
     } catch (err) {
-      console.error('Error creating entry:', err);
-      setError(err instanceof Error ? err.message : 'Failed to create entry');
+      console.error('Error saving entry:', err);
+      setError(err instanceof Error ? err.message : 'Failed to save entry');
     } finally {
       setIsSubmitting(false);
     }
@@ -198,21 +257,29 @@ export const NewEntryForm: React.FC<NewEntryFormProps> = ({ onEntryCreated }) =>
   };
 
   return (
-    <Dialog open={open} onOpenChange={(newOpen) => {
-      setOpen(newOpen);
-      if (!newOpen) resetForm();
-    }}>
+    <Dialog 
+      open={open} 
+      onOpenChange={(newOpen) => {
+        setOpen(newOpen);
+        if (!newOpen) {
+          resetForm();
+          if (onClose) onClose();
+        }
+      }}
+    >
       <DialogTrigger asChild>
-        <Button className="bg-blue-600 text-white rounded-lg hover:bg-blue-700">
-          <Plus className="w-4 h-4 mr-2" />
-          New Item
-        </Button>
+        {!isEditing ? (
+          <Button className="bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+            <Plus className="w-4 h-4 mr-2" />
+            New Item
+          </Button>
+        ) : null}
       </DialogTrigger>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
-          <DialogTitle>Create New Entry</DialogTitle>
+          <DialogTitle>{isEditing ? 'Edit Task' : 'Create New Entry'}</DialogTitle>
           <DialogDescription>
-            Create a new task or note.
+            {isEditing ? 'Update task details.' : 'Create a new task or note.'}
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -220,25 +287,27 @@ export const NewEntryForm: React.FC<NewEntryFormProps> = ({ onEntryCreated }) =>
             <div className="text-red-500 text-sm">{error}</div>
           )}
           
-          <div className="space-y-2">
-            <Label htmlFor="type">Type</Label>
-            <Select
-              value={type}
-              onValueChange={(value) => {
-                if (value === 'task' || value === 'note') {
-                  setType(value);
-                }
-              }}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Select type" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="task">Task</SelectItem>
-                <SelectItem value="note">Note</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+          {!isEditing && (
+            <div className="space-y-2">
+              <Label htmlFor="type">Type</Label>
+              <Select
+                value={type}
+                onValueChange={(value) => {
+                  if (value === 'task' || value === 'note') {
+                    setType(value);
+                  }
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="task">Task</SelectItem>
+                  <SelectItem value="note">Note</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          )}
 
           <div className="space-y-2">
             <Label htmlFor="title">Title</Label>
@@ -258,7 +327,7 @@ export const NewEntryForm: React.FC<NewEntryFormProps> = ({ onEntryCreated }) =>
             className="w-full bg-blue-600 hover:bg-blue-700"
             disabled={isSubmitting}
           >
-            {isSubmitting ? "Creating..." : "Create Entry"}
+            {isSubmitting ? (isEditing ? "Saving..." : "Creating...") : (isEditing ? "Save Changes" : "Create Entry")}
           </Button>
         </form>
       </DialogContent>
