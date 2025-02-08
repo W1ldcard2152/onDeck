@@ -13,7 +13,7 @@ interface NavProps {
 }
 
 // Shared navigation items configuration
-export const navItems = [
+const navItems = [
   { icon: Home, label: 'Dashboard', id: 'dashboard' },
   { icon: CheckSquare, label: 'Tasks', id: 'tasks' },
   { icon: BookOpen, label: 'Notes', id: 'notes' },
@@ -22,7 +22,7 @@ export const navItems = [
   { icon: Calendar, label: 'Journal', id: 'journal' },
 ];
 
-export const BottomNav: React.FC<NavProps> = ({ activeSection, onSectionChange }) => {
+const MobileNav = ({ activeSection, onSectionChange }: NavProps) => {
   return (
     <>
       {/* Mobile Bottom Navigation */}
@@ -71,6 +71,59 @@ export const BottomNav: React.FC<NavProps> = ({ activeSection, onSectionChange }
           </Sheet>
         </div>
       </nav>
+
+      {/* Mobile Header */}
+      <header className="md:hidden fixed top-0 left-0 right-0 h-16 bg-white border-b flex items-center px-4">
+        <div className="flex items-center flex-1">
+          <div className="flex items-center">
+            <div className="w-8 h-8 bg-blue-500 rounded-lg mr-2"></div>
+            <span className="text-xl font-semibold">OnDeck</span>
+          </div>
+        </div>
+      </header>
     </>
   );
 };
+
+const DesktopNav = ({ activeSection, onSectionChange }: NavProps) => {
+  return (
+    <div className="hidden md:block w-64 bg-navy-900 text-white p-4">
+      <div className="flex items-center mb-8">
+        <div className="w-8 h-8 bg-blue-500 rounded-lg mr-2"></div>
+        <span className="text-xl font-semibold">OnDeck</span>
+      </div>
+
+      <nav className="space-y-1">
+        {navItems.map(({ icon: Icon, label, id }) => (
+          <button
+            key={id}
+            onClick={() => onSectionChange(id)}
+            className={cn(
+              "flex w-full items-center px-3 py-2 rounded-lg text-sm",
+              activeSection === id 
+                ? "bg-blue-600 text-white" 
+                : "text-gray-300 hover:bg-gray-800 hover:text-white"
+            )}
+          >
+            <Icon className="h-5 w-5 mr-3" />
+            {label}
+          </button>
+        ))}
+      </nav>
+    </div>
+  );
+};
+
+export const ResponsiveNavigation: React.FC<NavProps> = ({ 
+  activeSection, 
+  onSectionChange 
+}) => {
+  return (
+    <>
+      <MobileNav activeSection={activeSection} onSectionChange={onSectionChange} />
+      <DesktopNav activeSection={activeSection} onSectionChange={onSectionChange} />
+    </>
+  );
+};
+
+export default ResponsiveNavigation;
