@@ -1,11 +1,7 @@
 import React from 'react';
 import { cn } from "@/lib/utils";
-import { navItems } from './BottomNav';
-
-interface NavProps {
-  activeSection: string;
-  onSectionChange: (section: string) => void;
-}
+import { navItems } from '@/components/layouts/responsiveNav/BottomNav';
+import type { NavProps } from '@/components/layouts/responsiveNav/types';
 
 export const DesktopNav: React.FC<NavProps> = ({ activeSection, onSectionChange }) => {
   return (

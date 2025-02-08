@@ -1,129 +1,73 @@
-import React from 'react';
-import { Home, CheckSquare, BookOpen, FolderOpen, Calendar, Star, Menu } from 'lucide-react';
+import React, { useState } from 'react';
+import { Search, Bell, Settings } from 'lucide-react';
 import { cn } from "@/lib/utils";
-import {
-  Sheet,
-  SheetContent,
-  SheetTrigger,
-} from "@/components/ui/sheet";
+import { BottomNav } from './BottomNav';
+import { DesktopNav } from './DesktopNav';
+import { MobileHeader } from './MobileHeader';
+import type { SectionType } from './types';
 
-interface NavProps {
-  activeSection: string;
-  onSectionChange: (section: string) => void;
-}
+const Layout = () => {
+  const [activeSection, setActiveSection] = useState<SectionType>('dashboard');
 
-// Shared navigation items configuration
-const navItems = [
-  { icon: Home, label: 'Dashboard', id: 'dashboard' },
-  { icon: CheckSquare, label: 'Tasks', id: 'tasks' },
-  { icon: BookOpen, label: 'Notes', id: 'notes' },
-  { icon: FolderOpen, label: 'Projects', id: 'projects' },
-  { icon: Star, label: 'Habits', id: 'habits' },
-  { icon: Calendar, label: 'Journal', id: 'journal' },
-];
-
-const MobileNav = ({ activeSection, onSectionChange }: NavProps) => {
   return (
-    <>
-      {/* Mobile Bottom Navigation */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t px-2 pb-safe">
-        <div className="flex justify-around">
-          {navItems.slice(0, 4).map(({ icon: Icon, label, id }) => (
-            <button
-              key={id}
-              onClick={() => onSectionChange(id)}
-              className={cn(
-                "flex flex-col items-center py-2 px-3 rounded-lg",
-                activeSection === id ? "text-blue-600" : "text-gray-600"
-              )}
-            >
-              <Icon className="h-6 w-6" />
-              <span className="text-xs mt-1">{label}</span>
-            </button>
-          ))}
-          <Sheet>
-            <SheetTrigger asChild>
-              <button className="flex flex-col items-center py-2 px-3 rounded-lg text-gray-600">
-                <Menu className="h-6 w-6" />
-                <span className="text-xs mt-1">More</span>
-              </button>
-            </SheetTrigger>
-            <SheetContent side="bottom" className="h-72">
-              <div className="grid grid-cols-3 gap-4 p-4">
-                {navItems.slice(4).map(({ icon: Icon, label, id }) => (
-                  <button
-                    key={id}
-                    onClick={() => {
-                      onSectionChange(id);
-                      // Close sheet (you'll need to implement this)
-                    }}
-                    className={cn(
-                      "flex flex-col items-center p-4 rounded-lg",
-                      activeSection === id ? "text-blue-600 bg-blue-50" : "text-gray-600"
-                    )}
-                  >
-                    <Icon className="h-6 w-6" />
-                    <span className="text-sm mt-2">{label}</span>
-                  </button>
-                ))}
-              </div>
-            </SheetContent>
-          </Sheet>
-        </div>
-      </nav>
-
-      {/* Mobile Header */}
-      <header className="md:hidden fixed top-0 left-0 right-0 h-16 bg-white border-b flex items-center px-4">
-        <div className="flex items-center flex-1">
-          <div className="flex items-center">
-            <div className="w-8 h-8 bg-blue-500 rounded-lg mr-2"></div>
-            <span className="text-xl font-semibold">OnDeck</span>
-          </div>
-        </div>
-      </header>
-    </>
-  );
-};
-
-const DesktopNav = ({ activeSection, onSectionChange }: NavProps) => {
-  return (
-    <div className="hidden md:block w-64 bg-navy-900 text-white p-4">
-      <div className="flex items-center mb-8">
-        <div className="w-8 h-8 bg-blue-500 rounded-lg mr-2"></div>
-        <span className="text-xl font-semibold">OnDeck</span>
+    <div className="min-h-screen bg-gray-50">
+      {/* Desktop Navigation - hidden on mobile */}
+      <div className="hidden md:block fixed left-0 top-0 h-full">
+        <DesktopNav 
+          activeSection={activeSection} 
+          onSectionChange={setActiveSection}
+        />
       </div>
 
-      <nav className="space-y-1">
-        {navItems.map(({ icon: Icon, label, id }) => (
-          <button
-            key={id}
-            onClick={() => onSectionChange(id)}
-            className={cn(
-              "flex w-full items-center px-3 py-2 rounded-lg text-sm",
-              activeSection === id 
-                ? "bg-blue-600 text-white" 
-                : "text-gray-300 hover:bg-gray-800 hover:text-white"
-            )}
-          >
-            <Icon className="h-5 w-5 mr-3" />
-            {label}
-          </button>
-        ))}
-      </nav>
+      {/* Main Content Area */}
+      <div className="md:ml-64 min-h-screen flex flex-col">
+        {/* Mobile Header - visible only on mobile */}
+        <MobileHeader className="md:hidden" />
+
+        {/* Desktop Header - visible only on desktop */}
+        <header className="hidden md:flex h-16 bg-white border-b items-center justify-between px-4 sticky top-0">
+          <div className="flex items-center flex-1">
+            <div className="relative w-full max-w-md">
+              <input
+                type="text"
+                placeholder="Search..."
+                className="w-full pl-10 pr-4 py-2 rounded-lg bg-gray-100"
+              />
+              <Search className="absolute left-3 top-2.5 text-gray-400" size={20} />
+            </div>
+          </div>
+          
+          <div className="flex items-center space-x-4">
+            <button className="p-2 hover:bg-gray-100 rounded-lg">
+              <Bell size={20} className="text-gray-600" />
+            </button>
+            <button className="p-2 hover:bg-gray-100 rounded-lg">
+              <Settings size={20} className="text-gray-600" />
+            </button>
+            <div className="w-8 h-8 bg-gray-200 rounded-full" />
+          </div>
+        </header>
+
+        {/* Main Content */}
+        <main className="flex-1 p-4 md:p-6 mt-16 md:mt-0 pb-20 md:pb-6">
+          {/* Your page content goes here */}
+          <div className="max-w-7xl mx-auto">
+            {/* Content for each section */}
+            {activeSection === 'dashboard' && <div>Dashboard Content</div>}
+            {activeSection === 'tasks' && <div>Tasks Content</div>}
+            {activeSection === 'notes' && <div>Notes Content</div>}
+            {/* Add other sections as needed */}
+          </div>
+        </main>
+
+        {/* Bottom Navigation - visible only on mobile */}
+        <BottomNav 
+          activeSection={activeSection} 
+          onSectionChange={setActiveSection}
+        />
+      </div>
     </div>
   );
 };
 
-export const ResponsiveNavigation: React.FC<NavProps> = ({ 
-  activeSection, 
-  onSectionChange 
-}) => {
-  return (
-    <>
-      <MobileNav activeSection={activeSection} onSectionChange={onSectionChange} />
-      <DesktopNav activeSection={activeSection} onSectionChange={onSectionChange} />
-    </>
-  );
-};
-
-export default ResponsiveNavigation;
+export default Layout;

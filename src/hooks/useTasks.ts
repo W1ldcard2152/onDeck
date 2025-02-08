@@ -5,13 +5,20 @@ import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import type { TaskWithDetails } from '@/lib/types'
 import type { Database } from '@/types/database.types'
 
-export function useTasks(userId: string, limit: number = 10) {
+export function useTasks(userId: string | undefined, limit: number = 10) {
   const [tasks, setTasks] = useState<TaskWithDetails[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<Error | null>(null)
 
   async function fetchTasks() {
     try {
+      // Return early if no userId is provided
+      if (!userId) {
+        setTasks([]);
+        setIsLoading(false);
+        return;
+      }
+
       console.log('Fetching tasks for user:', userId)
       setIsLoading(true)
       
@@ -72,25 +79,8 @@ export function useTasks(userId: string, limit: number = 10) {
         }
       }).filter((task): task is TaskWithDetails => task !== null)
 
-      // Sort tasks by status and due date
-      const sortedTasks = combinedTasks.sort((a, b) => {
-        const statusOrder = { 'active': 0, 'on_deck': 1, 'completed': 2 };
-        const statusA = statusOrder[a.status || 'on_deck'];
-        const statusB = statusOrder[b.status || 'on_deck'];
-        if (statusA !== statusB) {
-          return statusA - statusB;
-        }
-        
-        if (a.due_date && b.due_date) {
-          return new Date(a.due_date).getTime() - new Date(b.due_date).getTime()
-        }
-        if (a.due_date) return -1
-        if (b.due_date) return 1
-        return new Date(a.item.created_at).getTime() - new Date(b.item.created_at).getTime()
-      })
-
-      console.log('Setting tasks state with:', sortedTasks);
-      setTasks(sortedTasks)
+      console.log('Setting tasks state with:', combinedTasks);
+      setTasks(combinedTasks)
       
     } catch (e) {
       console.error('Error in fetchTasks:', e)

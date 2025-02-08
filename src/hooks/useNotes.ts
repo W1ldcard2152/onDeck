@@ -1,15 +1,24 @@
+'use client'
+
 import { useState, useEffect } from 'react'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import type { NoteWithDetails } from '@/lib/types'
 import type { Database } from '@/types/database.types'
 
-export function useNotes(userId: string, limit: number = 10) {
+export function useNotes(userId: string | undefined, limit: number = 10) {
   const [notes, setNotes] = useState<NoteWithDetails[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<Error | null>(null)
 
   async function fetchNotes() {
     try {
+      // Return early if no userId is provided
+      if (!userId) {
+        setNotes([]);
+        setIsLoading(false);
+        return;
+      }
+
       console.log('Fetching notes for user:', userId)
       setIsLoading(true)
       

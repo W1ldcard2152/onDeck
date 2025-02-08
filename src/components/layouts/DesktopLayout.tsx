@@ -1,48 +1,21 @@
+'use client'
+
 import React, { useState } from 'react';
-import { Search, Bell, Settings, Menu } from 'lucide-react';
-import AuthUI from '../Auth';
-import { useSupabaseAuth } from '@/hooks/useSupabaseAuth';
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
-import { useRouter } from 'next/navigation';
-import type { Database } from '@/types/database.types';
+import { Search, Bell, Settings } from 'lucide-react';
+import { cn } from "@/lib/utils";
 import { BottomNav } from './responsiveNav/BottomNav';
 import { DesktopNav } from './responsiveNav/DesktopNav';
 import { MobileHeader } from './responsiveNav/MobileHeader';
+import AuthUI from '@/components/Auth';
+import { useSupabaseAuth } from '@/hooks/useSupabaseAuth';
+import type { SectionType } from './responsiveNav/types';
 import DashboardPage from '@/app/dashboard/page';
 import TasksPage from '@/app/tasks/page';
 import NotesPage from '@/app/notes/page';
-import { 
-  DropdownMenu, 
-  DropdownMenuContent, 
-  DropdownMenuItem, 
-  DropdownMenuTrigger 
-} from '@/components/ui/dropdown-menu';
 
-const UserMenu = () => {
-  const supabase = createClientComponentClient<Database>();
-  const router = useRouter();
-
-  const handleSignOut = async () => {
-    await supabase.auth.signOut();
-    router.refresh();
-  };
-
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <button className="w-8 h-8 bg-gray-200 rounded-full cursor-pointer hover:ring-2 hover:ring-gray-300 transition-all" />
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
-        <DropdownMenuItem onClick={handleSignOut}>
-          Sign out
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
-};
-
-const DesktopLayout: React.FC = () => {
+const DesktopLayout = () => {
   const { user, loading } = useSupabaseAuth();
+  const [activeSection, setActiveSection] = useState<SectionType>('dashboard');
 
   if (loading) {
     return (
@@ -55,16 +28,6 @@ const DesktopLayout: React.FC = () => {
   if (!user) {
     return <AuthUI />;
   }
-
-  return <AuthenticatedLayout userId={user.id} />;
-};
-
-interface AuthenticatedLayoutProps {
-  userId: string;
-}
-
-const AuthenticatedLayout: React.FC<AuthenticatedLayoutProps> = ({ userId }) => {
-  const [activeSection, setActiveSection] = useState<'dashboard' | 'tasks' | 'notes' | 'projects' | 'habits' | 'journal'>('dashboard');
 
   const renderContent = () => {
     switch (activeSection) {
@@ -86,19 +49,22 @@ const AuthenticatedLayout: React.FC<AuthenticatedLayoutProps> = ({ userId }) => 
   };
 
   return (
-    <div className="flex h-screen bg-gray-50">
-      {/* Desktop Navigation */}
-      <DesktopNav 
-        activeSection={activeSection} 
-        onSectionChange={setActiveSection}
-      />
+    <div className="min-h-screen bg-gray-50">
+      {/* Desktop Navigation - hidden on mobile */}
+      <div className="hidden md:block fixed left-0 top-0 h-full">
+        <DesktopNav 
+          activeSection={activeSection} 
+          onSectionChange={setActiveSection}
+        />
+      </div>
 
-      <div className="flex-1 flex flex-col min-w-0">
-        {/* Mobile Header */}
+      {/* Main Content Area */}
+      <div className="md:ml-64 min-h-screen flex flex-col">
+        {/* Mobile Header - visible only on mobile */}
         <MobileHeader className="md:hidden" />
 
-        {/* Desktop Header */}
-        <header className="hidden md:flex h-16 bg-white border-b items-center justify-between px-4">
+        {/* Desktop Header - visible only on desktop */}
+        <header className="hidden md:flex h-16 bg-white border-b items-center justify-between px-4 sticky top-0">
           <div className="flex items-center flex-1">
             <div className="relative w-full max-w-md">
               <input
@@ -111,28 +77,24 @@ const AuthenticatedLayout: React.FC<AuthenticatedLayoutProps> = ({ userId }) => 
           </div>
           
           <div className="flex items-center space-x-4">
-            <button 
-              type="button"
-              className="p-2 hover:bg-gray-100 rounded-lg"
-            >
+            <button className="p-2 hover:bg-gray-100 rounded-lg">
               <Bell size={20} className="text-gray-600" />
             </button>
-            <button 
-              type="button"
-              className="p-2 hover:bg-gray-100 rounded-lg"
-            >
+            <button className="p-2 hover:bg-gray-100 rounded-lg">
               <Settings size={20} className="text-gray-600" />
             </button>
-            <UserMenu />
+            <div className="w-8 h-8 bg-gray-200 rounded-full" />
           </div>
         </header>
 
         {/* Main Content */}
-        <main className="flex-1 p-4 md:p-6 overflow-auto pb-16 md:pb-6">
-          {renderContent()}
+        <main className="flex-1 p-4 md:p-6 mt-16 md:mt-0 pb-20 md:pb-6">
+          <div className="max-w-7xl mx-auto">
+            {renderContent()}
+          </div>
         </main>
 
-        {/* Mobile Navigation */}
+        {/* Bottom Navigation - visible only on mobile */}
         <BottomNav 
           activeSection={activeSection} 
           onSectionChange={setActiveSection}

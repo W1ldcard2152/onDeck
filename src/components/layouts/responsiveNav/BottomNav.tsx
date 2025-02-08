@@ -1,3 +1,5 @@
+'use client'
+
 import React from 'react';
 import { Home, CheckSquare, BookOpen, FolderOpen, Calendar, Star, Menu } from 'lucide-react';
 import { cn } from "@/lib/utils";
@@ -6,14 +8,14 @@ import {
   SheetContent,
   SheetTrigger,
 } from "@/components/ui/sheet";
-
-interface NavProps {
-  activeSection: string;
-  onSectionChange: (section: string) => void;
-}
+import type { NavProps, SectionType } from './types';
 
 // Shared navigation items configuration
-export const navItems = [
+export const navItems: Array<{
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+  id: SectionType;
+}> = [
   { icon: Home, label: 'Dashboard', id: 'dashboard' },
   { icon: CheckSquare, label: 'Tasks', id: 'tasks' },
   { icon: BookOpen, label: 'Notes', id: 'notes' },
@@ -22,7 +24,9 @@ export const navItems = [
   { icon: Calendar, label: 'Journal', id: 'journal' },
 ];
 
-export const BottomNav: React.FC<NavProps> = ({ activeSection, onSectionChange }) => {
+export const BottomNav = ({ activeSection, onSectionChange }: NavProps) => {
+  const [isSheetOpen, setIsSheetOpen] = React.useState(false);
+
   return (
     <>
       {/* Mobile Bottom Navigation */}
@@ -41,7 +45,7 @@ export const BottomNav: React.FC<NavProps> = ({ activeSection, onSectionChange }
               <span className="text-xs mt-1">{label}</span>
             </button>
           ))}
-          <Sheet>
+          <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
             <SheetTrigger asChild>
               <button className="flex flex-col items-center py-2 px-3 rounded-lg text-gray-600">
                 <Menu className="h-6 w-6" />
@@ -55,7 +59,7 @@ export const BottomNav: React.FC<NavProps> = ({ activeSection, onSectionChange }
                     key={id}
                     onClick={() => {
                       onSectionChange(id);
-                      // Close sheet (you'll need to implement this)
+                      setIsSheetOpen(false);
                     }}
                     className={cn(
                       "flex flex-col items-center p-4 rounded-lg",
