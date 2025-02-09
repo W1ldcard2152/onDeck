@@ -6,10 +6,13 @@ import type { NavProps } from '@/components/layouts/responsiveNav/types';
 export const DesktopNav: React.FC<NavProps> = ({ activeSection, onSectionChange }) => {
   return (
     <div className="hidden md:block w-64 bg-navy-900 text-white p-4">
-      <div className="flex items-center mb-8">
+      <button 
+        onClick={() => onSectionChange('dashboard')}
+        className="flex items-center mb-8 hover:opacity-90 transition-opacity"
+      >
         <div className="w-8 h-8 bg-blue-500 rounded-lg mr-2"></div>
         <span className="text-xl font-semibold">OnDeck</span>
-      </div>
+      </button>
 
       <nav className="space-y-1">
         {navItems.map(({ icon: Icon, label, id }) => (
