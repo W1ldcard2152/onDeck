@@ -1,9 +1,6 @@
-'use client'
-
 import React, { createContext, useContext, useState, useCallback } from 'react';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import type { Database } from '@/types/database.types';
-import type { TaskWithDetails, NoteWithDetails } from '@/lib/types';
 
 interface SearchResult {
   id: string;
@@ -34,7 +31,13 @@ export function SearchProvider({ children }: { children: React.ReactNode }) {
   
   const supabase = createClientComponentClient<Database>();
 
+  const handleSetSearchQuery = useCallback((query: string) => {
+    console.log('Setting search query:', query);
+    setSearchQuery(query);
+  }, []);
+
   const performSearch = useCallback(async (query: string) => {
+    console.log('Performing search for:', query);
     if (!query.trim()) {
       setSearchResults([]);
       return;
@@ -84,6 +87,7 @@ export function SearchProvider({ children }: { children: React.ReactNode }) {
         };
       });
 
+      console.log('Search results:', results);
       setSearchResults(results);
     } catch (error) {
       console.error('Search error:', error);
@@ -94,6 +98,7 @@ export function SearchProvider({ children }: { children: React.ReactNode }) {
   }, [supabase]);
 
   const clearSearch = useCallback(() => {
+    console.log('Clearing search');
     setSearchQuery('');
     setSearchResults([]);
     setShowResults(false);
@@ -104,7 +109,7 @@ export function SearchProvider({ children }: { children: React.ReactNode }) {
     searchQuery,
     searchResults,
     showResults,
-    setSearchQuery,
+    setSearchQuery: handleSetSearchQuery,
     performSearch,
     clearSearch,
     setShowResults

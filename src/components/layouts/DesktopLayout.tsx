@@ -14,6 +14,7 @@ import NotesPage from '@/app/notes/page';
 import UserMenu from '../UserMenu';
 import { SearchInput } from '../SearchInput';
 import ClientLayout from './ClientLayout';
+import IntegratedSearch from '../IntegratedSearch';
 
 const DesktopLayout = () => {
   const { user, loading } = useSupabaseAuth();
@@ -71,29 +72,30 @@ const DesktopLayout = () => {
 
           {/* Desktop Header */}
           <header className="hidden md:flex h-16 bg-white border-b items-center justify-between px-4">
-            <div className="flex items-center flex-1">
-              <SearchInput 
-                className="max-w-md" 
-                onSectionChange={setActiveSection}
-              />
-            </div>
-            
-            <div className="flex items-center space-x-4">
-              <button 
-                type="button"
-                className="p-2 hover:bg-gray-100 rounded-lg"
-              >
-                <Bell size={20} className="text-gray-600" />
-              </button>
-              <button 
-                type="button"
-                className="p-2 hover:bg-gray-100 rounded-lg"
-              >
-                <Settings size={20} className="text-gray-600" />
-              </button>
-              <UserMenu />
-            </div>
-          </header>
+  <div className="flex items-center flex-1">
+  <IntegratedSearch 
+  className="max-w-md" 
+  onSectionChange={setActiveSection}
+  activeSection={activeSection}
+/>
+  </div>
+  
+  <div className="flex items-center space-x-4">
+    <button 
+      type="button"
+      className="p-2 hover:bg-gray-100 rounded-lg"
+    >
+      <Bell size={20} className="text-gray-600" />
+    </button>
+    <button 
+      type="button"
+      className="p-2 hover:bg-gray-100 rounded-lg"
+    >
+      <Settings size={20} className="text-gray-600" />
+    </button>
+    <UserMenu />
+  </div>
+</header>
 
           {/* Main Content */}
           <main className="flex-1 p-4 md:p-6 mt-16 md:mt-0 pb-20 md:pb-6">

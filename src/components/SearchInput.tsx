@@ -3,12 +3,8 @@ import { Search, X } from 'lucide-react';
 import { cn } from "@/lib/utils";
 import { useSearch } from '@/contexts/SearchContext';
 import { SearchResults } from '@/components/SearchResults';
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import { Button } from "@/components/ui/button";
+import { SearchResultsView } from '@/components/SearchResultsView';
+import { Input } from "@/components/ui/input";
 import type { SectionType } from '@/components/layouts/responsiveNav/types';
 
 interface SearchInputProps {
@@ -27,41 +23,47 @@ export const SearchInput: React.FC<SearchInputProps> = ({
   onExpandedChange,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
+  const [showFullResults, setShowFullResults] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  
   const {
     searchQuery,
     setSearchQuery,
     performSearch,
     clearSearch,
-    isSearching
+    isSearching,
+    searchResults
   } = useSearch();
 
   // Handle search query changes
-  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const query = e.target.value;
-    setSearchQuery(query);
-    if (query.length >= 2) {
-      performSearch(query);
+  const handleSearchChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newValue = e.target.value;
+    setSearchQuery(newValue);
+
+    if (newValue.length >= 2) {
+      await performSearch(newValue);
       setIsOpen(true);
     } else {
-      clearSearch();
       setIsOpen(false);
     }
   };
 
   // Handle form submission
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (searchQuery.length >= 2) {
-      performSearch(searchQuery);
-      setIsOpen(true);
+      await performSearch(searchQuery);
+      setShowFullResults(true);
+      setIsOpen(false);
     }
   };
 
-  // Clear search and close popover
+  // Clear search
   const handleClear = () => {
+    setSearchQuery('');
     clearSearch();
     setIsOpen(false);
+    setShowFullResults(false);
     if (mobile && onExpandedChange) {
       onExpandedChange(false);
     }
@@ -75,104 +77,65 @@ export const SearchInput: React.FC<SearchInputProps> = ({
     }
   }, [mobile, expanded]);
 
-  // Mobile expanded view
-  if (mobile && expanded) {
-    return (
-      <div className={cn("flex items-center gap-2", className)}>
-        <form onSubmit={handleSubmit} className="flex-1">
-          <div className="relative">
-            <input
-              ref={inputRef}
-              type="text"
-              value={searchQuery}
-              onChange={handleSearchChange}
-              placeholder="Search tasks, notes..."
-              className="w-full pl-10 pr-4 py-2 rounded-lg bg-gray-100"
-            />
-            <Search className="absolute left-3 top-2.5 text-gray-400" size={20} />
-            {searchQuery && (
-              <button
-                type="button"
-                onClick={handleClear}
-                className="absolute right-3 top-2.5 text-gray-400 hover:text-gray-600"
-              >
-                <X size={20} />
-              </button>
-            )}
-          </div>
+  return (
+    <>
+      <div className={cn("relative", className)}>
+        <form onSubmit={handleSubmit}>
+          <Input
+            ref={inputRef}
+            type="text"
+            value={searchQuery}
+            onChange={handleSearchChange}
+            placeholder="Search tasks, notes..."
+            className="w-full pl-10 pr-4 py-2"
+          />
+          <Search className="absolute left-3 top-2.5 text-gray-400" size={20} />
+          {searchQuery && (
+            <button
+              type="button"
+              onClick={handleClear}
+              className="absolute right-3 top-2.5 text-gray-400 hover:text-gray-600"
+            >
+              <X size={20} />
+            </button>
+          )}
         </form>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          onClick={() => onExpandedChange?.(false)}
-        >
-          <X className="h-5 w-5 text-gray-600" />
-        </Button>
-        {isOpen && searchQuery && (
-          <div className="absolute left-0 right-0 top-16 bg-white border-t shadow-lg z-50">
+        
+        {isOpen && !showFullResults && searchQuery.length >= 2 && (
+          <div className="absolute top-full w-full bg-white shadow-lg rounded-lg mt-1 z-50">
             <SearchResults 
-              onItemClick={(section) => {
-                onSectionChange?.(section);
-                onExpandedChange?.(false);
-                clearSearch();
-              }}
-              onClose={() => {
+              onItemClick={() => {
+                setShowFullResults(true);
                 setIsOpen(false);
-                onExpandedChange?.(false);
-                clearSearch();
               }}
+              onClose={() => setIsOpen(false)}
             />
+            {searchResults.length > 0 && (
+              <div className="p-2 border-t">
+                <button
+                  onClick={() => setShowFullResults(true)}
+                  className="w-full text-sm text-blue-600 hover:text-blue-700 text-center"
+                >
+                  Show all results
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>
-    );
-  }
 
-  // Desktop view
-  return (
-    <Popover open={isOpen} onOpenChange={setIsOpen}>
-      <PopoverTrigger asChild>
-        <div className={cn("relative", className)}>
-          <form onSubmit={handleSubmit}>
-            <input
-              ref={inputRef}
-              type="text"
-              value={searchQuery}
-              onChange={handleSearchChange}
-              placeholder="Search tasks, notes..."
-              className="w-full pl-10 pr-4 py-2 rounded-lg bg-gray-100"
+      {showFullResults && (
+        <div className="fixed md:pl-64 left-0 right-0 top-16 bottom-0 bg-gray-50 overflow-y-auto z-40">
+          <div className="container max-w-[calc(100vw-theme(spacing.64)-theme(spacing.16))] md:pr-4 mx-auto p-4 md:p-6">
+            <SearchResultsView 
+              onClose={() => {
+                setShowFullResults(false);
+                handleClear();
+              }}
             />
-            <Search className="absolute left-3 top-2.5 text-gray-400" size={20} />
-            {searchQuery && (
-              <button
-                type="button"
-                onClick={handleClear}
-                className="absolute right-3 top-2.5 text-gray-400 hover:text-gray-600"
-              >
-                <X size={20} />
-              </button>
-            )}
-          </form>
+          </div>
         </div>
-      </PopoverTrigger>
-      <PopoverContent 
-        className="w-[500px] p-0" 
-        align="start"
-        sideOffset={5}
-      >
-        <SearchResults 
-          onItemClick={(section) => {
-            onSectionChange?.(section);
-            setIsOpen(false);
-            clearSearch();
-          }}
-          onClose={() => {
-            setIsOpen(false);
-            clearSearch();
-          }}
-        />
-      </PopoverContent>
-    </Popover>
+      )}
+    </>
   );
 };

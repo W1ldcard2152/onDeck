@@ -12,7 +12,6 @@ export function useTasks(userId: string | undefined, limit: number = 10) {
 
   async function fetchTasks() {
     try {
-      // Return early if no userId is provided
       if (!userId) {
         setTasks([]);
         setIsLoading(false);
@@ -24,10 +23,11 @@ export function useTasks(userId: string | undefined, limit: number = 10) {
       
       const supabase = createClientComponentClient<Database>()
 
-      // First get all task IDs from the tasks table that have dates
+      // Get all tasks with status 'active' or 'on_deck'
       const { data: taskData, error: taskError } = await supabase
         .from('tasks')
-        .select('*')  // Select all columns to make sure we get the status
+        .select('*')
+        .in('status', ['active', 'on_deck'])
         .order('due_date', { ascending: true })
         .limit(limit)
 
@@ -40,7 +40,7 @@ export function useTasks(userId: string | undefined, limit: number = 10) {
         return
       }
 
-      // Then get the corresponding items
+      // Get the corresponding items
       const { data: itemsData, error: itemsError } = await supabase
         .from('items')
         .select('*')
@@ -52,32 +52,29 @@ export function useTasks(userId: string | undefined, limit: number = 10) {
       console.log('Items query response:', { itemsData, itemsError });
 
       if (itemsError) throw itemsError
-      if (!itemsData || itemsData.length === 0) {
-        console.log('No matching items found')
-        setTasks([])
-        return
-      }
 
-      // Combine items and tasks
-      const combinedTasks = taskData.map(task => {
-        const item = itemsData.find(item => item.id === task.id)
-        if (!item) {
-          console.warn(`No matching item found for task ${task.id}`)
-          return null
-        }
-      
-        return {
-          id: task.id,
-          assigned_date: task.assigned_date,
-          due_date: task.due_date,
-          status: task.status,
-          description: task.description,
-          is_project_converted: task.is_project_converted,
-          converted_project_id: task.converted_project_id,
-          priority: task.priority,
-          item: item
-        }
-      }).filter((task): task is TaskWithDetails => task !== null)
+      // Combine tasks and items
+      const combinedTasks = taskData
+        .map(task => {
+          const item = itemsData?.find(item => item.id === task.id)
+          if (!item) {
+            console.log(`No matching item found for task ${task.id}`)
+            return null
+          }
+        
+          return {
+            id: task.id,
+            assigned_date: task.assigned_date,
+            due_date: task.due_date,
+            status: task.status,
+            description: task.description,
+            is_project_converted: task.is_project_converted,
+            converted_project_id: task.converted_project_id,
+            priority: task.priority,
+            item: item
+          }
+        })
+        .filter((task): task is TaskWithDetails => task !== null)
 
       console.log('Setting tasks state with:', combinedTasks);
       setTasks(combinedTasks)
