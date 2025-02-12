@@ -15,6 +15,27 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
 }) => {
   const { isSearching, searchResults, searchQuery } = useSearch();
 
+  const handleItemClick = (type: 'task' | 'note') => {
+    if (onItemClick) {
+      let section: SectionType = 'dashboard';
+      
+      // Map result type to section
+      switch (type) {
+        case 'task':
+          section = 'tasks';
+          break;
+        case 'note':
+          section = 'notes';
+          break;
+      }
+      
+      onItemClick(section);
+    }
+    if (onClose) {
+      onClose();
+    }
+  };
+
   if (isSearching) {
     return (
       <div className="p-4 text-center text-gray-500">
@@ -34,15 +55,6 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
   if (searchResults.length === 0) {
     return null;
   }
-
-  const handleItemClick = (type: 'task' | 'note') => {
-    if (onItemClick) {
-      onItemClick(type === 'task' ? 'tasks' : 'notes');
-    }
-    if (onClose) {
-      onClose();
-    }
-  };
 
   return (
     <div className="max-h-[400px] overflow-y-auto">
