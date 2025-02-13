@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import { useSupabaseAuth } from '@/hooks/useSupabaseAuth';
 import type { Database } from '@/types/database.types';
 
 interface ProjectWorkflowProps {
@@ -21,7 +22,9 @@ const ProjectWorkflow: React.FC<ProjectWorkflowProps> = ({
   const [projectTitle, setProjectTitle] = useState('');
   const [projectGoal, setProjectGoal] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const supabase = createClientComponentClient<Database>();
+  const { user } = useSupabaseAuth();
 
   const addStep = () => {
     setSteps([...steps, { title: '', description: '' }]);
@@ -35,34 +38,123 @@ const ProjectWorkflow: React.FC<ProjectWorkflowProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!user) {
+      setError('You must be logged in to create a project');
+      return;
+    }
+
     setIsSubmitting(true);
+    setError(null);
 
     try {
-      // Create project entry
-      const { data: project, error: projectError } = await supabase
-        .from('projects')
+      const now = new Date().toISOString();
+
+      // First create an item for the project
+      const { data: itemData, error: itemError } = await supabase
+        .from('items')
         .insert([{
-          parent_task_id: parentTaskId || null,
-          status: 'active',
-          progress: 0,
+          title: projectTitle.trim(),
+          user_id: user.id,
+          item_type: 'project',
+          created_at: now,
+          updated_at: now,
+          is_archived: false
         }])
         .select()
         .single();
 
-      if (projectError) throw projectError;
+      if (itemError) {
+        console.error('Item creation error:', itemError);
+        throw itemError;
+      }
 
-      // Create initial task for the project
-      const { error: taskError } = await supabase
-        .from('tasks')
+      if (!itemData) {
+        throw new Error('Failed to create item');
+      }
+
+      // Create the project
+      const { data: project, error: projectError } = await supabase
+        .from('projects')
         .insert([{
-          title: projectTitle,
-          description: projectGoal,
+          id: itemData.id,
+          title: projectTitle.trim(),
+          description: projectGoal.trim(),
           status: 'active',
+          progress: 0,
+          user_id: user.id,
+          parent_task_id: parentTaskId || null,
+          current_step: 1,
+          created_at: now,
+          updated_at: now,
           priority: 'normal',
+          completed_at: null,
+          estimated_completion_date: null
         }])
-        .select();
+        .select()
+        .single();
 
-      if (taskError) throw taskError;
+      if (projectError) {
+        console.error('Project creation error:', projectError);
+        throw projectError;
+      }
+
+      // Create only the first task
+      if (steps.length > 0) {
+        const firstStep = steps[0];
+        
+        // Create item for the first task
+        const { data: taskItem, error: taskItemError } = await supabase
+          .from('items')
+          .insert([{
+            title: firstStep.title.trim(),
+            user_id: user.id,
+            item_type: 'task',
+            created_at: now,
+            updated_at: now,
+            is_archived: false
+          }])
+          .select()
+          .single();
+
+        if (taskItemError) {
+          console.error('Task item creation error:', taskItemError);
+          throw taskItemError;
+        }
+
+        // Create the first task
+        const { error: taskError } = await supabase
+          .from('tasks')
+          .insert([{
+            id: taskItem.id,
+            status: 'on_deck',
+            description: firstStep.description.trim(),
+            is_project_converted: false,
+            converted_project_id: itemData.id,
+            priority: 'normal'
+          }]);
+
+        if (taskError) {
+          console.error('Task creation error:', taskError);
+          throw taskError;
+        }
+
+        // Store subsequent steps metadata
+        const { error: metadataError } = await supabase
+          .from('project_metadata')
+          .insert([{
+            project_id: itemData.id,
+            pending_steps: steps.slice(1).map((step, index) => ({
+              title: step.title.trim(),
+              description: step.description.trim(),
+              sequence: index + 2  // Start from 2 since step 1 is already created
+            }))
+          }]);
+
+        if (metadataError) {
+          console.error('Metadata storage error:', metadataError);
+          // Continue even if metadata storage fails
+        }
+      }
 
       if (onProjectCreated) {
         onProjectCreated();
@@ -75,6 +167,7 @@ const ProjectWorkflow: React.FC<ProjectWorkflowProps> = ({
       
     } catch (error) {
       console.error('Error creating project:', error);
+      setError(error instanceof Error ? error.message : 'Failed to create project');
     } finally {
       setIsSubmitting(false);
     }
@@ -94,6 +187,10 @@ const ProjectWorkflow: React.FC<ProjectWorkflowProps> = ({
         </DialogHeader>
         
         <form onSubmit={handleSubmit} className="space-y-6">
+          {error && (
+            <div className="text-red-500 text-sm">{error}</div>
+          )}
+
           {/* Project Details */}
           <div className="space-y-4">
             <div>
@@ -108,7 +205,7 @@ const ProjectWorkflow: React.FC<ProjectWorkflowProps> = ({
             </div>
             
             <div>
-              <Label htmlFor="projectGoal">Project Goal</Label>
+              <Label htmlFor="projectGoal">Project Description</Label>
               <Textarea
                 id="projectGoal"
                 value={projectGoal}
@@ -157,7 +254,7 @@ const ProjectWorkflow: React.FC<ProjectWorkflowProps> = ({
 
           {/* Preview */}
           <div className="border rounded-lg p-4 bg-gray-50">
-            <h3 className="font-medium mb-2">Task Creation Preview</h3>
+            <h3 className="font-medium mb-2">Project Structure Preview</h3>
             <div className="space-y-2">
               {steps.map((step, index) => (
                 <div key={index} className="flex items-center gap-2 text-sm text-gray-600">
