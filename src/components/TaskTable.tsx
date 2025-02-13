@@ -23,6 +23,7 @@ import { Badge } from "@/components/ui/badge";
 import type { Database } from '@/types/database.types';
 import type { TaskWithDetails } from '@/lib/types';
 import type { Priority, TaskStatus } from '@/types/database.types';
+import ScrollableTableWrapper from './layouts/responsiveNav/ScrollableTableWrapper';
 
 type SortDirection = 'asc' | 'desc' | null;
 type SortField = 'status' | 'title' | 'priority' | 'assigned_date' | 'description' | 'due_date' | null;
@@ -172,6 +173,7 @@ const TaskTableBase = ({
       )}
       
       <div className="relative">
+      <ScrollableTableWrapper>
         <Table>
           <TableHeader>
             <TableRow>
@@ -407,6 +409,7 @@ const TaskTableBase = ({
             })}
           </TableBody>
         </Table>
+        </ScrollableTableWrapper>
 
         {taskToEdit && (
           <NewEntryForm

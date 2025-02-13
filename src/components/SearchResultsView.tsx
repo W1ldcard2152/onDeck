@@ -41,7 +41,6 @@ export const SearchResultsView: React.FC<SearchResultsViewProps> = ({
 
   const handleResultClick = (result: any) => {
     setSelectedResult(result);
-    // If onNavigate is provided and the result has a type that maps to a section
     if (onNavigate && (result.type === 'task' || result.type === 'note')) {
       onNavigate(result.type === 'task' ? 'tasks' : 'notes');
       onClose();
