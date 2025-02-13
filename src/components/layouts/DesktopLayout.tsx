@@ -15,6 +15,7 @@ import UserMenu from '../UserMenu';
 import { SearchInput } from '../SearchInput';
 import ClientLayout from './ClientLayout';
 import IntegratedSearch from '../IntegratedSearch';
+import ProjectsPage from '@/app/projects/page';
 
 const DesktopLayout = () => {
   const { user, loading } = useSupabaseAuth();
@@ -40,8 +41,8 @@ const DesktopLayout = () => {
         return <TasksPage />;
       case 'notes':
         return <NotesPage />;
-      case 'projects':
-        return <div className="text-center py-12">Projects feature coming soon</div>;
+        case 'projects':
+        return <ProjectsPage />;
       case 'habits':
         return <div className="text-center py-12">Habits feature coming soon</div>;
       case 'journal':
