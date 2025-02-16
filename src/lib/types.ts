@@ -28,7 +28,6 @@ export interface Task {
   converted_project_id: string | null;
 }
 
-// Keep this for legacy code that might use it
 export interface TaskWithDetails {
   id: string;
   created_at: string;
@@ -56,10 +55,32 @@ export interface NoteWithDetails {
 
 export interface ProjectStep {
   id: string;
+  project_id: string;
   title: string;
   description: string | null;
+  order: number;  // Changed from order_index
   status: StepStatus;
+  due_date: string | null;
+  assigned_date: string | null;
+  priority: Priority;
+  is_converted: boolean;
+  converted_task_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface StepData {
+  id: string;
+  title: string;
+  description: string;
+  due_date?: Date | undefined;
+  assigned_date?: Date | undefined;
+  priority: Priority;
   order: number;
+  status: StepStatus;  // Add this line
+  is_converted: boolean;
+  converted_task_id: string | null;
+  project_id?: string;
 }
 
 export interface ProjectWithDetails {
@@ -78,6 +99,5 @@ export interface ProjectWithDetails {
   user_id: string;
   tasks: Task[];
   item: Item;
-  // Make steps optional since we don't have them in the database yet
-  steps?: ProjectStep[];
+  steps: ProjectStep[];
 }
