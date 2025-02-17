@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import type { Database } from '@/types/database.types';
-import type { ProjectWithDetails, Task } from '@/lib/types';
+import type { ProjectWithDetails, Task, ProjectStep } from '@/lib/types';
 
 export function useProjects(userId: string | undefined) {
   const [projects, setProjects] = useState<ProjectWithDetails[]>([]);
@@ -53,6 +53,15 @@ export function useProjects(userId: string | undefined) {
 
       if (tasksError) throw tasksError;
 
+      // Get project steps
+      const { data: stepsData, error: stepsError } = await supabase
+        .from('project_steps')
+        .select('*')
+        .in('project_id', projectsData.map(p => p.id))
+        .order('order', { ascending: true });
+
+      if (stepsError) throw stepsError;
+
       // Transform the data to match our ProjectWithDetails type
       const transformedProjects: ProjectWithDetails[] = projectsData.map(project => {
         const projectTasks: Task[] = tasksData
@@ -69,12 +78,38 @@ export function useProjects(userId: string | undefined) {
             converted_project_id: task.converted_project_id || null
           })) || [];
 
+          const projectSteps: ProjectStep[] = stepsData
+          ?.filter(step => step.project_id === project.id)
+          .map(step => ({
+            id: step.id,
+            project_id: step.project_id,
+            title: step.title,
+            description: step.description,
+            order_number: step.order_number,  // Changed from order
+            status: step.status,
+            created_at: step.created_at,
+            updated_at: step.updated_at,
+            completed_at: step.completed_at,
+            // Added fields with defaults
+            priority: step.priority || 'normal',
+            due_date: step.due_date || null,
+            assigned_date: step.assigned_date || null,
+            is_converted: step.is_converted || false,
+            converted_task_id: step.converted_task_id || null
+          })) || [];
+
+        // Calculate progress based on completed steps
+        const completedSteps = projectSteps.filter(step => step.status === 'completed').length;
+        const progress = projectSteps.length > 0 
+          ? Math.round((completedSteps / projectSteps.length) * 100) 
+          : 0;
+
         return {
           id: project.id,
           title: project.title || '',
           description: project.description || null,
           status: project.status || 'active',
-          progress: project.progress || 0,
+          progress: progress, // Use calculated progress
           created_at: project.created_at,
           updated_at: project.updated_at,
           completed_at: project.completed_at || null,
@@ -84,7 +119,7 @@ export function useProjects(userId: string | undefined) {
           parent_task_id: project.parent_task_id || null,
           user_id: project.user_id,
           tasks: projectTasks,
-          steps: [], // Since we don't have a steps table yet
+          steps: projectSteps,
           item: {
             id: project.items.id,
             user_id: project.items.user_id,

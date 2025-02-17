@@ -58,15 +58,17 @@ export interface ProjectStep {
   project_id: string;
   title: string;
   description: string | null;
-  order: number;  // Changed from order_index
+  order_number: number;  // Changed from order to match DB
   status: StepStatus;
-  due_date: string | null;
-  assigned_date: string | null;
-  priority: Priority;
-  is_converted: boolean;
-  converted_task_id: string | null;
   created_at: string;
   updated_at: string;
+  completed_at: string | null;
+  // Additional fields we want to support
+  priority: Priority;
+  due_date: string | null;
+  assigned_date: string | null;
+  is_converted: boolean;
+  converted_task_id: string | null;
 }
 
 export interface StepData {
