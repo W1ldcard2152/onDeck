@@ -42,7 +42,7 @@ export const ProjectEntryForm: React.FC<ProjectEntryFormProps> = ({
       due_date: undefined,
       assigned_date: undefined,
       status: 'pending' as StepStatus,
-      order: 0,
+      order_number: 0,  // Changed from order
       is_converted: false,
       converted_task_id: null
     },
@@ -54,7 +54,7 @@ export const ProjectEntryForm: React.FC<ProjectEntryFormProps> = ({
       due_date: undefined,
       assigned_date: undefined,
       status: 'pending' as StepStatus,
-      order: 1,
+      order_number: 1,  // Changed from order
       is_converted: false,
       converted_task_id: null
     }
@@ -65,23 +65,23 @@ export const ProjectEntryForm: React.FC<ProjectEntryFormProps> = ({
   // Initialize form with project data when editing
   useEffect(() => {
     if (initialData && isEditing) {
-      setTitle(initialData.title);
-      setDescription(initialData.description || '');
-      if (initialData.steps) {
-        setSteps(initialData.steps.map((step: ProjectStep, index: number) => ({
-          id: step.id,
-          title: step.title,
-          description: step.description || '',
-          priority: step.priority || 'normal',
-          due_date: step.due_date ? new Date(step.due_date) : undefined,
-          assigned_date: step.assigned_date ? new Date(step.assigned_date) : undefined,
-          status: step.status || 'pending',
-          order: index,
-          is_converted: step.is_converted,
-          converted_task_id: step.converted_task_id
-        })));
+        setTitle(initialData.title);
+        setDescription(initialData.description || '');
+        if (initialData.steps) {
+          setSteps(initialData.steps.map((step: ProjectStep, index: number) => ({
+            id: step.id,
+            title: step.title,
+            description: step.description || '',
+            priority: step.priority || 'normal',
+            due_date: step.due_date ? new Date(step.due_date) : undefined,
+            assigned_date: step.assigned_date ? new Date(step.assigned_date) : undefined,
+            status: step.status || 'pending',
+            order_number: index,  // Changed from order
+            is_converted: step.is_converted,
+            converted_task_id: step.converted_task_id
+          })));
+        }
       }
-    }
   }, [initialData, isEditing]);
 
   const resetForm = () => {
@@ -96,7 +96,7 @@ export const ProjectEntryForm: React.FC<ProjectEntryFormProps> = ({
         due_date: undefined,
         assigned_date: undefined,
         status: 'pending' as StepStatus,
-        order: 0,
+        order_number: 0,  // Changed from order
         is_converted: false,
         converted_task_id: null
       },
@@ -108,7 +108,7 @@ export const ProjectEntryForm: React.FC<ProjectEntryFormProps> = ({
         due_date: undefined,
         assigned_date: undefined,
         status: 'pending' as StepStatus,
-        order: 1,
+        order_number: 1,  // Changed from order
         is_converted: false,
         converted_task_id: null
       }
@@ -125,7 +125,7 @@ export const ProjectEntryForm: React.FC<ProjectEntryFormProps> = ({
       due_date: undefined,
       assigned_date: undefined,
       status: 'pending' as StepStatus,
-      order: steps.length,
+      order_number: steps.length,  // Changed from order
       is_converted: false,
       converted_task_id: null
     }]);
@@ -154,9 +154,9 @@ export const ProjectEntryForm: React.FC<ProjectEntryFormProps> = ({
     const [removed] = newSteps.splice(fromIndex, 1);
     newSteps.splice(toIndex, 0, removed);
     
-    // Update order values after moving
+    // Update order_number values after moving
     newSteps.forEach((step, index) => {
-      step.order = index;
+      step.order_number = index;
     });
     
     setSteps(newSteps);
@@ -226,12 +226,12 @@ export const ProjectEntryForm: React.FC<ProjectEntryFormProps> = ({
             project_id: itemData.id,
             title: step.title.trim(),
             description: step.description.trim() || null,
-            order: step.order,
+            order_number: step.order_number,  // Changed from order
             status: 'pending',
             due_date: step.due_date?.toISOString() || null,
             assigned_date: step.assigned_date?.toISOString() || null,
             priority: step.priority,
-            is_converted: index === 0, // First step gets converted automatically
+            is_converted: index === 0,
             converted_task_id: null,
             created_at: now,
             updated_at: now

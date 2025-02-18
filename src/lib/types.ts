@@ -78,8 +78,8 @@ export interface StepData {
   due_date?: Date | undefined;
   assigned_date?: Date | undefined;
   priority: Priority;
-  order: number;
-  status: StepStatus;  // Add this line
+  order_number: number;  // Changed from 'order'
+  status: StepStatus;
   is_converted: boolean;
   converted_task_id: string | null;
   project_id?: string;
