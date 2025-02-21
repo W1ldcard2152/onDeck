@@ -5,15 +5,20 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { format } from 'date-fns';
-import { cn } from '@/lib/utils';
-import { CalendarIcon, Plus, GripVertical, Trash2, ArrowUp, ArrowDown } from 'lucide-react';
+import { Plus, GripVertical, Trash2, ArrowUp, ArrowDown } from 'lucide-react';
 import { useSupabaseAuth } from '@/hooks/useSupabaseAuth';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
-import { DayPicker } from "react-day-picker";
-import "react-day-picker/dist/style.css";
-import type { Priority, ProjectStep, StepData, StepStatus } from '@/lib/types';
+import type { Priority, ProjectStatus, StepStatus } from '@/lib/types';
+
+interface StepData {
+  id: string;
+  title: string;
+  description: string;
+  order_number: number;  // Renamed from order to match DB
+  status: StepStatus;
+  is_converted: boolean;
+  converted_task_id: string | null;
+}
 
 interface ProjectEntryFormProps {
   onProjectCreated?: (project: any) => void;
@@ -22,7 +27,7 @@ interface ProjectEntryFormProps {
   onClose?: () => void;
 }
 
-export const ProjectEntryForm: React.FC<ProjectEntryFormProps> = ({ 
+const ProjectEntryForm: React.FC<ProjectEntryFormProps> = ({ 
   onProjectCreated, 
   initialData,
   isEditing = false,
@@ -33,16 +38,15 @@ export const ProjectEntryForm: React.FC<ProjectEntryFormProps> = ({
   const [open, setOpen] = useState(isEditing);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
+  const [priority, setPriority] = useState<Priority>('normal');
+  const [status, setStatus] = useState<ProjectStatus>('active');
   const [steps, setSteps] = useState<StepData[]>([
     {
       id: crypto.randomUUID(),
       title: '',
       description: '',
-      priority: 'normal' as Priority,
-      due_date: undefined,
-      assigned_date: undefined,
-      status: 'pending' as StepStatus,
-      order_number: 0,  // Changed from order
+      order_number: 0,
+      status: 'pending',
       is_converted: false,
       converted_task_id: null
     },
@@ -50,11 +54,8 @@ export const ProjectEntryForm: React.FC<ProjectEntryFormProps> = ({
       id: crypto.randomUUID(),
       title: '',
       description: '',
-      priority: 'normal' as Priority,
-      due_date: undefined,
-      assigned_date: undefined,
-      status: 'pending' as StepStatus,
-      order_number: 1,  // Changed from order
+      order_number: 1,
+      status: 'pending',
       is_converted: false,
       converted_task_id: null
     }
@@ -65,38 +66,36 @@ export const ProjectEntryForm: React.FC<ProjectEntryFormProps> = ({
   // Initialize form with project data when editing
   useEffect(() => {
     if (initialData && isEditing) {
-        setTitle(initialData.title);
-        setDescription(initialData.description || '');
-        if (initialData.steps) {
-          setSteps(initialData.steps.map((step: ProjectStep, index: number) => ({
-            id: step.id,
-            title: step.title,
-            description: step.description || '',
-            priority: step.priority || 'normal',
-            due_date: step.due_date ? new Date(step.due_date) : undefined,
-            assigned_date: step.assigned_date ? new Date(step.assigned_date) : undefined,
-            status: step.status || 'pending',
-            order_number: index,  // Changed from order
-            is_converted: step.is_converted,
-            converted_task_id: step.converted_task_id
-          })));
-        }
+      setTitle(initialData.title);
+      setDescription(initialData.description || '');
+      setPriority(initialData.priority || 'normal');
+      setStatus(initialData.status || 'active');
+      if (initialData.steps) {
+        setSteps(initialData.steps.map((step: any, index: number) => ({
+          id: step.id,
+          title: step.title,
+          description: step.description || '',
+          order_number: index,
+          status: step.status || 'pending',
+          is_converted: step.is_converted || false,
+          converted_task_id: step.converted_task_id || null
+        })));
       }
+    }
   }, [initialData, isEditing]);
 
   const resetForm = () => {
     setTitle('');
     setDescription('');
+    setPriority('normal');
+    setStatus('active');
     setSteps([
       {
         id: crypto.randomUUID(),
         title: '',
         description: '',
-        priority: 'normal',
-        due_date: undefined,
-        assigned_date: undefined,
-        status: 'pending' as StepStatus,
-        order_number: 0,  // Changed from order
+        order_number: 0,
+        status: 'pending',
         is_converted: false,
         converted_task_id: null
       },
@@ -104,11 +103,8 @@ export const ProjectEntryForm: React.FC<ProjectEntryFormProps> = ({
         id: crypto.randomUUID(),
         title: '',
         description: '',
-        priority: 'normal',
-        due_date: undefined,
-        assigned_date: undefined,
-        status: 'pending' as StepStatus,
-        order_number: 1,  // Changed from order
+        order_number: 1,
+        status: 'pending',
         is_converted: false,
         converted_task_id: null
       }
@@ -116,24 +112,37 @@ export const ProjectEntryForm: React.FC<ProjectEntryFormProps> = ({
     setError(null);
   };
 
-  const handleAddStep = () => {
-    setSteps([...steps, {
+  const handleAddStep = (afterIndex?: number) => {
+    const newSteps = [...steps];
+    const insertIndex = typeof afterIndex === 'number' ? afterIndex + 1 : steps.length;
+    
+    // Insert new step
+    newSteps.splice(insertIndex, 0, {
       id: crypto.randomUUID(),
       title: '',
       description: '',
-      priority: 'normal' as Priority,
-      due_date: undefined,
-      assigned_date: undefined,
-      status: 'pending' as StepStatus,
-      order_number: steps.length,  // Changed from order
+      order_number: insertIndex,
+      status: 'pending',
       is_converted: false,
       converted_task_id: null
-    }]);
+    });
+
+    // Update order numbers for all subsequent steps
+    for (let i = insertIndex + 1; i < newSteps.length; i++) {
+      newSteps[i].order_number = i;
+    }
+
+    setSteps(newSteps);
   };
 
   const handleRemoveStep = (index: number) => {
     if (steps.length > 1) {
-      setSteps(steps.filter((_, i) => i !== index));
+      const newSteps = steps.filter((_, i) => i !== index)
+        .map((step, i) => ({
+          ...step,
+          order_number: i
+        }));
+      setSteps(newSteps);
     }
   };
 
@@ -154,7 +163,7 @@ export const ProjectEntryForm: React.FC<ProjectEntryFormProps> = ({
     const [removed] = newSteps.splice(fromIndex, 1);
     newSteps.splice(toIndex, 0, removed);
     
-    // Update order_number values after moving
+    // Update order numbers
     newSteps.forEach((step, index) => {
       step.order_number = index;
     });
@@ -209,7 +218,8 @@ export const ProjectEntryForm: React.FC<ProjectEntryFormProps> = ({
             id: itemData.id,
             title: title.trim(),
             description: description.trim() || null,
-            status: 'active',
+            status: status,
+            priority: priority,
             progress: 0,
             current_step: 0,
             user_id: user.id,
@@ -222,20 +232,17 @@ export const ProjectEntryForm: React.FC<ProjectEntryFormProps> = ({
         if (projectError) throw projectError;
 
         // Create project steps
-        const stepsToInsert = steps.map((step, index) => ({
-            project_id: itemData.id,
-            title: step.title.trim(),
-            description: step.description.trim() || null,
-            order_number: step.order_number,  // Changed from order
-            status: 'pending',
-            due_date: step.due_date?.toISOString() || null,
-            assigned_date: step.assigned_date?.toISOString() || null,
-            priority: step.priority,
-            is_converted: index === 0,
-            converted_task_id: null,
-            created_at: now,
-            updated_at: now
-          }));
+        const stepsToInsert = steps.map(step => ({
+          project_id: itemData.id,
+          title: step.title.trim(),
+          description: step.description.trim() || null,
+          order_number: step.order_number,
+          status: 'pending',
+          is_converted: false,
+          converted_task_id: null,
+          created_at: now,
+          updated_at: now
+        }));
 
         const { error: stepsError } = await supabase
           .from('project_steps')
@@ -245,6 +252,9 @@ export const ProjectEntryForm: React.FC<ProjectEntryFormProps> = ({
 
         // Convert first step to task automatically
         const firstStep = steps[0];
+        const tomorrow = new Date();
+        tomorrow.setDate(tomorrow.getDate() + 1);
+
         const { data: taskItemData, error: taskItemError } = await supabase
           .from('items')
           .insert([{
@@ -267,12 +277,24 @@ export const ProjectEntryForm: React.FC<ProjectEntryFormProps> = ({
             status: 'on_deck',
             description: firstStep.description.trim() || null,
             converted_project_id: itemData.id,
-            priority: firstStep.priority,
-            due_date: firstStep.due_date?.toISOString() || null,
-            assigned_date: firstStep.assigned_date?.toISOString() || null
+            priority: 'normal',
+            due_date: tomorrow.toISOString(),
+            assigned_date: now
           }]);
 
         if (taskError) throw taskError;
+
+        // Update the first step to mark it as converted
+        const { error: updateStepError } = await supabase
+          .from('project_steps')
+          .update({
+            is_converted: true,
+            converted_task_id: taskItemData.id
+          })
+          .eq('project_id', itemData.id)
+          .eq('order_number', 0);
+
+        if (updateStepError) throw updateStepError;
 
         if (onProjectCreated) {
           onProjectCreated({ id: itemData.id });
@@ -289,40 +311,6 @@ export const ProjectEntryForm: React.FC<ProjectEntryFormProps> = ({
       setIsSubmitting(false);
     }
   };
-
-  const renderDatePicker = (
-    selectedDate: Date | null | undefined,
-    onDateChange: (date: Date | null | undefined) => void,
-    label: string
-  ) => (
-    <div className="space-y-2">
-      <Label>{label}</Label>
-      <Popover>
-        <PopoverTrigger asChild>
-          <Button
-            variant="outline"
-            className={cn(
-              "w-full justify-start text-left font-normal",
-              !selectedDate && "text-muted-foreground"
-            )}
-          >
-            <CalendarIcon className="mr-2 h-4 w-4" />
-            {selectedDate ? format(selectedDate, "PPP") : `Pick ${label.toLowerCase()}`}
-          </Button>
-        </PopoverTrigger>
-        <PopoverContent className="w-auto p-0">
-          <div className="border rounded-md bg-white p-3">
-            <DayPicker
-              mode="single"
-              selected={selectedDate || undefined}
-              onSelect={onDateChange}
-              showOutsideDays={true}
-            />
-          </div>
-        </PopoverContent>
-      </Popover>
-    </div>
-  );
 
   return (
     <Dialog 
@@ -367,6 +355,49 @@ export const ProjectEntryForm: React.FC<ProjectEntryFormProps> = ({
           </div>
 
           <div className="space-y-2">
+              <Label htmlFor="priority">Priority</Label>
+              <Select 
+                value={priority} 
+                onValueChange={(value) => {
+                  if (value === 'low' || value === 'normal' || value === 'high') {
+                    setPriority(value);
+                  }
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select priority" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="low">Low</SelectItem>
+                  <SelectItem value="normal">Normal</SelectItem>
+                  <SelectItem value="high">High</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="status">Status</Label>
+              <Select 
+                value={status} 
+                onValueChange={(value) => {
+                  if (value === 'active' || value === 'on_hold' || value === 'completed') {
+                    setStatus(value);
+                  }
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="active">Active</SelectItem>
+                  <SelectItem value="on_hold">On Hold</SelectItem>
+                  <SelectItem value="completed">Completed</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <div className="space-y-2">
             <Label htmlFor="description">Project Description</Label>
             <Textarea
               id="description"
@@ -384,7 +415,7 @@ export const ProjectEntryForm: React.FC<ProjectEntryFormProps> = ({
                 type="button"
                 variant="outline"
                 size="sm"
-                onClick={handleAddStep}
+                onClick={() => handleAddStep()}
               >
                 <Plus className="w-4 h-4 mr-2" />
                 Add Step
@@ -397,7 +428,10 @@ export const ProjectEntryForm: React.FC<ProjectEntryFormProps> = ({
                 className="border rounded-lg p-4 space-y-4"
               >
                 <div className="flex items-center justify-between">
-                  <h4 className="text-sm font-medium">Step {index + 1}</h4>
+                  <div className="flex items-center gap-2">
+                    <GripVertical className="w-5 h-5 text-gray-400 cursor-move" />
+                    <h4 className="text-sm font-medium">Step {index + 1}</h4>
+                  </div>
                   <div className="flex items-center gap-2">
                     {index > 0 && (
                       <Button
@@ -453,39 +487,20 @@ export const ProjectEntryForm: React.FC<ProjectEntryFormProps> = ({
                     />
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4">
-                    {renderDatePicker(
-                      step.assigned_date,
-                      (date) => handleStepChange(index, 'assigned_date', date),
-                      "Assigned Date"
-                    )}
-                    {renderDatePicker(
-                      step.due_date,
-                      (date) => handleStepChange(index, 'due_date', date),
-                      "Due Date"
-                    )}
-                  </div>
-
-                  <div className="space-y-2">
-  <Label>Priority</Label>
-  <Select
-    value={step.priority || 'normal'} // Provide a default value if null/undefined
-    onValueChange={(value: string) => {
-      if (value === 'low' || value === 'normal' || value === 'high') {
-        handleStepChange(index, 'priority', value as Priority);
-      }
-    }}
-  >
-    <SelectTrigger>
-      <SelectValue placeholder="Select priority" />
-    </SelectTrigger>
-    <SelectContent>
-      <SelectItem value="low">Low</SelectItem>
-      <SelectItem value="normal">Normal</SelectItem>
-      <SelectItem value="high">High</SelectItem>
-    </SelectContent>
-  </Select>
-</div>
+                  {index < steps.length - 1 && (
+                    <div className="flex justify-center">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleAddStep(index)}
+                        className="text-blue-600 hover:text-blue-700"
+                      >
+                        <Plus className="w-4 h-4 mr-2" />
+                        Add step here
+                      </Button>
+                    </div>
+                  )}
                 </div>
               </div>
             ))}
