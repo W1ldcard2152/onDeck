@@ -1,3 +1,4 @@
+import { useSupabaseAuth } from '@/hooks/useSupabaseAuth';
 import React, { useState } from 'react';
 import TruncatedCell from './TruncatedCell';
 import { format } from 'date-fns';
@@ -58,26 +59,119 @@ const TaskTableBase = ({
   const [error, setError] = useState<string | null>(null);
   const [taskToEdit, setTaskToEdit] = useState<TaskWithDetails | null>(null);
   const supabase = createClientComponentClient<Database>();
+  const { user } = useSupabaseAuth();
 
   const updateTaskStatus = async (taskId: string, newStatus: TaskStatus): Promise<void> => {
     setLoading(prev => ({ ...prev, [taskId]: true }));
     setError(null);
     
     try {
+      // First update the task status
       const { error: taskError } = await supabase
         .from('tasks')
         .update({ status: newStatus })
         .eq('id', taskId);
-
+  
       if (taskError) throw taskError;
-
+  
+      // Update the item's updated_at timestamp
       const { error: itemError } = await supabase
         .from('items')
         .update({ updated_at: new Date().toISOString() })
         .eq('id', taskId);
-
+  
       if (itemError) throw itemError;
-
+  
+      // If the task is being marked as completed and it's a project task
+      if (newStatus === 'completed') {
+        // Get the task details to find the project
+        const { data: taskData, error: taskFetchError } = await supabase
+          .from('tasks')
+          .select('*')
+          .eq('id', taskId)
+          .single();
+  
+        if (taskFetchError) throw taskFetchError;
+  
+        if (taskData.project_id) {
+          // Find and update the corresponding project step
+          const { data: stepData, error: stepError } = await supabase
+            .from('project_steps')
+            .update({ 
+              status: 'completed',
+              completed_at: new Date().toISOString()
+            })
+            .eq('converted_task_id', taskId)
+            .select()
+            .single();
+  
+          if (stepError) throw stepError;
+  
+          // Get all project steps to find the next one
+          const { data: projectSteps, error: stepsError } = await supabase
+          .from('project_steps')
+          .select('*')
+          .eq('project_id', taskData.project_id)
+          .order('order_number', { ascending: true });  // Make sure this uses order_number
+        
+        if (stepsError) throw stepsError;
+  
+          // Find the next unconverted step
+          const nextStep = projectSteps?.find(step => 
+            !step.is_converted && step.status !== 'completed'
+          );
+  
+          if (nextStep) {
+            // Create a new task for the next step
+            const now = new Date().toISOString();
+            const tomorrow = new Date();
+            tomorrow.setDate(tomorrow.getDate() + 1);
+  
+            const { data: newTaskItem, error: newItemError } = await supabase
+              .from('items')
+              .insert([{
+                title: nextStep.title,
+                user_id: user?.id,
+                item_type: 'task',
+                created_at: now,
+                updated_at: now,
+                is_archived: false
+              }])
+              .select()
+              .single();
+  
+            if (newItemError) throw newItemError;
+  
+            // Create the task
+            const { error: newTaskError } = await supabase
+              .from('tasks')
+              .insert([{
+                id: newTaskItem.id,
+                status: 'on_deck',
+                description: nextStep.description,
+                priority: 'normal',
+                due_date: tomorrow.toISOString(),
+                assigned_date: now,
+                project_id: taskData.project_id,
+                is_project_converted: true
+              }]);
+  
+            if (newTaskError) throw newTaskError;
+  
+            // Mark the step as converted
+            const { error: stepUpdateError } = await supabase
+              .from('project_steps')
+              .update({
+                is_converted: true,
+                converted_task_id: newTaskItem.id
+              })
+              .eq('id', nextStep.id);
+  
+            if (stepUpdateError) throw stepUpdateError;
+          }
+        }
+      }
+  
       onTaskUpdate();
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Error updating task status';

@@ -10,11 +10,79 @@ import { useSupabaseAuth } from '@/hooks/useSupabaseAuth';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import type { Priority, ProjectStatus, StepStatus } from '@/lib/types';
 
+async function convertNextStepToTask(projectId: string, steps: StepData[], user: any, supabase: any) {
+  const now = new Date().toISOString();
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+
+  // Find the first non-completed, non-converted step
+  const nextStep = steps.find(step => 
+    step.status !== 'completed' && 
+    !step.is_converted
+  );
+
+  if (!nextStep) {
+    console.log('No eligible steps to convert to task');
+    return;
+  }
+
+  try {
+    // Create new item for the task
+    const { data: taskItemData, error: taskItemError } = await supabase
+      .from('items')
+      .insert([{
+        title: nextStep.title.trim(),
+        user_id: user?.id,
+        item_type: 'task',
+        created_at: now,
+        updated_at: now,
+        is_archived: false
+      }])
+      .select()
+      .single();
+
+    if (taskItemError) throw taskItemError;
+
+    // Create the task
+    const { error: taskError } = await supabase
+      .from('tasks')
+      .insert([{
+        id: taskItemData.id,
+        status: 'on_deck',
+        description: nextStep.description?.trim() || null,
+        priority: 'normal',
+        due_date: tomorrow.toISOString(),
+        assigned_date: now,
+        project_id: projectId,  // Link task back to project
+        is_project_converted: true
+      }]);
+
+    if (taskError) throw taskError;
+
+    // Update the step to mark it as converted
+    const { error: updateStepError } = await supabase
+      .from('project_steps')
+      .update({
+        is_converted: true,
+        converted_task_id: taskItemData.id,
+        updated_at: now
+      })
+      .eq('id', nextStep.id);
+
+    if (updateStepError) throw updateStepError;
+
+    console.log('Successfully converted step to task:', taskItemData.id);
+    return taskItemData.id;
+  } catch (error) {
+    console.error('Error converting step to task:', error);
+    throw error;
+  }
+}
 interface StepData {
   id: string;
   title: string;
   description: string;
-  order_number: number;  // Renamed from order to match DB
+  order_number: number;
   status: StepStatus;
   is_converted: boolean;
   converted_task_id: string | null;
@@ -27,12 +95,12 @@ interface ProjectEntryFormProps {
   onClose?: () => void;
 }
 
-const ProjectEntryForm: React.FC<ProjectEntryFormProps> = ({ 
+export function ProjectEntryForm({ 
   onProjectCreated, 
   initialData,
   isEditing = false,
   onClose 
-}) => {
+}: ProjectEntryFormProps) {
   const { user } = useSupabaseAuth();
   const supabase = createClientComponentClient();
   const [open, setOpen] = useState(isEditing);
@@ -63,27 +131,6 @@ const ProjectEntryForm: React.FC<ProjectEntryFormProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Initialize form with project data when editing
-  useEffect(() => {
-    if (initialData && isEditing) {
-      setTitle(initialData.title);
-      setDescription(initialData.description || '');
-      setPriority(initialData.priority || 'normal');
-      setStatus(initialData.status || 'active');
-      if (initialData.steps) {
-        setSteps(initialData.steps.map((step: any, index: number) => ({
-          id: step.id,
-          title: step.title,
-          description: step.description || '',
-          order_number: index,
-          status: step.status || 'pending',
-          is_converted: step.is_converted || false,
-          converted_task_id: step.converted_task_id || null
-        })));
-      }
-    }
-  }, [initialData, isEditing]);
-
   const resetForm = () => {
     setTitle('');
     setDescription('');
@@ -112,11 +159,30 @@ const ProjectEntryForm: React.FC<ProjectEntryFormProps> = ({
     setError(null);
   };
 
+  useEffect(() => {
+    if (initialData && isEditing) {
+      setTitle(initialData.title);
+      setDescription(initialData.description || '');
+      setPriority(initialData.priority || 'normal');
+      setStatus(initialData.status || 'active');
+      if (initialData.steps) {
+        setSteps(initialData.steps.map((step: any, index: number) => ({
+          id: step.id,
+          title: step.title,
+          description: step.description || '',
+          order_number: index,
+          status: step.status || 'pending',
+          is_converted: step.is_converted || false,
+          converted_task_id: step.converted_task_id || null
+        })));
+      }
+    }
+  }, [initialData, isEditing]);
+
   const handleAddStep = (afterIndex?: number) => {
     const newSteps = [...steps];
     const insertIndex = typeof afterIndex === 'number' ? afterIndex + 1 : steps.length;
     
-    // Insert new step
     newSteps.splice(insertIndex, 0, {
       id: crypto.randomUUID(),
       title: '',
@@ -127,7 +193,6 @@ const ProjectEntryForm: React.FC<ProjectEntryFormProps> = ({
       converted_task_id: null
     });
 
-    // Update order numbers for all subsequent steps
     for (let i = insertIndex + 1; i < newSteps.length; i++) {
       newSteps[i].order_number = i;
     }
@@ -163,7 +228,6 @@ const ProjectEntryForm: React.FC<ProjectEntryFormProps> = ({
     const [removed] = newSteps.splice(fromIndex, 1);
     newSteps.splice(toIndex, 0, removed);
     
-    // Update order numbers
     newSteps.forEach((step, index) => {
       step.order_number = index;
     });
@@ -182,7 +246,6 @@ const ProjectEntryForm: React.FC<ProjectEntryFormProps> = ({
       return;
     }
 
-    // Validate steps
     if (steps.some(step => !step.title.trim())) {
       setError('All steps must have a title');
       setIsSubmitting(false);
@@ -193,8 +256,112 @@ const ProjectEntryForm: React.FC<ProjectEntryFormProps> = ({
       const now = new Date().toISOString();
 
       if (isEditing && initialData) {
-        // Update existing project logic here
-      } else {
+        const now = new Date().toISOString();
+        
+        // Update the item
+        const { error: itemError } = await supabase
+          .from('items')
+          .update({
+            title: title.trim(),
+            updated_at: now
+          })
+          .eq('id', initialData.id);
+      
+        if (itemError) throw itemError;
+      
+        // Update the project
+        const { error: projectError } = await supabase
+          .from('projects')
+          .update({
+            title: title.trim(),
+            description: description.trim() || null,
+            status: status,
+            priority: priority,
+            updated_at: now
+          })
+          .eq('id', initialData.id);
+      
+        if (projectError) throw projectError;
+      
+        // Get existing steps
+        const { data: existingSteps, error: stepsError } = await supabase
+          .from('project_steps')
+          .select('*')
+          .eq('project_id', initialData.id);
+      
+        if (stepsError) throw stepsError;
+      
+        // Create sets of step IDs for comparison
+        const existingStepIds = new Set(existingSteps?.map(step => step.id) || []);
+        const newStepIds = new Set(steps.map(step => step.id));
+      
+        // Steps to delete (exist in DB but not in form)
+        const stepsToDelete = existingSteps?.filter(step => !newStepIds.has(step.id)) || [];
+        
+        // Steps to create (exist in form but not in DB)
+        const stepsToCreate = steps.filter(step => !existingStepIds.has(step.id));
+        
+        // Steps to update (exist in both)
+        const stepsToUpdate = steps.filter(step => existingStepIds.has(step.id));
+      
+        // Delete removed steps
+        if (stepsToDelete.length > 0) {
+          const { error: deleteError } = await supabase
+            .from('project_steps')
+            .delete()
+            .in('id', stepsToDelete.map(step => step.id));
+      
+          if (deleteError) throw deleteError;
+        }
+      
+        // Create new steps
+        if (stepsToCreate.length > 0) {
+          const { error: createError } = await supabase
+            .from('project_steps')
+            .insert(
+              stepsToCreate.map(step => ({
+                project_id: initialData.id,
+                title: step.title.trim(),
+                description: step.description.trim() || null,
+                order_number: step.order_number,
+                status: step.status || 'pending',
+                created_at: now,
+                updated_at: now
+              }))
+            );
+      
+          if (createError) throw createError;
+        }
+      
+        // Update existing steps
+        for (const step of stepsToUpdate) {
+          const { error: updateError } = await supabase
+            .from('project_steps')
+            .update({
+              title: step.title.trim(),
+              description: step.description.trim() || null,
+              order_number: step.order_number,
+              status: step.status,
+              updated_at: now
+            })
+            .eq('id', step.id);
+      
+          if (updateError) throw updateError;
+        }
+      
+                // Try to convert the next step to a task
+                try {
+                  await convertNextStepToTask(initialData.id, steps, user, supabase);
+                } catch (error) {
+                  console.error('Error in step to task conversion:', error);
+                  // We don't throw here since the main update was successful
+                }
+        
+                if (onProjectCreated) {
+                  onProjectCreated({ id: initialData.id });
+                }
+      }
+       else {
         // Create new project
         const { data: itemData, error: itemError } = await supabase
           .from('items')
@@ -354,16 +521,17 @@ const ProjectEntryForm: React.FC<ProjectEntryFormProps> = ({
             />
           </div>
 
-          <div className="space-y-2">
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
               <Label htmlFor="priority">Priority</Label>
               <Select 
-                value={priority} 
-                onValueChange={(value) => {
+                 value={priority ?? 'normal'} 
+                     onValueChange={(value: string) => {
                   if (value === 'low' || value === 'normal' || value === 'high') {
-                    setPriority(value);
-                  }
-                }}
-              >
+                       setPriority(value as Priority);
+                     }
+             }}
+>
                 <SelectTrigger>
                   <SelectValue placeholder="Select priority" />
                 </SelectTrigger>
@@ -379,9 +547,9 @@ const ProjectEntryForm: React.FC<ProjectEntryFormProps> = ({
               <Label htmlFor="status">Status</Label>
               <Select 
                 value={status} 
-                onValueChange={(value) => {
+                onValueChange={(value: string) => {
                   if (value === 'active' || value === 'on_hold' || value === 'completed') {
-                    setStatus(value);
+                    setStatus(value as ProjectStatus);
                   }
                 }}
               >
@@ -520,6 +688,4 @@ const ProjectEntryForm: React.FC<ProjectEntryFormProps> = ({
       </DialogContent>
     </Dialog>
   );
-};
-
-export default ProjectEntryForm;
+}

@@ -55,12 +55,12 @@ export function useProjects(userId: string | undefined) {
 
       // Get project steps
       const { data: stepsData, error: stepsError } = await supabase
-        .from('project_steps')
-        .select('*')
-        .in('project_id', projectsData.map(p => p.id))
-        .order('order', { ascending: true });
+  .from('project_steps')
+  .select('*')
+  .in('project_id', projectsData.map(p => p.id))
+  .order('order_number', { ascending: true });  // Changed from 'order' to 'order_number'
 
-      if (stepsError) throw stepsError;
+if (stepsError) throw stepsError;
 
       // Transform the data to match our ProjectWithDetails type
       const transformedProjects: ProjectWithDetails[] = projectsData.map(project => {
@@ -79,24 +79,23 @@ export function useProjects(userId: string | undefined) {
           })) || [];
 
           const projectSteps: ProjectStep[] = stepsData
-          ?.filter(step => step.project_id === project.id)
-          .map(step => ({
-            id: step.id,
-            project_id: step.project_id,
-            title: step.title,
-            description: step.description,
-            order_number: step.order_number,  // Changed from order
-            status: step.status,
-            created_at: step.created_at,
-            updated_at: step.updated_at,
-            completed_at: step.completed_at,
-            // Added fields with defaults
-            priority: step.priority || 'normal',
-            due_date: step.due_date || null,
-            assigned_date: step.assigned_date || null,
-            is_converted: step.is_converted || false,
-            converted_task_id: step.converted_task_id || null
-          })) || [];
+  ?.filter(step => step.project_id === project.id)
+  .map(step => ({
+    id: step.id,
+    project_id: step.project_id,
+    title: step.title,
+    description: step.description,
+    order_number: step.order_number,  // Make sure this matches too
+    status: step.status,
+    created_at: step.created_at,
+    updated_at: step.updated_at,
+    completed_at: step.completed_at,
+    priority: step.priority || 'normal',
+    due_date: step.due_date || null,
+    assigned_date: step.assigned_date || null,
+    is_converted: step.is_converted || false,
+    converted_task_id: step.converted_task_id || null
+  })) || [];
 
         // Calculate progress based on completed steps
         const completedSteps = projectSteps.filter(step => step.status === 'completed').length;
