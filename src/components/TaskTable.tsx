@@ -66,21 +66,23 @@ const TaskTableBase = ({
     setError(null);
     
     try {
-      // First update the task status
+      // First update the task status - only update the status field
       const { error: taskError } = await supabase
         .from('tasks')
         .update({ status: newStatus })
-        .eq('id', taskId);
+        .eq('id', taskId)
+        .select();  // Add select() but don't try to update updated_at
   
       if (taskError) throw taskError;
   
-      // Update the item's updated_at timestamp
+      // Update the item's updated_at timestamp (this is correct as items table has updated_at)
       const { error: itemError } = await supabase
         .from('items')
         .update({ updated_at: new Date().toISOString() })
         .eq('id', taskId);
   
       if (itemError) throw itemError;
+
   
       // If the task is being marked as completed and it's a project task
       if (newStatus === 'completed') {
@@ -108,13 +110,16 @@ const TaskTableBase = ({
           if (stepError) throw stepError;
   
           // Get all project steps to find the next one
+          console.log('About to query project steps for project:', taskData.project_id);
           const { data: projectSteps, error: stepsError } = await supabase
-          .from('project_steps')
-          .select('*')
-          .eq('project_id', taskData.project_id)
-          .order('order_number', { ascending: true });  // Make sure this uses order_number
-        
-        if (stepsError) throw stepsError;
+            .from('project_steps')
+            .select('*')
+            .eq('project_id', taskData.project_id)
+            .order('order_number', { ascending: true });
+          
+          console.log('Project steps query response:', { data: projectSteps, error: stepsError });
+
+if (stepsError) throw stepsError;
   
           // Find the next unconverted step
           const nextStep = projectSteps?.find(step => 

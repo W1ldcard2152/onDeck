@@ -55,12 +55,10 @@ export function useProjects(userId: string | undefined) {
 
       // Get project steps
       const { data: stepsData, error: stepsError } = await supabase
-  .from('project_steps')
-  .select('*')
-  .in('project_id', projectsData.map(p => p.id))
-  .order('order_number', { ascending: true });  // Changed from 'order' to 'order_number'
-
-if (stepsError) throw stepsError;
+      .from('project_steps')
+      .select('*')
+      .in('project_id', projectsData.map(p => p.id))
+      .order('order_number', { ascending: true });
 
       // Transform the data to match our ProjectWithDetails type
       const transformedProjects: ProjectWithDetails[] = projectsData.map(project => {
