@@ -99,32 +99,18 @@ const TaskTableBase: React.FC<TaskTableBaseProps> = ({
     setError(null);
     
     try {
-      // Log current task state
-      const { data: currentTask } = await supabase
-        .from('tasks')
-        .select('*')
-        .eq('id', taskId)
-        .single();
-        
-      console.log('Current task state:', currentTask);
-      console.log(`Updating task ${taskId} from ${currentTask?.status} to ${newStatus}`);
+      // Add debugging
+      console.log(`Updating task ${taskId} to status: ${newStatus}`);
       
       const { data: updatedTask, error: taskError } = await supabase
         .from('tasks')
-        .update({ 
-          status: newStatus,
-          updated_at: new Date().toISOString()
-        })
+        .update({ status: newStatus })
         .eq('id', taskId)
-        .select()
-        .single();
+        .select();
   
-      if (taskError) {
-        console.error('Error updating task status:', taskError);
-        throw taskError;
-      }
-  
-      console.log('Task updated successfully:', updatedTask);
+      if (taskError) throw taskError;
+      
+      console.log('Updated task:', updatedTask);
   
       const { error: itemError } = await supabase
         .from('items')
@@ -133,11 +119,11 @@ const TaskTableBase: React.FC<TaskTableBaseProps> = ({
   
       if (itemError) throw itemError;
   
-      onTaskUpdate();
+      onTaskUpdate(); // Make sure this function is correctly refreshing the data
     } catch (err) {
-      console.error('Error in updateTaskStatus:', err);
       const message = err instanceof Error ? err.message : 'Error updating task status';
       setError(message);
+      console.error('Error updating task status:', err);
     } finally {
       setLoading(prev => ({ ...prev, [taskId]: false }));
     }
@@ -656,7 +642,8 @@ const TaskTable: React.FC<TaskTableProps> = ({ tasks, onTaskUpdate }) => {
 
   const activeTasks = sortTasks(tasks.filter(task => {
     const status = task?.status?.toLowerCase() || 'on_deck';
-    return status === 'active' || status === 'on_deck';
+    return task.status === 'active' || task.status === 'on_deck';
+    console.log('Task being filtered:', task.id, task.status);
   }));
   
   const completedTasks = sortTasks(tasks.filter(task => {

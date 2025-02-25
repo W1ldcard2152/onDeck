@@ -23,14 +23,28 @@ export function useTasks(userId: string | undefined, limit: number = 10) {
       
       const supabase = createClientComponentClient<Database>()
   
-      // First get all tasks including completed ones
+      // First debug the raw task data from the database
+      const { data: taskDataRaw, error: taskErrorRaw } = await supabase
+        .from('tasks')
+        .select('*');
+      
+      console.log('ALL tasks in database:', taskDataRaw?.length);
+      console.log('Sample tasks statuses:', taskDataRaw?.slice(0, 5).map(t => ({ 
+        id: t.id, 
+        status: t.status 
+      })));
+  
+      // Then get all tasks including completed ones
       const { data: taskData, error: taskError } = await supabase
         .from('tasks')
-        .select('*')  // Select all columns including status
+        .select('*')
         .order('due_date', { ascending: true })
         .limit(limit)
   
-      console.log('Task query response:', { taskData, taskError });
+      console.log('Task query response:', { 
+        count: taskData?.length, 
+        statuses: taskData?.map(t => t.status) 
+      });
   
       if (taskError) throw taskError
       if (!taskData || taskData.length === 0) {
@@ -44,10 +58,13 @@ export function useTasks(userId: string | undefined, limit: number = 10) {
       .select('*')
       .eq('user_id', userId)
       .eq('item_type', 'task')
-      .eq('is_archived', false) // Add this line to filter out archived items
+      .eq('is_archived', false) // Only non-archived items
       .in('id', taskData.map(task => task.id))
   
-      console.log('Items query response:', { itemsData, itemsError });
+      console.log('Items query response:', { 
+        count: itemsData?.length,
+        ids: itemsData?.map(item => item.id)
+      });
   
       if (itemsError) throw itemsError
       if (!itemsData || itemsData.length === 0) {
@@ -77,7 +94,14 @@ export function useTasks(userId: string | undefined, limit: number = 10) {
         }
       }).filter((task): task is TaskWithDetails => task !== null)
   
-      console.log('Setting tasks state with:', combinedTasks);
+      console.log('Combined tasks with status breakdown:', {
+        total: combinedTasks.length,
+        active: combinedTasks.filter(t => t.status === 'active').length,
+        onDeck: combinedTasks.filter(t => t.status === 'on_deck').length,
+        completed: combinedTasks.filter(t => t.status === 'completed').length,
+        nullStatus: combinedTasks.filter(t => t.status === null).length,
+      });
+  
       setTasks(combinedTasks)
       
     } catch (e) {
