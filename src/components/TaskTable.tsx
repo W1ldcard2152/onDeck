@@ -26,6 +26,7 @@ import type { TaskWithDetails } from '@/lib/types';
 import type { Priority, TaskStatus } from '@/types/database.types';
 import ScrollableTableWrapper from './layouts/responsiveNav/ScrollableTableWrapper';
 
+// Define types
 type SortDirection = 'asc' | 'desc' | null;
 type SortField = 'status' | 'title' | 'priority' | 'assigned_date' | 'description' | 'due_date' | null;
 
@@ -48,142 +49,186 @@ interface TaskTableBaseProps {
   tableType: 'active' | 'completed';
 }
 
-const TaskTableBase = ({ 
+// TaskTableBase Component
+const TaskTableBase: React.FC<TaskTableBaseProps> = ({ 
   tasks, 
   onTaskUpdate,
   sorts,
   onSort,
   tableType
-}: TaskTableBaseProps) => {
+}) => {
   const [loading, setLoading] = useState<Record<string, boolean>>({});
   const [error, setError] = useState<string | null>(null);
   const [taskToEdit, setTaskToEdit] = useState<TaskWithDetails | null>(null);
   const supabase = createClientComponentClient<Database>();
   const { user } = useSupabaseAuth();
 
+  const deleteTask = async (taskId: string): Promise<void> => {
+    setLoading(prev => ({ ...prev, [taskId]: true }));
+    setError(null);
+    
+    try {
+      // First delete from tasks table
+      const { error: taskError } = await supabase
+        .from('tasks')
+        .delete()
+        .eq('id', taskId);
+
+      if (taskError) throw taskError;
+
+      // Then delete from items table
+      const { error: itemError } = await supabase
+        .from('items')
+        .delete()
+        .eq('id', taskId);
+
+      if (itemError) throw itemError;
+
+      onTaskUpdate();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Error deleting task';
+      setError(message);
+      console.error('Error deleting task:', err);
+    } finally {
+      setLoading(prev => ({ ...prev, [taskId]: false }));
+    }
+  };
+
   const updateTaskStatus = async (taskId: string, newStatus: TaskStatus): Promise<void> => {
     setLoading(prev => ({ ...prev, [taskId]: true }));
     setError(null);
     
     try {
-      // First update the task status - only update the status field
-      const { error: taskError } = await supabase
+      // Log current task state
+      const { data: currentTask } = await supabase
         .from('tasks')
-        .update({ status: newStatus })
+        .select('*')
         .eq('id', taskId)
-        .select();  // Add select() but don't try to update updated_at
+        .single();
+        
+      console.log('Current task state:', currentTask);
+      console.log(`Updating task ${taskId} from ${currentTask?.status} to ${newStatus}`);
+      
+      const { data: updatedTask, error: taskError } = await supabase
+        .from('tasks')
+        .update({ 
+          status: newStatus,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', taskId)
+        .select()
+        .single();
   
-      if (taskError) throw taskError;
+      if (taskError) {
+        console.error('Error updating task status:', taskError);
+        throw taskError;
+      }
   
-      // Update the item's updated_at timestamp (this is correct as items table has updated_at)
+      console.log('Task updated successfully:', updatedTask);
+  
       const { error: itemError } = await supabase
         .from('items')
         .update({ updated_at: new Date().toISOString() })
         .eq('id', taskId);
   
       if (itemError) throw itemError;
-
-  
-      // If the task is being marked as completed and it's a project task
-      if (newStatus === 'completed') {
-        // Get the task details to find the project
-        const { data: taskData, error: taskFetchError } = await supabase
-          .from('tasks')
-          .select('*')
-          .eq('id', taskId)
-          .single();
-  
-        if (taskFetchError) throw taskFetchError;
-  
-        if (taskData.project_id) {
-          // Find and update the corresponding project step
-          const { data: stepData, error: stepError } = await supabase
-            .from('project_steps')
-            .update({ 
-              status: 'completed',
-              completed_at: new Date().toISOString()
-            })
-            .eq('converted_task_id', taskId)
-            .select()
-            .single();
-  
-          if (stepError) throw stepError;
-  
-          // Get all project steps to find the next one
-          console.log('About to query project steps for project:', taskData.project_id);
-          const { data: projectSteps, error: stepsError } = await supabase
-            .from('project_steps')
-            .select('*')
-            .eq('project_id', taskData.project_id)
-            .order('order_number', { ascending: true });
-          
-          console.log('Project steps query response:', { data: projectSteps, error: stepsError });
-
-if (stepsError) throw stepsError;
-  
-          // Find the next unconverted step
-          const nextStep = projectSteps?.find(step => 
-            !step.is_converted && step.status !== 'completed'
-          );
-  
-          if (nextStep) {
-            // Create a new task for the next step
-            const now = new Date().toISOString();
-            const tomorrow = new Date();
-            tomorrow.setDate(tomorrow.getDate() + 1);
-  
-            const { data: newTaskItem, error: newItemError } = await supabase
-              .from('items')
-              .insert([{
-                title: nextStep.title,
-                user_id: user?.id,
-                item_type: 'task',
-                created_at: now,
-                updated_at: now,
-                is_archived: false
-              }])
-              .select()
-              .single();
-  
-            if (newItemError) throw newItemError;
-  
-            // Create the task
-            const { error: newTaskError } = await supabase
-              .from('tasks')
-              .insert([{
-                id: newTaskItem.id,
-                status: 'on_deck',
-                description: nextStep.description,
-                priority: 'normal',
-                due_date: tomorrow.toISOString(),
-                assigned_date: now,
-                project_id: taskData.project_id,
-                is_project_converted: true
-              }]);
-  
-            if (newTaskError) throw newTaskError;
-  
-            // Mark the step as converted
-            const { error: stepUpdateError } = await supabase
-              .from('project_steps')
-              .update({
-                is_converted: true,
-                converted_task_id: newTaskItem.id
-              })
-              .eq('id', nextStep.id);
-  
-            if (stepUpdateError) throw stepUpdateError;
-          }
-        }
-      }
   
       onTaskUpdate();
     } catch (err) {
+      console.error('Error in updateTaskStatus:', err);
       const message = err instanceof Error ? err.message : 'Error updating task status';
       setError(message);
-      console.error('Error updating task status:', err);
     } finally {
       setLoading(prev => ({ ...prev, [taskId]: false }));
+    }
+  };
+
+  const handleProjectTaskCompletion = async (taskData: any, taskId: string) => {
+    try {
+      // Update project step
+      const { error: stepError } = await supabase
+        .from('project_steps')
+        .update({ 
+          status: 'completed',
+          completed_at: new Date().toISOString()
+        })
+        .eq('converted_task_id', taskId)
+        .select()
+        .single();
+
+      if (stepError) throw stepError;
+
+      // Get all project steps
+      const { data: projectSteps, error: stepsError } = await supabase
+        .from('project_steps')
+        .select('*')
+        .eq('project_id', taskData.project_id)
+        .order('order_number', { ascending: true });
+
+      if (stepsError) throw stepsError;
+
+      // Find next unconverted step
+      const nextStep = projectSteps?.find(step => 
+        !step.is_converted && step.status !== 'completed'
+      );
+
+      if (nextStep) {
+        await createNextTask(nextStep, taskData.project_id);
+      }
+    } catch (error) {
+      console.error('Error handling project task completion:', error);
+      throw error;
+    }
+  };
+
+  const createNextTask = async (nextStep: any, projectId: string) => {
+    const now = new Date().toISOString();
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    try {
+      const { data: newTaskItem, error: newItemError } = await supabase
+        .from('items')
+        .insert([{
+          title: nextStep.title,
+          user_id: user?.id,
+          item_type: 'task',
+          created_at: now,
+          updated_at: now,
+          is_archived: false
+        }])
+        .select()
+        .single();
+
+      if (newItemError) throw newItemError;
+
+      const { error: newTaskError } = await supabase
+        .from('tasks')
+        .insert([{
+          id: newTaskItem.id,
+          status: 'on_deck',
+          description: nextStep.description,
+          priority: 'normal',
+          due_date: tomorrow.toISOString(),
+          assigned_date: now,
+          project_id: projectId,
+          is_project_converted: true
+        }]);
+
+      if (newTaskError) throw newTaskError;
+
+      const { error: stepUpdateError } = await supabase
+        .from('project_steps')
+        .update({
+          is_converted: true,
+          converted_task_id: newTaskItem.id
+        })
+        .eq('id', nextStep.id);
+
+      if (stepUpdateError) throw stepUpdateError;
+    } catch (error) {
+      console.error('Error creating next task:', error);
+      throw error;
     }
   };
 
@@ -272,242 +317,247 @@ if (stepsError) throw stepsError;
       )}
       
       <div className="relative">
-      <ScrollableTableWrapper>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>
-                {tableType === 'active' ? (
-                  <Button 
-                    variant="ghost" 
-                    onClick={() => onSort('status')}
-                    className="hover:bg-gray-100"
-                  >
-                    Status {getSortIcon('status')}
-                  </Button>
-                ) : (
-                  <span className="text-sm font-medium">Status</span>
-                )}
-              </TableHead>
-              <TableHead>
-                {tableType === 'active' ? (
-                  <Button 
-                    variant="ghost" 
-                    onClick={() => onSort('title')}
-                    className="hover:bg-gray-100"
-                  >
-                    Title {getSortIcon('title')}
-                  </Button>
-                ) : (
-                  <span className="text-sm font-medium">Title</span>
-                )}
-              </TableHead>
-              <TableHead>
-                {tableType === 'active' ? (
-                  <Button 
-                    variant="ghost" 
-                    onClick={() => onSort('priority')}
-                    className="hover:bg-gray-100"
-                  >
-                    Priority {getSortIcon('priority')}
-                  </Button>
-                ) : (
-                  <span className="text-sm font-medium">Priority</span>
-                )}
-              </TableHead>
-              <TableHead>
-                {tableType === 'active' ? (
-                  <Button 
-                    variant="ghost" 
-                    onClick={() => onSort('assigned_date')}
-                    className="hover:bg-gray-100"
-                  >
-                    Assigned Date {getSortIcon('assigned_date')}
-                  </Button>
-                ) : (
-                  <span className="text-sm font-medium">Assigned Date</span>
-                )}
-              </TableHead>
-              <TableHead>
-                <span className="text-sm font-medium">Description</span>
-              </TableHead>
-              <TableHead>
-                {tableType === 'active' ? (
-                  <Button 
-                    variant="ghost" 
-                    onClick={() => onSort('due_date')}
-                    className="hover:bg-gray-100"
-                  >
-                    Due Date {getSortIcon('due_date')}
-                  </Button>
-                ) : (
-                  <span className="text-sm font-medium">Due Date</span>
-                )}
-              </TableHead>
-              <TableHead>
-                <span className="text-sm font-medium">Linked Project</span>
-              </TableHead>
-              <TableHead className="w-12 text-right">
-                <span className="text-sm font-medium">Actions</span>
-              </TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {tasks.map((task) => {
-              const isLoading = loading[task.id];
-              const status = task.status || 'on_deck';
-              const priority = task.priority || 'normal';
-              
-              return (
-                <TableRow key={task.id}>
-                  <TableCell>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button 
-                          variant="ghost" 
-                          className="p-0 h-auto hover:bg-transparent"
-                          disabled={isLoading}
-                        >
-                          <Badge 
-                            className={`${getStatusColor(status)} border-0 cursor-pointer hover:opacity-80`}
+        <ScrollableTableWrapper>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>
+                  {tableType === 'active' ? (
+                    <Button 
+                      variant="ghost" 
+                      onClick={() => onSort('status')}
+                      className="hover:bg-gray-100"
+                    >
+                      Status {getSortIcon('status')}
+                    </Button>
+                  ) : (
+                    <span className="text-sm font-medium">Status</span>
+                  )}
+                </TableHead>
+                <TableHead>
+                  {tableType === 'active' ? (
+                    <Button 
+                      variant="ghost" 
+                      onClick={() => onSort('title')}
+                      className="hover:bg-gray-100"
+                    >
+                      Title {getSortIcon('title')}
+                    </Button>
+                  ) : (
+                    <span className="text-sm font-medium">Title</span>
+                  )}
+                </TableHead>
+                <TableHead>
+                  {tableType === 'active' ? (
+                    <Button 
+                      variant="ghost" 
+                      onClick={() => onSort('priority')}
+                      className="hover:bg-gray-100"
+                    >
+                      Priority {getSortIcon('priority')}
+                    </Button>
+                  ) : (
+                    <span className="text-sm font-medium">Priority</span>
+                  )}
+                </TableHead>
+                <TableHead>
+                  {tableType === 'active' ? (
+                    <Button 
+                      variant="ghost" 
+                      onClick={() => onSort('assigned_date')}
+                      className="hover:bg-gray-100"
+                    >
+                      Assigned Date {getSortIcon('assigned_date')}
+                    </Button>
+                  ) : (
+                    <span className="text-sm font-medium">Assigned Date</span>
+                  )}
+                </TableHead>
+                <TableHead>
+                  <span className="text-sm font-medium">Description</span>
+                </TableHead>
+                <TableHead>
+                  {tableType === 'active' ? (
+                    <Button 
+                      variant="ghost" 
+                      onClick={() => onSort('due_date')}
+                      className="hover:bg-gray-100"
+                    >
+                      Due Date {getSortIcon('due_date')}
+                    </Button>
+                  ) : (
+                    <span className="text-sm font-medium">Due Date</span>
+                  )}
+                </TableHead>
+                <TableHead>
+                  <span className="text-sm font-medium">Linked Project</span>
+                </TableHead>
+                <TableHead className="w-12 text-right">
+                  <span className="text-sm font-medium">Actions</span>
+                </TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {tasks.map((task) => {
+                const isLoading = loading[task.id];
+                const status = task.status || 'on_deck';
+                const priority = task.priority || 'normal';
+                
+                return (
+                  <TableRow key={task.id}>
+                    <TableCell>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button 
+                            variant="ghost" 
+                            className="p-0 h-auto hover:bg-transparent"
+                            disabled={isLoading}
                           >
-                            {isLoading ? 'Updating...' : status}
-                          </Badge>
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent>
-                        {tableType === 'active' ? (
-                          <>
-                            <DropdownMenuItem
-                              onClick={() => updateTaskStatus(task.id, status === 'on_deck' ? 'active' : 'on_deck')}
-                              disabled={isLoading}
+                            <Badge 
+                              className={`${getStatusColor(status)} border-0 cursor-pointer hover:opacity-80`}
                             >
-                              Mark {status === 'on_deck' ? 'active' : 'on deck'}
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() => updateTaskStatus(task.id, 'completed')}
-                              disabled={isLoading}
-                            >
-                              Mark completed
-                            </DropdownMenuItem>
-                          </>
-                        ) : (
-                          <>
-                            <DropdownMenuItem
-                              onClick={() => updateTaskStatus(task.id, 'active')}
-                              disabled={isLoading}
-                            >
-                              Mark active
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() => updateTaskStatus(task.id, 'on_deck')}
-                              disabled={isLoading}
-                            >
-                              Mark on deck
-                            </DropdownMenuItem>
-                          </>
-                        )}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </TableCell>
-                  <TableCell>
-                    {task.item.title}
-                  </TableCell>
-                  <TableCell>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button 
-                          variant="ghost" 
-                          className="p-0 h-auto hover:bg-transparent"
-                          disabled={isLoading}
-                        >
-                          <Badge 
-                            className={`${getPriorityColor(priority)} border-0 cursor-pointer hover:opacity-80`}
+                              {isLoading ? 'Updating...' : status}
+                            </Badge>
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent>
+                          {tableType === 'active' ? (
+                            <>
+                              <DropdownMenuItem
+                                onClick={() => updateTaskStatus(task.id, status === 'on_deck' ? 'active' : 'on_deck')}
+                                disabled={isLoading}
+                              >
+                                Mark completed
+                              </DropdownMenuItem>
+                            </>
+                          ) : (
+                            <>
+                              <DropdownMenuItem
+                                onClick={() => updateTaskStatus(task.id, 'active')}
+                                disabled={isLoading}
+                              >
+                                Mark active
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                onClick={() => updateTaskStatus(task.id, 'on_deck')}
+                                disabled={isLoading}
+                              >
+                                Mark on deck
+                              </DropdownMenuItem>
+                            </>
+                          )}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </TableCell>
+                    <TableCell>
+                      {task.item.title}
+                    </TableCell>
+                    <TableCell>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button 
+                            variant="ghost" 
+                            className="p-0 h-auto hover:bg-transparent"
+                            disabled={isLoading}
                           >
-                            {isLoading ? 'Updating...' : priority}
-                          </Badge>
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent>
-                        <DropdownMenuItem
-                          onClick={() => updateTaskPriority(task.id, 'low')}
-                          className={priority === 'low' ? 'bg-gray-50' : ''}
-                          disabled={isLoading}
-                        >
-                          Low
-                          {priority === 'low' && <Check className="ml-2 h-4 w-4" />}
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          onClick={() => updateTaskPriority(task.id, 'normal')}
-                          className={priority === 'normal' ? 'bg-blue-50' : ''}
-                          disabled={isLoading}
-                        >
-                          Normal
-                          {priority === 'normal' && <Check className="ml-2 h-4 w-4" />}
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          onClick={() => updateTaskPriority(task.id, 'high')}
-                          className={priority === 'high' ? 'bg-red-50' : ''}
-                          disabled={isLoading}
-                        >
-                          High
-                          {priority === 'high' && <Check className="ml-2 h-4 w-4" />}
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </TableCell>
-                  <TableCell>
-                    {task.assigned_date ? format(new Date(task.assigned_date), 'MMM d, yyyy') : '-'}
-                  </TableCell>
-                  <TableCell className="max-w-[12rem] truncate">
-                    <TruncatedCell content={task.description} maxLength={60} />
-                  </TableCell>
-                  <TableCell>
-                    {task.due_date ? format(new Date(task.due_date), 'MMM d, yyyy') : '-'}
-                  </TableCell>
-                  <TableCell>
-                    {task.converted_project_id && (
-                      <div className="flex items-center text-blue-600">
-                        <Link className="h-4 w-4 mr-1" />
-                        Project {task.converted_project_id.slice(0, 8)}
-                      </div>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button 
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8"
-                          disabled={isLoading}
-                        >
-                          <MoreHorizontal className="h-4 w-4" />
-                          <span className="sr-only">Open menu</span>
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem
-                          onClick={() => setTaskToEdit(task)}
-                          disabled={isLoading}
-                        >
-                          Edit Task
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          onClick={() => updateTaskStatus(task.id, tableType === 'active' ?
-                            'completed' : 'active')}
-                          disabled={isLoading}
-                        >
-                          {tableType === 'active' ? 'Mark Completed' : 'Mark Active'}
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </TableCell>
-                </TableRow>
-              );
-            })}
-          </TableBody>
-        </Table>
+                            <Badge 
+                              className={`${getPriorityColor(priority)} border-0 cursor-pointer hover:opacity-80`}
+                            >
+                              {isLoading ? 'Updating...' : priority}
+                            </Badge>
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent>
+                          <DropdownMenuItem
+                            onClick={() => updateTaskPriority(task.id, 'low')}
+                            className={priority === 'low' ? 'bg-gray-50' : ''}
+                            disabled={isLoading}
+                          >
+                            Low
+                            {priority === 'low' && <Check className="ml-2 h-4 w-4" />}
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => updateTaskPriority(task.id, 'normal')}
+                            className={priority === 'normal' ? 'bg-blue-50' : ''}
+                            disabled={isLoading}
+                          >
+                            Normal
+                            {priority === 'normal' && <Check className="ml-2 h-4 w-4" />}
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => updateTaskPriority(task.id, 'high')}
+                            className={priority === 'high' ? 'bg-red-50' : ''}
+                            disabled={isLoading}
+                          >
+                            High
+                            {priority === 'high' && <Check className="ml-2 h-4 w-4" />}
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </TableCell>
+                    <TableCell>
+                      {task.assigned_date ? format(new Date(task.assigned_date), 'MMM d, yyyy') : '-'}
+                    </TableCell>
+                    <TableCell className="max-w-[12rem] truncate">
+                      <TruncatedCell content={task.description} maxLength={60} />
+                    </TableCell>
+                    <TableCell>
+                      {task.due_date ? format(new Date(task.due_date), 'MMM d, yyyy') : '-'}
+                    </TableCell>
+                    <TableCell>
+                      {task.converted_project_id && (
+                        <div className="flex items-center text-blue-600">
+                          <Link className="h-4 w-4 mr-1" />
+                          Project {task.converted_project_id.slice(0, 8)}
+                        </div>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button 
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            disabled={isLoading}
+                          >
+                            <MoreHorizontal className="h-4 w-4" />
+                            <span className="sr-only">Open menu</span>
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem
+                            onClick={() => setTaskToEdit(task)}
+                            disabled={isLoading}
+                          >
+                            Edit Task
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => updateTaskStatus(task.id, tableType === 'active' ?
+                              'completed' : 'active')}
+                            disabled={isLoading}
+                          >
+                            {tableType === 'active' ? 'Mark Completed' : 'Mark Active'}
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => {
+                              if (window.confirm('Are you sure you want to delete this task? This action cannot be undone.')) {
+                                deleteTask(task.id);
+                              }
+                            }}
+                            disabled={isLoading}
+                            className="text-red-600 hover:text-red-700"
+                          >
+                            Delete Task
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
         </ScrollableTableWrapper>
 
         {taskToEdit && (
@@ -526,7 +576,8 @@ if (stepsError) throw stepsError;
   );
 };
 
-const TaskTable = ({ tasks, onTaskUpdate }: TaskTableProps) => {
+// Main TaskTable component
+const TaskTable: React.FC<TaskTableProps> = ({ tasks, onTaskUpdate }) => {
   const [showCompleted, setShowCompleted] = useState(false);
   const [sorts, setSorts] = useState<SortState[]>([]);
 
@@ -601,14 +652,21 @@ const TaskTable = ({ tasks, onTaskUpdate }: TaskTableProps) => {
       return 0;
     });
   };
+  console.log('Raw tasks:', tasks.map(t => ({ id: t.id, status: t.status })));
 
-  const activeTasks = sortTasks(tasks.filter(task => 
-    task.status === 'active' || task.status === 'on_deck'
-  ));
+  const activeTasks = sortTasks(tasks.filter(task => {
+    const status = task?.status?.toLowerCase() || 'on_deck';
+    return status === 'active' || status === 'on_deck';
+  }));
   
-  const completedTasks = tasks.filter(task => 
-    task.status === 'completed'
-  );
+  const completedTasks = sortTasks(tasks.filter(task => {
+    const status = task?.status?.toLowerCase() || 'on_deck';
+    return status === 'completed';
+  }));
+
+  // Debug logs
+  console.log('Filtered active tasks:', activeTasks.map(t => ({ id: t.id, status: t.status })));
+  console.log('Filtered completed tasks:', completedTasks.map(t => ({ id: t.id, status: t.status })));
 
   const completedCount = completedTasks.length;
 
@@ -640,14 +698,20 @@ const TaskTable = ({ tasks, onTaskUpdate }: TaskTableProps) => {
           </div>
         </div>
         
-        {showCompleted && completedTasks.length > 0 && (
-          <TaskTableBase 
-            tasks={completedTasks}
-            onTaskUpdate={onTaskUpdate}
-            sorts={sorts}
-            onSort={handleSort}
-            tableType="completed"
-          />
+        {showCompleted && (
+          <div className="p-6">
+            {completedTasks.length === 0 ? (
+              <div className="text-gray-500 text-center py-4">No completed tasks</div>
+            ) : (
+              <TaskTableBase 
+                tasks={completedTasks}
+                onTaskUpdate={onTaskUpdate}
+                sorts={sorts}
+                onSort={handleSort}
+                tableType="completed"
+              />
+            )}
+          </div>
         )}
       </div>
     </div>

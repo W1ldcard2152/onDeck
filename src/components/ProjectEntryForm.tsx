@@ -8,14 +8,38 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Plus, GripVertical, Trash2, ArrowUp, ArrowDown } from 'lucide-react';
 import { useSupabaseAuth } from '@/hooks/useSupabaseAuth';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
-import type { Priority, ProjectStatus, StepStatus } from '@/lib/types';
+import type { ProjectWithDetails, Priority, ProjectStatus, StepStatus } from '@/lib/types';
+import type { User } from '@supabase/auth-helpers-nextjs';
 
-async function convertNextStepToTask(projectId: string, steps: StepData[], user: any, supabase: any) {
+
+// Types and Interfaces
+interface StepData {
+  id: string;
+  title: string;
+  description: string;
+  order_number: number;
+  status: StepStatus;
+  priority?: Priority; // Make priority optional
+  is_converted: boolean;
+  converted_task_id: string | null;
+}
+
+interface ProjectEntryFormProps {
+  onProjectCreated?: (project: { id: string }) => void;
+  initialData?: ProjectWithDetails | null;  // Make it explicitly nullable
+  isEditing?: boolean;
+  onClose?: () => void;
+}
+
+
+// Helper Functions
+async function convertNextStepToTask(projectId: string, steps: StepData[], user: User | null, supabase: any) {
+  if (!user) return;
+  
   const now = new Date().toISOString();
   const tomorrow = new Date();
   tomorrow.setDate(tomorrow.getDate() + 1);
 
-  // Find the first non-completed, non-converted step
   const nextStep = steps.find(step => 
     step.status !== 'completed' && 
     !step.is_converted
@@ -27,7 +51,6 @@ async function convertNextStepToTask(projectId: string, steps: StepData[], user:
   }
 
   try {
-    // Create new item for the task
     const { data: taskItemData, error: taskItemError } = await supabase
       .from('items')
       .insert([{
@@ -43,7 +66,6 @@ async function convertNextStepToTask(projectId: string, steps: StepData[], user:
 
     if (taskItemError) throw taskItemError;
 
-    // Create the task
     const { error: taskError } = await supabase
       .from('tasks')
       .insert([{
@@ -53,13 +75,12 @@ async function convertNextStepToTask(projectId: string, steps: StepData[], user:
         priority: 'normal',
         due_date: tomorrow.toISOString(),
         assigned_date: now,
-        project_id: projectId,  // Link task back to project
+        project_id: projectId,
         is_project_converted: true
       }]);
 
     if (taskError) throw taskError;
 
-    // Update the step to mark it as converted
     const { error: updateStepError } = await supabase
       .from('project_steps')
       .update({
@@ -71,43 +92,29 @@ async function convertNextStepToTask(projectId: string, steps: StepData[], user:
 
     if (updateStepError) throw updateStepError;
 
-    console.log('Successfully converted step to task:', taskItemData.id);
     return taskItemData.id;
   } catch (error) {
     console.error('Error converting step to task:', error);
     throw error;
   }
 }
-interface StepData {
-  id: string;
-  title: string;
-  description: string;
-  order_number: number;
-  status: StepStatus;
-  is_converted: boolean;
-  converted_task_id: string | null;
-}
 
-interface ProjectEntryFormProps {
-  onProjectCreated?: (project: any) => void;
-  initialData?: any;
-  isEditing?: boolean;
-  onClose?: () => void;
-}
-
-export function ProjectEntryForm({ 
+// Main Component
+export const ProjectEntryForm: React.FC<ProjectEntryFormProps> = ({ 
   onProjectCreated, 
   initialData,
   isEditing = false,
   onClose 
-}: ProjectEntryFormProps) {
+}) => {
   const { user } = useSupabaseAuth();
   const supabase = createClientComponentClient();
+
+  // State
   const [open, setOpen] = useState(isEditing);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [priority, setPriority] = useState<Priority>('normal');
-  const [status, setStatus] = useState<ProjectStatus>('active');
+  const [status, setStatus] = useState<ProjectStatus>('active' as const);
   const [steps, setSteps] = useState<StepData[]>([
     {
       id: crypto.randomUUID(),
@@ -131,6 +138,7 @@ export function ProjectEntryForm({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Helper functions
   const resetForm = () => {
     setTitle('');
     setDescription('');
@@ -158,26 +166,6 @@ export function ProjectEntryForm({
     ]);
     setError(null);
   };
-
-  useEffect(() => {
-    if (initialData && isEditing) {
-      setTitle(initialData.title);
-      setDescription(initialData.description || '');
-      setPriority(initialData.priority || 'normal');
-      setStatus(initialData.status || 'active');
-      if (initialData.steps) {
-        setSteps(initialData.steps.map((step: any, index: number) => ({
-          id: step.id,
-          title: step.title,
-          description: step.description || '',
-          order_number: index,
-          status: step.status || 'pending',
-          is_converted: step.is_converted || false,
-          converted_task_id: step.converted_task_id || null
-        })));
-      }
-    }
-  }, [initialData, isEditing]);
 
   const handleAddStep = (afterIndex?: number) => {
     const newSteps = [...steps];
@@ -235,6 +223,31 @@ export function ProjectEntryForm({
     setSteps(newSteps);
   };
 
+  // Effects
+  useEffect(() => {
+    if (initialData && isEditing) {
+      // Add optional chaining and null checks
+      setTitle(initialData?.title ?? '');
+      setDescription(initialData?.description ?? '');
+      setPriority(initialData?.priority ?? 'normal');
+      setStatus(initialData?.status ?? 'active');
+      
+      // Safe check for steps
+      if (initialData?.steps && Array.isArray(initialData.steps)) {
+        setSteps(initialData.steps.map((step: any, index: number) => ({
+          id: step.id ?? crypto.randomUUID(),
+          title: step.title ?? '',
+          description: step.description ?? '',
+          order_number: index,
+          status: step.status ?? 'pending',
+          is_converted: step.is_converted ?? false,
+          converted_task_id: step.converted_task_id ?? null
+        })));
+      }
+    }
+  }, [initialData, isEditing]);
+
+  // Form submission
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setIsSubmitting(true);
@@ -256,216 +269,11 @@ export function ProjectEntryForm({
       const now = new Date().toISOString();
 
       if (isEditing && initialData) {
-        const now = new Date().toISOString();
-        
-        // Update the item
-        const { error: itemError } = await supabase
-          .from('items')
-          .update({
-            title: title.trim(),
-            updated_at: now
-          })
-          .eq('id', initialData.id);
-      
-        if (itemError) throw itemError;
-      
-        // Update the project
-        const { error: projectError } = await supabase
-          .from('projects')
-          .update({
-            title: title.trim(),
-            description: description.trim() || null,
-            status: status,
-            priority: priority,
-            updated_at: now
-          })
-          .eq('id', initialData.id);
-      
-        if (projectError) throw projectError;
-      
-        // Get existing steps
-        const { data: existingSteps, error: stepsError } = await supabase
-          .from('project_steps')
-          .select('*')
-          .eq('project_id', initialData.id);
-      
-        if (stepsError) throw stepsError;
-      
-        // Create sets of step IDs for comparison
-        const existingStepIds = new Set(existingSteps?.map(step => step.id) || []);
-        const newStepIds = new Set(steps.map(step => step.id));
-      
-        // Steps to delete (exist in DB but not in form)
-        const stepsToDelete = existingSteps?.filter(step => !newStepIds.has(step.id)) || [];
-        
-        // Steps to create (exist in form but not in DB)
-        const stepsToCreate = steps.filter(step => !existingStepIds.has(step.id));
-        
-        // Steps to update (exist in both)
-        const stepsToUpdate = steps.filter(step => existingStepIds.has(step.id));
-      
-        // Delete removed steps
-        if (stepsToDelete.length > 0) {
-          const { error: deleteError } = await supabase
-            .from('project_steps')
-            .delete()
-            .in('id', stepsToDelete.map(step => step.id));
-      
-          if (deleteError) throw deleteError;
-        }
-      
-        // Create new steps
-        if (stepsToCreate.length > 0) {
-          const { error: createError } = await supabase
-            .from('project_steps')
-            .insert(
-              stepsToCreate.map(step => ({
-                project_id: initialData.id,
-                title: step.title.trim(),
-                description: step.description.trim() || null,
-                order_number: step.order_number,
-                status: step.status || 'pending',
-                created_at: now,
-                updated_at: now
-              }))
-            );
-      
-          if (createError) throw createError;
-        }
-      
-        // Update existing steps
-        for (const step of stepsToUpdate) {
-          const { error: updateError } = await supabase
-            .from('project_steps')
-            .update({
-              title: step.title.trim(),
-              description: step.description.trim() || null,
-              order_number: step.order_number,
-              status: step.status,
-              updated_at: now
-            })
-            .eq('id', step.id);
-      
-          if (updateError) throw updateError;
-        }
-      
-                // Try to convert the next step to a task
-                try {
-                  await convertNextStepToTask(initialData.id, steps, user, supabase);
-                } catch (error) {
-                  console.error('Error in step to task conversion:', error);
-                  // We don't throw here since the main update was successful
-                }
-        
-                if (onProjectCreated) {
-                  onProjectCreated({ id: initialData.id });
-                }
-      }
-       else {
-        // Create new project
-        const { data: itemData, error: itemError } = await supabase
-          .from('items')
-          .insert([{
-            title: title.trim(),
-            user_id: user.id,
-            item_type: 'project',
-            created_at: now,
-            updated_at: now,
-            is_archived: false
-          }])
-          .select()
-          .single();
-
-        if (itemError) throw itemError;
-
-        // Create the project
-        const { data: projectData, error: projectError } = await supabase
-          .from('projects')
-          .insert([{
-            id: itemData.id,
-            title: title.trim(),
-            description: description.trim() || null,
-            status: status,
-            priority: priority,
-            progress: 0,
-            current_step: 0,
-            user_id: user.id,
-            created_at: now,
-            updated_at: now
-          }])
-          .select()
-          .single();
-
-        if (projectError) throw projectError;
-
-        // Create project steps
-        const stepsToInsert = steps.map(step => ({
-          project_id: itemData.id,
-          title: step.title.trim(),
-          description: step.description.trim() || null,
-          order_number: step.order_number,
-          status: 'pending',
-          is_converted: false,
-          converted_task_id: null,
-          created_at: now,
-          updated_at: now
-        }));
-
-        const { error: stepsError } = await supabase
-          .from('project_steps')
-          .insert(stepsToInsert);
-
-        if (stepsError) throw stepsError;
-
-        // Convert first step to task automatically
-        const firstStep = steps[0];
-        const tomorrow = new Date();
-        tomorrow.setDate(tomorrow.getDate() + 1);
-
-        const { data: taskItemData, error: taskItemError } = await supabase
-          .from('items')
-          .insert([{
-            title: firstStep.title.trim(),
-            user_id: user.id,
-            item_type: 'task',
-            created_at: now,
-            updated_at: now,
-            is_archived: false
-          }])
-          .select()
-          .single();
-
-        if (taskItemError) throw taskItemError;
-
-        const { error: taskError } = await supabase
-          .from('tasks')
-          .insert([{
-            id: taskItemData.id,
-            status: 'on_deck',
-            description: firstStep.description.trim() || null,
-            converted_project_id: itemData.id,
-            priority: 'normal',
-            due_date: tomorrow.toISOString(),
-            assigned_date: now
-          }]);
-
-        if (taskError) throw taskError;
-
-        // Update the first step to mark it as converted
-        const { error: updateStepError } = await supabase
-          .from('project_steps')
-          .update({
-            is_converted: true,
-            converted_task_id: taskItemData.id
-          })
-          .eq('project_id', itemData.id)
-          .eq('order_number', 0);
-
-        if (updateStepError) throw updateStepError;
-
-        if (onProjectCreated) {
-          onProjectCreated({ id: itemData.id });
-        }
+        // Handle editing existing project
+        await handleEditProject(now);
+      } else {
+        // Handle creating new project
+        await handleCreateProject(now);
       }
 
       setOpen(false);
@@ -479,33 +287,260 @@ export function ProjectEntryForm({
     }
   };
 
-  return (
-    <Dialog 
-      open={open} 
-      onOpenChange={(newOpen) => {
-        setOpen(newOpen);
-        if (!newOpen) {
-          resetForm();
-          if (onClose) onClose();
-        }
-      }}
-    >
-      <DialogTrigger asChild>
-        {!isEditing ? (
-          <Button className="bg-blue-600 text-white rounded-lg hover:bg-blue-700">
-            <Plus className="w-4 h-4 mr-2" />
-            New Project
-          </Button>
-        ) : null}
-      </DialogTrigger>
-      <DialogContent className="sm:max-w-[700px]">
-        <DialogHeader>
-          <DialogTitle>{isEditing ? 'Edit Project' : 'Create New Project'}</DialogTitle>
-          <DialogDescription>
-            {isEditing ? 'Update project details and steps.' : 'Create a new project with sequential steps.'}
-          </DialogDescription>
-        </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4">
+  const handleEditProject = async (now: string) => {
+    // Update the item
+    if (!initialData?.id) {
+      throw new Error('Project ID is required for editing');
+    }
+    const { error: itemError } = await supabase
+      .from('items')
+      .update({
+        title: title.trim(),
+        updated_at: now
+      })
+      .eq('id', initialData.id);
+  
+    if (itemError) throw itemError;
+  
+    // Update the project
+    const { error: projectError } = await supabase
+      .from('projects')
+      .update({
+        title: title.trim(),
+        description: description.trim() || null,
+        status: status,
+        priority: priority,
+        updated_at: now
+      })
+      .eq('id', initialData.id);
+  
+    if (projectError) throw projectError;
+
+    await handleStepUpdates(initialData.id, now);
+
+    try {
+      await convertNextStepToTask(initialData.id, steps, user, supabase);
+    } catch (error) {
+      console.error('Error in step to task conversion:', error);
+    }
+
+    if (onProjectCreated) {
+      onProjectCreated({ id: initialData.id });
+    }
+  };
+
+  const handleCreateProject = async (now: string) => {
+    if (!user?.id) return; // Early return if no user
+  
+    try {
+      // Create the item first
+      const { data: itemData, error: itemError } = await supabase
+        .from('items')
+        .insert([{
+          title: title.trim(),
+          user_id: user?.id,
+          item_type: 'project',
+          created_at: now,
+          updated_at: now,
+          is_archived: false
+        }])
+        .select()
+        .single();
+  
+      if (itemError) throw itemError;
+      if (!itemData) throw new Error('Failed to create item');
+  
+      // Then create the project using the item's ID
+      const { error: projectError } = await supabase
+        .from('projects')
+        .insert([{
+          id: itemData.id,
+          title: title.trim(),
+          description: description.trim() || null,
+          status: status,
+          priority: priority,
+          progress: 0,
+          current_step: 0,
+          user_id: user?.id,
+          created_at: now,
+          updated_at: now
+        }]);
+  
+      if (projectError) throw projectError;
+  
+      // Create steps after project is created
+      await handleCreateSteps(itemData.id, now);
+  
+      if (onProjectCreated) {
+        onProjectCreated({ id: itemData.id });
+      }
+      
+    } catch (error) {
+      console.error('Error creating project:', error);
+      throw error;
+    }
+  };
+
+  const handleStepUpdates = async (projectId: string, now: string) => {
+    // Get existing steps
+    const { data: existingSteps, error: stepsError } = await supabase
+      .from('project_steps')
+      .select('*')
+      .eq('project_id', projectId);
+  
+    if (stepsError) throw stepsError;
+  
+    const existingStepIds = new Set(existingSteps?.map(step => step.id) || []);
+    const newStepIds = new Set(steps.map(step => step.id));
+  
+    // Handle step changes
+    const stepsToDelete = existingSteps?.filter(step => !newStepIds.has(step.id)) || [];
+    const stepsToCreate = steps.filter(step => !existingStepIds.has(step.id));
+    const stepsToUpdate = steps.filter(step => existingStepIds.has(step.id));
+  
+    // Delete removed steps
+    if (stepsToDelete.length > 0) {
+      const { error: deleteError } = await supabase
+        .from('project_steps')
+        .delete()
+        .in('id', stepsToDelete.map(step => step.id));
+  
+      if (deleteError) throw deleteError;
+    }
+  
+    // Create new steps
+    if (stepsToCreate.length > 0) {
+      const { error: createError } = await supabase
+        .from('project_steps')
+        .insert(
+          stepsToCreate.map(step => ({
+            project_id: projectId,
+            title: step.title.trim(),
+            description: step.description.trim() || null,
+            order_number: step.order_number,
+            status: step.status || 'pending',
+            created_at: now,
+            updated_at: now
+          }))
+        );
+  
+      if (createError) throw createError;
+    }
+  
+    // Update existing steps
+    for (const step of stepsToUpdate) {
+      const { error: updateError } = await supabase
+        .from('project_steps')
+        .update({
+          title: step.title.trim(),
+          description: step.description.trim() || null,
+          order_number: step.order_number,
+          status: step.status,
+          updated_at: now
+        })
+        .eq('id', step.id);
+  
+      if (updateError) throw updateError;
+    }
+  };
+
+  const handleCreateSteps = async (projectId: string, now: string) => {
+    // Create steps
+    const stepsToInsert = steps.map(step => ({
+      project_id: projectId,
+      title: step.title.trim(),
+      description: step.description.trim() || null,
+      order_number: step.order_number,
+      status: 'pending' as const, // Use const assertion
+      priority: step.priority || 'normal' as Priority, // Provide default priority
+      is_converted: false,
+      converted_task_id: null,
+      created_at: now,
+      updated_at: now
+    }));
+
+    const { error: stepsError } = await supabase
+      .from('project_steps')
+      .insert(stepsToInsert);
+
+    if (stepsError) throw stepsError;
+
+    // Convert first step to task
+    const firstStep = steps[0];
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    const { data: taskItemData, error: taskItemError } = await supabase
+    .from('items')
+    .insert([{
+      title: firstStep.title.trim(),
+      user_id: user?.id,
+      item_type: 'task',
+      created_at: now,
+      updated_at: now,
+      is_archived: false
+    }])
+    .select()
+    .single();
+
+  if (taskItemError) throw taskItemError;
+
+  const { error: taskError } = await supabase
+    .from('tasks')
+    .insert([{
+      id: taskItemData.id,
+      status: 'on_deck',
+      description: firstStep.description.trim() || null,
+      converted_project_id: projectId,
+      priority: 'normal',
+      due_date: tomorrow.toISOString(),
+      assigned_date: now
+    }]);
+
+  if (taskError) throw taskError;
+
+  // Update first step to mark as converted
+  const { error: updateStepError } = await supabase
+    .from('project_steps')
+    .update({
+      is_converted: true,
+      converted_task_id: taskItemData.id
+    })
+    .eq('project_id', projectId)
+    .eq('order_number', 0);
+
+  if (updateStepError) throw updateStepError;
+};
+
+// Render
+return (
+  <Dialog 
+    open={open} 
+    onOpenChange={(newOpen) => {
+      setOpen(newOpen);
+      if (!newOpen) {
+        resetForm();
+        if (onClose) onClose();
+      }
+    }}
+  >
+    <DialogTrigger asChild>
+      {!isEditing ? (
+        <Button className="bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+          <Plus className="w-4 h-4 mr-2" />
+          New Project
+        </Button>
+      ) : null}
+    </DialogTrigger>
+    <DialogContent className="sm:max-w-[700px]">
+      <DialogHeader>
+        <DialogTitle>{isEditing ? 'Edit Project' : 'Create New Project'}</DialogTitle>
+        <DialogDescription>
+          {isEditing ? 'Update project details and steps.' : 'Create a new project with sequential steps.'}
+        </DialogDescription>
+      </DialogHeader>
+      <form onSubmit={handleSubmit}>
+        <div className="space-y-4">
           {error && (
             <div className="text-red-500 text-sm">{error}</div>
           )}
@@ -525,32 +560,30 @@ export function ProjectEntryForm({
             <div className="space-y-2">
               <Label htmlFor="priority">Priority</Label>
               <Select 
-                 value={priority ?? 'normal'} 
-                     onValueChange={(value: string) => {
-                  if (value === 'low' || value === 'normal' || value === 'high') {
-                       setPriority(value as Priority);
-                     }
-             }}
+  value={priority || 'normal'} // Convert null to a string value
+  onValueChange={(value: string) => {
+    if (value === 'low' || value === 'normal' || value === 'high') {
+      setPriority(value);
+    }
+  }}
 >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select priority" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="low">Low</SelectItem>
-                  <SelectItem value="normal">Normal</SelectItem>
-                  <SelectItem value="high">High</SelectItem>
-                </SelectContent>
-              </Select>
+  <SelectTrigger>
+    <SelectValue placeholder="Select priority" />
+  </SelectTrigger>
+  <SelectContent>
+    <SelectItem value="low">Low</SelectItem>
+    <SelectItem value="normal">Normal</SelectItem>
+    <SelectItem value="high">High</SelectItem>
+  </SelectContent>
+</Select>
             </div>
 
             <div className="space-y-2">
               <Label htmlFor="status">Status</Label>
               <Select 
-                value={status} 
-                onValueChange={(value: string) => {
-                  if (value === 'active' || value === 'on_hold' || value === 'completed') {
-                    setStatus(value as ProjectStatus);
-                  }
+                value={status}
+                onValueChange={(val: string) => {
+                  setStatus(val as ProjectStatus);
                 }}
               >
                 <SelectTrigger>
@@ -576,8 +609,8 @@ export function ProjectEntryForm({
             />
           </div>
 
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
+          <div className="space-y-2">
+            <div className="flex items-center justify-between mb-2">
               <h3 className="text-sm font-medium">Project Steps</h3>
               <Button
                 type="button"
@@ -590,93 +623,93 @@ export function ProjectEntryForm({
               </Button>
             </div>
 
-            {steps.map((step, index) => (
-              <div
-                key={step.id}
-                className="border rounded-lg p-4 space-y-4"
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <GripVertical className="w-5 h-5 text-gray-400 cursor-move" />
-                    <h4 className="text-sm font-medium">Step {index + 1}</h4>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {index > 0 && (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleMoveStep(index, 'up')}
-                      >
-                        <ArrowUp className="w-4 h-4" />
-                      </Button>
-                    )}
-                    {index < steps.length - 1 && (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleMoveStep(index, 'down')}
-                      >
-                        <ArrowDown className="w-4 h-4" />
-                      </Button>
-                    )}
-                    {steps.length > 1 && (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleRemoveStep(index)}
-                      >
-                        <Trash2 className="w-4 h-4 text-red-500" />
-                      </Button>
-                    )}
-                  </div>
-                </div>
+            <div className="max-h-64 overflow-y-auto border rounded-lg divide-y">
+              {steps.map((step, index) => (
+                <div
+                  key={step.id}
+                  className="p-3 bg-white"
+                >
+                  <div className="flex items-start gap-3">
+                    <div className="flex items-center gap-2 mt-1">
+                      <GripVertical className="w-4 h-4 text-gray-400 cursor-move" />
+                      <span className="text-sm text-gray-500">#{index + 1}</span>
+                    </div>
+                    
+                    <div className="flex-1 space-y-2">
+                      <Input
+                        value={step.title}
+                        onChange={(e) => handleStepChange(index, 'title', e.target.value)}
+                        placeholder="Step title"
+                        className="text-sm"
+                        required
+                      />
+                      <Textarea
+                        value={step.description}
+                        onChange={(e) => handleStepChange(index, 'description', e.target.value)}
+                        placeholder="Step description"
+                        className="text-sm h-16 min-h-[4rem]"
+                      />
+                    </div>
 
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label>Step Title</Label>
-                    <Input
-                      value={step.title}
-                      onChange={(e) => handleStepChange(index, 'title', e.target.value)}
-                      placeholder="Enter step title"
-                      required
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label>Description</Label>
-                    <Textarea
-                      value={step.description}
-                      onChange={(e) => handleStepChange(index, 'description', e.target.value)}
-                      placeholder="Describe what needs to be done"
-                      className="h-20"
-                    />
+                    <div className="flex flex-col gap-1">
+                      {index > 0 && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6"
+                          onClick={() => handleMoveStep(index, 'up')}
+                        >
+                          <ArrowUp className="h-4 w-4" />
+                        </Button>
+                      )}
+                      {index < steps.length - 1 && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6"
+                          onClick={() => handleMoveStep(index, 'down')}
+                        >
+                          <ArrowDown className="h-4 w-4" />
+                        </Button>
+                      )}
+                      {steps.length > 1 && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6 text-red-500 hover:text-red-600"
+                          onClick={() => handleRemoveStep(index)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </div>
                   </div>
 
                   {index < steps.length - 1 && (
-                    <div className="flex justify-center">
+                    <div className="flex justify-center mt-2">
                       <Button
                         type="button"
                         variant="ghost"
                         size="sm"
                         onClick={() => handleAddStep(index)}
-                        className="text-blue-600 hover:text-blue-700"
+                        className="text-blue-600 hover:text-blue-700 text-xs py-1 h-auto"
                       >
-                        <Plus className="w-4 h-4 mr-2" />
+                        <Plus className="w-3 h-3 mr-1" />
                         Add step here
                       </Button>
                     </div>
                   )}
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
 
           <Button 
             type="submit" 
-            className="w-full bg-blue-600 hover:bg-blue-700"
+            className="w-full bg-blue-600 hover:bg-blue-700 mt-6"
             disabled={isSubmitting}
           >
             {isSubmitting 
@@ -684,8 +717,11 @@ export function ProjectEntryForm({
               : (isEditing ? "Save Changes" : "Create Project")
             }
           </Button>
-        </form>
-      </DialogContent>
-    </Dialog>
-  );
-}
+        </div>
+      </form>
+    </DialogContent>
+  </Dialog>
+);
+};
+
+export default ProjectEntryForm;
