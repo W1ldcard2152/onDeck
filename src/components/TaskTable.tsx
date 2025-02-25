@@ -25,6 +25,9 @@ import type { Database } from '@/types/database.types';
 import type { TaskWithDetails } from '@/lib/types';
 import type { Priority, TaskStatus } from '@/types/database.types';
 import ScrollableTableWrapper from './layouts/responsiveNav/ScrollableTableWrapper';
+import { ProjectTaskManager } from '@/lib/projectTaskManager';
+import { AlertCircle } from 'lucide-react';
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 // Define types
 type SortDirection = 'asc' | 'desc' | null;
@@ -68,22 +71,80 @@ const TaskTableBase: React.FC<TaskTableBaseProps> = ({
     setError(null);
     
     try {
-      // First delete from tasks table
+      // Get the task to check if it's project-related
+      const { data: taskData, error: fetchError } = await supabase
+        .from('tasks')
+        .select('*')
+        .eq('id', taskId)
+        .single();
+        
+      if (fetchError) throw fetchError;
+      
+      // If task is part of a project, check if it should be allowed to be deleted
+      if (taskData?.project_id) {
+        const projectTaskManager = new ProjectTaskManager({ 
+          supabase, 
+          userId: user ? user.id : null
+        });
+        
+        // Get project steps to check if this is a critical task
+        const { data: steps } = await supabase
+          .from('project_steps')
+          .select('*')
+          .eq('project_id', taskData.project_id)
+          .order('order_number', { ascending: true });
+          
+        const thisStep = steps?.find(step => step.converted_task_id === taskId);
+        
+        if (thisStep) {
+          // Check if this task is for a completed step with incomplete steps before it
+          const stepIndex = steps?.findIndex(step => step.id === thisStep.id) || 0;
+          const hasIncompletePriorSteps = steps?.slice(0, stepIndex).some(step => step.status !== 'completed');
+          
+          if (hasIncompletePriorSteps) {
+            if (!window.confirm(
+              "This task is part of a project with incomplete prior steps. " +
+              "Deleting it may cause inconsistencies in your project workflow. Continue?"
+            )) {
+              setLoading(prev => ({ ...prev, [taskId]: false }));
+              return;
+            }
+          }
+          
+          // Check if there are later converted steps dependent on this one
+          const hasConvertedLaterSteps = steps?.slice(stepIndex + 1).some(step => step.is_converted);
+          
+          if (hasConvertedLaterSteps && thisStep.status !== 'completed') {
+            if (!window.confirm(
+              "This task is part of a project workflow with follow-up tasks already created. " +
+              "Deleting it will disrupt the workflow. Continue?"
+            )) {
+              setLoading(prev => ({ ...prev, [taskId]: false }));
+              return;
+            }
+          }
+        }
+        
+        // Notify the ProjectTaskManager about the task deletion
+        await projectTaskManager.handleTaskDeletion(taskId);
+      }
+      
+      // Delete the task
       const { error: taskError } = await supabase
         .from('tasks')
         .delete()
         .eq('id', taskId);
-
+  
       if (taskError) throw taskError;
-
-      // Then delete from items table
+  
+      // Delete the item
       const { error: itemError } = await supabase
         .from('items')
         .delete()
         .eq('id', taskId);
-
+  
       if (itemError) throw itemError;
-
+  
       onTaskUpdate();
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Error deleting task';
@@ -99,31 +160,71 @@ const TaskTableBase: React.FC<TaskTableBaseProps> = ({
     setError(null);
     
     try {
-      // Add debugging
-      console.log(`Updating task ${taskId} to status: ${newStatus}`);
+      // Get the current task data first
+      const { data: currentTask, error: fetchError } = await supabase
+        .from('tasks')
+        .select('*')
+        .eq('id', taskId)
+        .single();
+        
+      if (fetchError) throw fetchError;
       
+      console.log(`Updating task ${taskId} from ${currentTask?.status} to ${newStatus}`);
+      
+      // Check for project-related task logic
+      const isProjectTask = currentTask?.project_id;
+      const isCompletingTask = newStatus === 'completed' && currentTask?.status !== 'completed';
+      const isUncompletingTask = newStatus !== 'completed' && currentTask?.status === 'completed';
+      
+      // Update the task status
       const { data: updatedTask, error: taskError } = await supabase
         .from('tasks')
-        .update({ status: newStatus })
+        .update({ 
+          status: newStatus,
+          updated_at: new Date().toISOString()
+        })
         .eq('id', taskId)
-        .select();
+        .select()
+        .single();
   
-      if (taskError) throw taskError;
-      
-      console.log('Updated task:', updatedTask);
+      if (taskError) {
+        console.error('Error updating task status:', taskError);
+        throw taskError;
+      }
   
+      console.log('Task updated successfully:', updatedTask);
+  
+      // Update item timestamps
       const { error: itemError } = await supabase
         .from('items')
         .update({ updated_at: new Date().toISOString() })
         .eq('id', taskId);
   
       if (itemError) throw itemError;
+      
+      // Handle project-related task logic with ProjectTaskManager
+      if (isProjectTask) {
+        const projectTaskManager = new ProjectTaskManager({ 
+          supabase, 
+          userId: user ? user.id : null 
+        });
+        
+        if (isCompletingTask) {
+          // When marking a task as completed
+          await projectTaskManager.handleTaskCompletion(taskId, currentTask.project_id);
+          console.log('Project task marked complete and next step processed');
+        } else if (isUncompletingTask) {
+          // When unmarking a completed task
+          await projectTaskManager.handleTaskUncomplete(taskId);
+          console.log('Project task uncompleted and step reset');
+        }
+      }
   
-      onTaskUpdate(); // Make sure this function is correctly refreshing the data
+      onTaskUpdate();
     } catch (err) {
+      console.error('Error in updateTaskStatus:', err);
       const message = err instanceof Error ? err.message : 'Error updating task status';
       setError(message);
-      console.error('Error updating task status:', err);
     } finally {
       setLoading(prev => ({ ...prev, [taskId]: false }));
     }
@@ -384,164 +485,209 @@ const TaskTableBase: React.FC<TaskTableBaseProps> = ({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {tasks.map((task) => {
-                const isLoading = loading[task.id];
-                const status = task.status || 'on_deck';
-                const priority = task.priority || 'normal';
-                
-                return (
-                  <TableRow key={task.id}>
-                    <TableCell>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button 
-                            variant="ghost" 
-                            className="p-0 h-auto hover:bg-transparent"
-                            disabled={isLoading}
-                          >
-                            <Badge 
-                              className={`${getStatusColor(status)} border-0 cursor-pointer hover:opacity-80`}
-                            >
-                              {isLoading ? 'Updating...' : status}
-                            </Badge>
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent>
-                          {tableType === 'active' ? (
-                            <>
-                              <DropdownMenuItem
-                                onClick={() => updateTaskStatus(task.id, status === 'on_deck' ? 'active' : 'on_deck')}
-                                disabled={isLoading}
-                              >
-                                Mark completed
-                              </DropdownMenuItem>
-                            </>
-                          ) : (
-                            <>
-                              <DropdownMenuItem
-                                onClick={() => updateTaskStatus(task.id, 'active')}
-                                disabled={isLoading}
-                              >
-                                Mark active
-                              </DropdownMenuItem>
-                              <DropdownMenuItem
-                                onClick={() => updateTaskStatus(task.id, 'on_deck')}
-                                disabled={isLoading}
-                              >
-                                Mark on deck
-                              </DropdownMenuItem>
-                            </>
-                          )}
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </TableCell>
-                    <TableCell>
-                      {task.item.title}
-                    </TableCell>
-                    <TableCell>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button 
-                            variant="ghost" 
-                            className="p-0 h-auto hover:bg-transparent"
-                            disabled={isLoading}
-                          >
-                            <Badge 
-                              className={`${getPriorityColor(priority)} border-0 cursor-pointer hover:opacity-80`}
-                            >
-                              {isLoading ? 'Updating...' : priority}
-                            </Badge>
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent>
-                          <DropdownMenuItem
-                            onClick={() => updateTaskPriority(task.id, 'low')}
-                            className={priority === 'low' ? 'bg-gray-50' : ''}
-                            disabled={isLoading}
-                          >
-                            Low
-                            {priority === 'low' && <Check className="ml-2 h-4 w-4" />}
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() => updateTaskPriority(task.id, 'normal')}
-                            className={priority === 'normal' ? 'bg-blue-50' : ''}
-                            disabled={isLoading}
-                          >
-                            Normal
-                            {priority === 'normal' && <Check className="ml-2 h-4 w-4" />}
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() => updateTaskPriority(task.id, 'high')}
-                            className={priority === 'high' ? 'bg-red-50' : ''}
-                            disabled={isLoading}
-                          >
-                            High
-                            {priority === 'high' && <Check className="ml-2 h-4 w-4" />}
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </TableCell>
-                    <TableCell>
-                      {task.assigned_date ? format(new Date(task.assigned_date), 'MMM d, yyyy') : '-'}
-                    </TableCell>
-                    <TableCell className="max-w-[12rem] truncate">
-                      <TruncatedCell content={task.description} maxLength={60} />
-                    </TableCell>
-                    <TableCell>
-                      {task.due_date ? format(new Date(task.due_date), 'MMM d, yyyy') : '-'}
-                    </TableCell>
-                    <TableCell>
-                      {task.converted_project_id && (
-                        <div className="flex items-center text-blue-600">
-                          <Link className="h-4 w-4 mr-1" />
-                          Project {task.converted_project_id.slice(0, 8)}
-                        </div>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button 
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8"
-                            disabled={isLoading}
-                          >
-                            <MoreHorizontal className="h-4 w-4" />
-                            <span className="sr-only">Open menu</span>
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem
-                            onClick={() => setTaskToEdit(task)}
-                            disabled={isLoading}
-                          >
-                            Edit Task
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() => updateTaskStatus(task.id, tableType === 'active' ?
-                              'completed' : 'active')}
-                            disabled={isLoading}
-                          >
-                            {tableType === 'active' ? 'Mark Completed' : 'Mark Active'}
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() => {
-                              if (window.confirm('Are you sure you want to delete this task? This action cannot be undone.')) {
-                                deleteTask(task.id);
-                              }
-                            }}
-                            disabled={isLoading}
-                            className="text-red-600 hover:text-red-700"
-                          >
-                            Delete Task
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
+            {tasks.map((task) => {
+  const isLoading = loading[task.id];
+  const status = task.status || 'on_deck';
+  const priority = task.priority || 'normal';
+  const isProjectTask = Boolean(task.project_id);
+  
+  return (
+    <TableRow 
+      key={task.id}
+      className={isProjectTask ? "bg-blue-50/30" : ""}
+    >
+      <TableCell>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button 
+              variant="ghost" 
+              className="p-0 h-auto hover:bg-transparent"
+              disabled={isLoading}
+            >
+              <Badge 
+                className={`${getStatusColor(status)} border-0 cursor-pointer hover:opacity-80`}
+              >
+                {isLoading ? 'Updating...' : status}
+              </Badge>
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent>
+            {status !== 'completed' && (
+              <DropdownMenuItem
+                onClick={() => updateTaskStatus(task.id, 'completed')}
+                disabled={isLoading}
+              >
+                Mark completed
+              </DropdownMenuItem>
+            )}
+            {status !== 'active' && (
+              <DropdownMenuItem
+                onClick={() => updateTaskStatus(task.id, 'active')}
+                disabled={isLoading}
+              >
+                Mark active
+              </DropdownMenuItem>
+            )}
+            {status !== 'on_deck' && (
+              <DropdownMenuItem
+                onClick={() => updateTaskStatus(task.id, 'on_deck')}
+                disabled={isLoading}
+              >
+                Mark on deck
+              </DropdownMenuItem>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </TableCell>
+      
+      <TableCell>
+        {task.item.title}
+        {isProjectTask && (
+          <div className="flex items-center mt-1">
+            <span className="inline-flex items-center bg-blue-100 text-blue-800 text-xs px-2 py-0.5 rounded-full">
+              <Link className="h-3 w-3 mr-1" />
+              Project Task
+            </span>
+          </div>
+        )}
+      </TableCell>
+      
+      <TableCell>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button 
+              variant="ghost" 
+              className="p-0 h-auto hover:bg-transparent"
+              disabled={isLoading}
+            >
+              <Badge 
+                className={`${getPriorityColor(priority)} border-0 cursor-pointer hover:opacity-80`}
+              >
+                {isLoading ? 'Updating...' : priority}
+              </Badge>
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent>
+            <DropdownMenuItem
+              onClick={() => updateTaskPriority(task.id, 'low')}
+              className={priority === 'low' ? 'bg-gray-50' : ''}
+              disabled={isLoading}
+            >
+              Low
+              {priority === 'low' && <Check className="ml-2 h-4 w-4" />}
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={() => updateTaskPriority(task.id, 'normal')}
+              className={priority === 'normal' ? 'bg-blue-50' : ''}
+              disabled={isLoading}
+            >
+              Normal
+              {priority === 'normal' && <Check className="ml-2 h-4 w-4" />}
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={() => updateTaskPriority(task.id, 'high')}
+              className={priority === 'high' ? 'bg-red-50' : ''}
+              disabled={isLoading}
+            >
+              High
+              {priority === 'high' && <Check className="ml-2 h-4 w-4" />}
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </TableCell>
+      
+      <TableCell>
+        {task.assigned_date ? format(new Date(task.assigned_date), 'MMM d, yyyy') : '-'}
+      </TableCell>
+      
+      <TableCell className="max-w-[12rem] truncate">
+        <TruncatedCell content={task.description} maxLength={60} />
+      </TableCell>
+      
+      <TableCell>
+        {task.due_date ? format(new Date(task.due_date), 'MMM d, yyyy') : '-'}
+      </TableCell>
+      
+      <TableCell>
+        {isProjectTask && (
+          <div className="flex items-center text-blue-600">
+            <Button 
+              variant="link" 
+              size="sm" 
+              className="p-0 h-auto text-xs flex items-center text-blue-600"
+              onClick={() => {
+                // If needed, you can add project navigation here
+                // router.push(`/projects/${task.project_id}`);
+              }}
+            >
+              <Link className="h-3 w-3 mr-1" />
+              View project
+            </Button>
+          </div>
+        )}
+      </TableCell>
+      
+      <TableCell className="text-right">
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button 
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              disabled={isLoading}
+            >
+              <MoreHorizontal className="h-4 w-4" />
+              <span className="sr-only">Open menu</span>
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem
+              onClick={() => setTaskToEdit(task)}
+              disabled={isLoading}
+            >
+              Edit Task
+            </DropdownMenuItem>
+            
+            {/* Show different options based on current status */}
+            {status !== 'completed' && (
+              <DropdownMenuItem
+                onClick={() => updateTaskStatus(task.id, 'completed')}
+                disabled={isLoading}
+              >
+                Mark Completed
+              </DropdownMenuItem>
+            )}
+            {status === 'completed' && (
+              <DropdownMenuItem
+                onClick={() => updateTaskStatus(task.id, 'active')}
+                disabled={isLoading}
+              >
+                Mark Active
+              </DropdownMenuItem>
+            )}
+            
+            {/* Add warning for project tasks */}
+            <DropdownMenuItem
+              onClick={() => {
+                const confirmMessage = isProjectTask 
+                  ? 'This task is part of a project workflow. Deleting it will affect the project. Are you sure?'
+                  : 'Are you sure you want to delete this task? This action cannot be undone.';
+                  
+                if (window.confirm(confirmMessage)) {
+                  deleteTask(task.id);
+                }
+              }}
+              disabled={isLoading}
+              className="text-red-600 hover:text-red-700"
+            >
+              Delete Task
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </TableCell>
+    </TableRow>
+  );
+})}
             </TableBody>
           </Table>
         </ScrollableTableWrapper>
