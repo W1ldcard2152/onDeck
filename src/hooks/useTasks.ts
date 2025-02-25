@@ -9,7 +9,9 @@ export function useTasks(userId: string | undefined, limit: number = 10) {
   const [tasks, setTasks] = useState<TaskWithDetails[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<Error | null>(null)
-
+  tasks.forEach(task => {
+    console.log(`Task ${task.id} has status "${task.status}" of type ${typeof task.status}`);
+  });
   async function fetchTasks() {
     try {
       if (!userId) {
@@ -39,7 +41,7 @@ export function useTasks(userId: string | undefined, limit: number = 10) {
         .from('tasks')
         .select('*')
         .order('due_date', { ascending: true })
-        .limit(limit)
+      
   
       console.log('Task query response:', { 
         count: taskData?.length, 
@@ -80,12 +82,11 @@ export function useTasks(userId: string | undefined, limit: number = 10) {
           console.warn(`No matching item found for task ${task.id}`)
           return null
         }
-      
         return {
           id: task.id,
           assigned_date: task.assigned_date,
           due_date: task.due_date,
-          status: task.status,
+          status: (task.status || '').toLowerCase().trim(), // Normalize status
           description: task.description,
           is_project_converted: task.is_project_converted,
           converted_project_id: task.converted_project_id,
