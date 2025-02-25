@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { format } from 'date-fns';
 import { CheckCircle2, Circle, Clock, MoreHorizontal, ChevronDown, ChevronUp } from 'lucide-react';
 import ProjectWorkflow from '@/components/ProjectWorkflow';
+import OtherProjectsCard from '@/components/OtherProjectsCard';
 import { useProjects } from '@/hooks/useProjects';
 import { useSupabaseAuth } from '@/hooks/useSupabaseAuth';
 import { Button } from "@/components/ui/button";
@@ -263,7 +264,10 @@ const ProjectsPage = () => {
   const { user } = useSupabaseAuth();
   const { projects, isLoading, refetch } = useProjects(user?.id);
 
+  // Filter projects by status
   const activeProjects = projects.filter(p => p.status === 'active');
+  const onHoldProjects = projects.filter(p => p.status === 'on_hold');
+  const completedProjects = projects.filter(p => p.status === 'completed');
   
   const upcomingSteps: ProjectStep[] = projects
     .flatMap(p => p.steps || [])
@@ -345,6 +349,13 @@ const ProjectsPage = () => {
           {renderUpcomingSteps()}
         </div>
       )}
+
+      {/* Always show the Other Projects card, even if empty */}
+      <OtherProjectsCard
+        onHoldProjects={onHoldProjects}
+        completedProjects={completedProjects}
+        onProjectUpdate={refetch}
+      />
     </div>
   );
 };

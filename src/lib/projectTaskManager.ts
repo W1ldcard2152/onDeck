@@ -278,6 +278,20 @@ export class ProjectTaskManager {
    */
   async syncProjectSteps(projectId: string): Promise<void> {
     try {
+      // First check if the project is on hold - if so, don't sync
+        const { data: project, error: projectError } = await this.supabase
+        .from('projects')
+        .select('status')
+        .eq('id', projectId)
+        .single();
+        
+      if (projectError) throw projectError;
+          // If project is on hold, don't create any new tasks
+      if (project?.status === 'on_hold') {
+      console.log(`Project ${projectId} is on hold, skipping task sync`);
+      return;
+        }
+
       // Get all project steps
       const { data: steps, error: stepsError } = await this.supabase
         .from('project_steps')
@@ -382,9 +396,21 @@ export class ProjectTaskManager {
         .select('project_id')
         .eq('id', taskId)
         .single();
-
+  
       if (taskError || !task?.project_id) return;
-
+  
+      // Check project status first
+      const { data: project, error: projectError } = await this.supabase
+        .from('projects')
+        .select('status')
+        .eq('id', task.project_id)
+        .single();
+        
+      if (projectError) throw projectError;
+      
+      // If project is on hold, just update the step status but don't create a new task
+      const isProjectOnHold = project?.status === 'on_hold';
+  
       // Update the corresponding step
       const { data: step, error: stepError } = await this.supabase
         .from('project_steps')
@@ -397,11 +423,13 @@ export class ProjectTaskManager {
         .eq('converted_task_id', taskId)
         .select()
         .single();
-
+  
       if (stepError) throw stepError;
-
-      // Sync project steps to create a new task if needed
-      await this.syncProjectSteps(task.project_id);
+  
+      // Sync project steps to create a new task if needed, but only if project is not on hold
+      if (!isProjectOnHold && step?.project_id) {
+        await this.syncProjectSteps(task.project_id);
+      }
     } catch (error) {
       console.error('Error handling task deletion:', error);
       throw error;
