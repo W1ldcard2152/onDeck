@@ -1,48 +1,81 @@
-import React from 'react';
-import { TaskTable } from '@/components/TaskTable';
-import { NewEntryForm } from '@/components/NewEntryForm';
-import { useSupabaseAuth } from '@/hooks/useSupabaseAuth';
+'use client'
+
+import React, { useState, useEffect, useCallback } from 'react';
 import { useTasks } from '@/hooks/useTasks';
+import { useSupabaseAuth } from '@/hooks/useSupabaseAuth';
+import TaskTable from '@/components/TaskTable';
+import { NewEntryForm } from '@/components/NewEntryForm';
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { AlertCircle } from 'lucide-react';
+import TasksDebugger from '@/components/TasksDebugger';
 
 export default function TasksPage() {
   const { user } = useSupabaseAuth();
-  const { tasks, isLoading, error, refetch } = useTasks(user?.id || '');
+  const { tasks, isLoading, error, refetch } = useTasks(user?.id);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [hasInitialized, setHasInitialized] = useState(false);
+
+  // Prevent the handleTaskUpdate function from being recreated on every render
+  const handleTaskUpdate = useCallback(() => {
+    console.log('Task updated, refreshing data...');
+    refetch();
+    setRefreshKey(prevKey => prevKey + 1);
+  }, [refetch]);
+
+  // Only run the initial refresh once
+  useEffect(() => {
+    if (!hasInitialized && !isLoading) {
+      console.log('Running one-time initialization');
+      setHasInitialized(true);
+    }
+  }, [hasInitialized, isLoading]);
+
+  if (isLoading) {
+    return (
+      <div className="py-6">
+        <div className="bg-white rounded-lg shadow p-6">
+          <div className="flex justify-center items-center h-32">
+            <div className="text-lg text-gray-500">Loading tasks...</div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="py-6">
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>
+            Error loading tasks: {error.message}
+          </AlertDescription>
+        </Alert>
+      </div>
+    );
+  }
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-semibold">Task Manager</h1>
-        <NewEntryForm onEntryCreated={() => refetch()} />
+    <div className="space-y-6 py-6">
+      <div className="flex justify-between items-center">
+        <h1 className="text-2xl font-bold">Tasks</h1>
+        <NewEntryForm onEntryCreated={handleTaskUpdate} />
       </div>
 
-      <div className="bg-white rounded-xl shadow-sm">
-        {isLoading ? (
-          <div className="p-6">
-            <div className="animate-pulse space-y-4">
-              <div className="h-8 bg-gray-200 rounded w-full"></div>
-              <div className="h-8 bg-gray-200 rounded w-full"></div>
-              <div className="h-8 bg-gray-200 rounded w-full"></div>
-            </div>
-          </div>
-        ) : error ? (
-          <div className="p-6">
-            <div className="text-red-600">
-              {error instanceof Error ? error.message : 'Error loading tasks'}
-            </div>
-          </div>
-        ) : !tasks || tasks.length === 0 ? (
-          <div className="p-6">
-            <div className="text-gray-500 text-center py-8">
-              No tasks yet. Create your first task to get started!
-            </div>
-          </div>
-        ) : (
-          <TaskTable 
-            tasks={tasks} 
-            onTaskUpdate={refetch}
-          />
-        )}
+      {/* Add key to force re-render on data changes */}
+      <TaskTable 
+        tasks={tasks} 
+        onTaskUpdate={handleTaskUpdate} 
+        key={`tasks-table-${refreshKey}`} 
+      />
+      
+      {/* Debug information */}
+      <div className="text-xs text-gray-400 mt-8">
+        Tasks with project links: {tasks.filter(t => t.project_id).length} / {tasks.length}
       </div>
+      
+      {/* Add TasksDebugger but only manually trigger refreshes */}
+      <TasksDebugger tasks={tasks} />
     </div>
   );
 }

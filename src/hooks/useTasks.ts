@@ -1,121 +1,144 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import type { TaskWithDetails } from '@/lib/types'
 import type { Database } from '@/types/database.types'
 
-export function useTasks(userId: string | undefined, limit: number = 10) {
+export function useTasks(userId: string | undefined, limit: number = 50) {
   const [tasks, setTasks] = useState<TaskWithDetails[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<Error | null>(null)
-  tasks.forEach(task => {
-    console.log(`Task ${task.id} has status "${task.status}" of type ${typeof task.status}`);
-  });
-  async function fetchTasks() {
+  
+  // Use a ref to track if we're already fetching to prevent duplicate requests
+  const isFetchingRef = useRef(false);
+  // Use a ref to store last user ID to prevent duplicate fetches for the same user
+  const lastUserIdRef = useRef<string | undefined>(undefined);
+
+  const fetchTasks = useCallback(async () => {
+    // Prevent duplicate fetches
+    if (isFetchingRef.current) {
+      console.log('Already fetching tasks, request ignored');
+      return;
+    }
+    
+    // If user hasn't changed, don't fetch again
+    if (lastUserIdRef.current === userId && tasks.length > 0) {
+      console.log('User has not changed and we already have tasks, skipping fetch');
+      return;
+    }
+    
     try {
       if (!userId) {
         setTasks([]);
         setIsLoading(false);
         return;
       }
-  
-      console.log('Fetching tasks for user:', userId)
-      setIsLoading(true)
       
-      const supabase = createClientComponentClient<Database>()
+      // Set fetching flag to true
+      isFetchingRef.current = true;
+      lastUserIdRef.current = userId;
   
-      // First debug the raw task data from the database
-      const { data: taskDataRaw, error: taskErrorRaw } = await supabase
-        .from('tasks')
-        .select('*');
+      console.log('Fetching tasks for user:', userId);
+      setIsLoading(true);
       
-      console.log('ALL tasks in database:', taskDataRaw?.length);
-      console.log('Sample tasks statuses:', taskDataRaw?.slice(0, 5).map(t => ({ 
-        id: t.id, 
-        status: t.status 
-      })));
+      const supabase = createClientComponentClient<Database>();
   
-      // Then get all tasks including completed ones
+      // Get all tasks including completed ones and project linked tasks
       const { data: taskData, error: taskError } = await supabase
         .from('tasks')
         .select('*')
-        .order('due_date', { ascending: true })
+        .order('due_date', { ascending: true });
       
-  
-      console.log('Task query response:', { 
-        count: taskData?.length, 
-        statuses: taskData?.map(t => t.status) 
-      });
-  
-      if (taskError) throw taskError
+      if (taskError) throw taskError;
       if (!taskData || taskData.length === 0) {
-        console.log('No tasks found')
-        setTasks([])
-        return
+        console.log('No tasks found');
+        setTasks([]);
+        setIsLoading(false);
+        return;
       }
+      
+      // Count project-linked tasks
+      const projectTasksCount = taskData.filter(t => t.project_id).length;
+      console.log('Task query response:', { 
+        count: taskData.length, 
+        projectTasks: projectTasksCount 
+      });
   
       const { data: itemsData, error: itemsError } = await supabase
-      .from('items')
-      .select('*')
-      .eq('user_id', userId)
-      .eq('item_type', 'task')
-      .eq('is_archived', false) // Only non-archived items
-      .in('id', taskData.map(task => task.id))
+        .from('items')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('item_type', 'task')
+        .eq('is_archived', false)
+        .in('id', taskData.map(task => task.id));
   
-      console.log('Items query response:', { 
-        count: itemsData?.length,
-        ids: itemsData?.map(item => item.id)
-      });
-  
-      if (itemsError) throw itemsError
+      if (itemsError) throw itemsError;
       if (!itemsData || itemsData.length === 0) {
-        console.log('No matching items found')
-        setTasks([])
-        return
+        console.log('No matching items found');
+        setTasks([]);
+        setIsLoading(false);
+        return;
       }
   
-      // Combine items and tasks
-      const combinedTasks = taskData.map(task => {
-        const item = itemsData.find(item => item.id === task.id)
-        if (!item) {
-          console.warn(`No matching item found for task ${task.id}`)
-          return null
-        }
-        return {
-          id: task.id,
-          assigned_date: task.assigned_date,
-          due_date: task.due_date,
-          status: (task.status || '').toLowerCase().trim(), // Normalize status
-          description: task.description,
-          is_project_converted: task.is_project_converted,
-          converted_project_id: task.converted_project_id,
-          priority: task.priority,
-          item: item
-        }
-      }).filter((task): task is TaskWithDetails => task !== null)
+      // Log the items query response
+      console.log('Items query response:', { count: itemsData.length });
   
-      console.log('Combined tasks with status breakdown:', {
+      // Combine items and tasks
+      const combinedTasks = taskData
+        .map(task => {
+          const item = itemsData.find(item => item.id === task.id);
+          if (!item) return null;
+          
+          return {
+            id: task.id,
+            assigned_date: task.assigned_date,
+            due_date: task.due_date,
+            status: task.status || 'on_deck',
+            description: task.description,
+            is_project_converted: task.is_project_converted || false,
+            converted_project_id: task.converted_project_id,
+            priority: task.priority || 'normal',
+            project_id: task.project_id,
+            item: item
+          };
+        })
+        .filter((task): task is TaskWithDetails => task !== null);
+  
+      // Get unique project IDs
+      const projectIds = [...new Set(
+        combinedTasks
+          .filter(t => t.project_id)
+          .map(t => t.project_id)
+      )].filter(Boolean);
+      
+      console.log('Combined tasks with project breakdown:', {
         total: combinedTasks.length,
-        active: combinedTasks.filter(t => t.status === 'active').length,
-        onDeck: combinedTasks.filter(t => t.status === 'on_deck').length,
-        completed: combinedTasks.filter(t => t.status === 'completed').length,
-        nullStatus: combinedTasks.filter(t => t.status === null).length,
+        withProjects: combinedTasks.filter(t => t.project_id).length,
+        projectIds
       });
   
-      setTasks(combinedTasks)
+      setTasks(combinedTasks);
       
     } catch (e) {
-      console.error('Error in fetchTasks:', e)
-      setError(e instanceof Error ? e : new Error('An error occurred while fetching tasks'))
+      console.error('Error in fetchTasks:', e);
+      setError(e instanceof Error ? e : new Error('An error occurred while fetching tasks'));
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
+      // Reset the fetching flag
+      isFetchingRef.current = false;
     }
-  }
+  }, [userId, tasks.length]);
 
+  // Only fetch tasks when userId changes
   useEffect(() => {
-    fetchTasks()
-  }, [userId, limit])
+    fetchTasks();
+  }, [userId, fetchTasks]);
 
-  return { tasks, isLoading, error, refetch: fetchTasks }
+  return { 
+    tasks, 
+    isLoading, 
+    error, 
+    refetch: fetchTasks 
+  };
 }
