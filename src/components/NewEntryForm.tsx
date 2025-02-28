@@ -26,6 +26,50 @@ interface NewEntryFormProps {
 
 type EntryType = 'task' | 'note';
 
+// Custom DatePicker component to avoid hooks issues
+const DatePickerField: React.FC<{
+  label: string;
+  selectedDate: Date | undefined;
+  onDateChange: (date: Date | undefined) => void;
+}> = ({ label, selectedDate, onDateChange }) => {
+  const [open, setOpen] = useState(false);
+  
+  const handleSelect = (date: Date | undefined) => {
+    onDateChange(date);
+    setOpen(false);
+  };
+  
+  return (
+    <div className="space-y-2">
+      <Label>{label}</Label>
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <Button
+            variant="outline"
+            className={cn(
+              "w-full justify-start text-left font-normal",
+              !selectedDate && "text-muted-foreground"
+            )}
+          >
+            <CalendarIcon className="mr-2 h-4 w-4" />
+            {selectedDate ? format(selectedDate, "PPP") : `Pick ${label.toLowerCase()}`}
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-auto p-0">
+          <div className="border rounded-md bg-white p-3">
+            <DayPicker
+              mode="single"
+              selected={selectedDate}
+              onSelect={handleSelect}
+              showOutsideDays={true}
+            />
+          </div>
+        </PopoverContent>
+      </Popover>
+    </div>
+  );
+};
+
 export const NewEntryForm: React.FC<NewEntryFormProps> = ({ 
   onEntryCreated, 
   initialData,
@@ -35,13 +79,13 @@ export const NewEntryForm: React.FC<NewEntryFormProps> = ({
   const { user } = useSupabaseAuth();
   const supabase = createClientComponentClient();
   const [open, setOpen] = useState(isEditing);
-  const [type, setType] = useState<EntryType>('task');
+  const [type, setType] = useState<EntryType>('note'); // Changed default to 'note'
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [dueDate, setDueDate] = useState<Date>();
   const [assignedDate, setAssignedDate] = useState<Date>();
   const [priority, setPriority] = useState<Priority>('normal');
-  const [status, setStatus] = useState<TaskStatus>('on_deck');
+  const [status, setStatus] = useState<TaskStatus>('active'); // Changed default to 'active'
   const [description, setDescription] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -52,7 +96,7 @@ export const NewEntryForm: React.FC<NewEntryFormProps> = ({
       setTitle(initialData.item.title);
       setDescription(initialData.description || '');
       setPriority(initialData.priority || 'normal');
-      setStatus(initialData.status || 'on_deck');
+      setStatus(initialData.status || 'active');
       if (initialData.due_date) {
         setDueDate(new Date(initialData.due_date));
       }
@@ -68,9 +112,9 @@ export const NewEntryForm: React.FC<NewEntryFormProps> = ({
     setDueDate(undefined);
     setAssignedDate(undefined);
     setPriority('normal');
-    setStatus('on_deck');
+    setStatus('active');
     setDescription('');
-    setType('task');
+    setType('note');
     setError(null);
   };
 
@@ -146,43 +190,21 @@ export const NewEntryForm: React.FC<NewEntryFormProps> = ({
     }
   };
 
-  const renderDatePicker = (selectedDate: Date | undefined, onDateChange: (date: Date | undefined) => void, label: string) => (
-    <div className="space-y-2">
-      <Label>{label}</Label>
-      <Popover>
-        <PopoverTrigger asChild>
-          <Button
-            variant="outline"
-            className={cn(
-              "w-full justify-start text-left font-normal",
-              !selectedDate && "text-muted-foreground"
-            )}
-          >
-            <CalendarIcon className="mr-2 h-4 w-4" />
-            {selectedDate ? format(selectedDate, "PPP") : `Pick ${label.toLowerCase()}`}
-          </Button>
-        </PopoverTrigger>
-        <PopoverContent className="w-auto p-0">
-          <div className="border rounded-md bg-white p-3">
-            <DayPicker
-              mode="single"
-              selected={selectedDate}
-              onSelect={onDateChange}
-              showOutsideDays={true}
-            />
-          </div>
-        </PopoverContent>
-      </Popover>
-    </div>
-  );
-
   const renderTypeSpecificFields = () => {
     switch (type) {
       case 'task':
         return (
           <>
-            {renderDatePicker(assignedDate, setAssignedDate, "Assigned Date")}
-            {renderDatePicker(dueDate, setDueDate, "Due Date")}
+            <DatePickerField
+              label="Assigned Date"
+              selectedDate={assignedDate}
+              onDateChange={setAssignedDate}
+            />
+            <DatePickerField
+              label="Due Date"
+              selectedDate={dueDate}
+              onDateChange={setDueDate}
+            />
             
             <div className="space-y-2">
               <Label htmlFor="status">Status</Label>
