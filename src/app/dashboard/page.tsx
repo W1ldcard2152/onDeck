@@ -1,33 +1,26 @@
+'use client'
+
 import React, { useState } from 'react';
 import { TaskCard } from '@/components/TaskCard';
 import { NoteCard } from '@/components/NoteCard';
 import { DashboardCard } from '@/components/DashboardCard';
 import { NewEntryForm } from '@/components/NewEntryForm';
 import { Button } from '@/components/ui/button';
-import { 
-  Plus, 
-  Calendar, 
-  Clock, 
-  CheckSquare, 
-  FileText, 
-  ArrowRight, 
-  MoreHorizontal,
-  Check 
-} from 'lucide-react';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { Plus, Calendar, Clock, CheckSquare, FileText, ArrowRight, MoreHorizontal } from 'lucide-react';
 import { useTasks } from '@/hooks/useTasks';
 import { useNotes } from '@/hooks/useNotes';
 import { useSupabaseAuth } from '@/hooks/useSupabaseAuth';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import { format, isToday, isPast, isFuture, addDays, isWithinInterval } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import type { TaskWithDetails, NoteWithDetails } from '@/lib/types';
-import type { TaskStatus } from '@/types/database.types';
+import type { TaskStatus, Priority } from '@/types/database.types';
 import type { Database } from '@/types/database.types';
 
 const DashboardPage: React.FC = () => {
@@ -46,7 +39,7 @@ const DashboardPage: React.FC = () => {
   };
   
   // Update task status
-  const updateTaskStatus = async (taskId: string, newStatus: 'on_deck' | 'active' | 'completed'): Promise<void> => {
+  const updateTaskStatus = async (taskId: string, newStatus: TaskStatus): Promise<void> => {
     setLoadingTasks(prev => ({ ...prev, [taskId]: true }));
     
     try {
@@ -78,12 +71,6 @@ const DashboardPage: React.FC = () => {
   
       if (itemError) throw itemError;
       
-      // Handle project-related task logic if needed
-      if (currentTask?.project_id) {
-        // Project task logic would go here if needed
-        // For now, just refresh the data
-      }
-  
       // Refresh the data
       handleUpdate();
     } catch (err) {
@@ -105,112 +92,50 @@ const DashboardPage: React.FC = () => {
     );
   }
 
-  // Filter tasks for Today's Focus
-  const todayTasks = tasks.filter(task => {
-    const dueDate = task.due_date ? new Date(task.due_date) : null;
+  // Get all active tasks sorted by assigned date (soonest first)
+  const activeTasks = tasks
+    .filter(task => task.status === 'active')
+    .sort((a, b) => {
+      // First sort by assigned date
+      const aDate = a.assigned_date ? new Date(a.assigned_date).getTime() : Number.MAX_SAFE_INTEGER;
+      const bDate = b.assigned_date ? new Date(b.assigned_date).getTime() : Number.MAX_SAFE_INTEGER;
+      
+      return aDate - bDate;
+    });
     
-    // Include tasks that are:
-    // 1. Active tasks due today or in the past
-    return (
-      task.status === 'active' && 
-      dueDate && 
-      (isToday(dueDate) || isPast(dueDate))
-    );
-  });
-
-  // Sort by priority (high to low) and then by due date (earliest first)
-  todayTasks.sort((a, b) => {
-    const priorityOrder = { high: 0, normal: 1, low: 2 };
-    const aPriority = a.priority || 'normal';
-    const bPriority = b.priority || 'normal';
-    
-    // First sort by priority
-    if (priorityOrder[aPriority] !== priorityOrder[bPriority]) {
-      return priorityOrder[aPriority] - priorityOrder[bPriority];
-    }
-    
-    // Then sort by due date
-    const aDate = a.due_date ? new Date(a.due_date) : new Date(9999, 11, 31);
-    const bDate = b.due_date ? new Date(b.due_date) : new Date(9999, 11, 31);
-    return aDate.getTime() - bDate.getTime();
-  });
-
-  // Filter tasks for On Deck (next 3 days)
-  const today = new Date();
-  const nextThreeDays = addDays(today, 3);
-  
-  const onDeckTasks = tasks.filter(task => {
-    // Only consider "on_deck" status tasks
-    if (task.status !== 'on_deck') {
-      return false;
-    }
-    
-    // Skip tasks already shown in Today's Focus
-    if (todayTasks.includes(task)) {
-      return false;
-    }
-    
-    const dueDate = task.due_date ? new Date(task.due_date) : null;
-    
-    // Only include tasks that have a due date within the next 3 days
-    return (
-      dueDate && 
-      isFuture(dueDate) && 
-      isWithinInterval(dueDate, { start: today, end: nextThreeDays })
-    );
-  });
-
-  // Group on deck tasks by day
-  const onDeckByDay: Record<string, TaskWithDetails[]> = {};
-  onDeckTasks.forEach(task => {
-    // Use due date if available, otherwise assigned date
-    const taskDate = task.due_date || task.assigned_date;
-    if (!taskDate) return;
-    
-    const date = new Date(taskDate);
-    const dateKey = format(date, 'yyyy-MM-dd');
-    if (!onDeckByDay[dateKey]) {
-      onDeckByDay[dateKey] = [];
-    }
-    onDeckByDay[dateKey].push(task);
-  });
-  
-  // Sort each day's tasks by priority
-  Object.keys(onDeckByDay).forEach(date => {
-    onDeckByDay[date].sort((a, b) => {
-      const priorityOrder = { high: 0, normal: 1, low: 2 };
+  // Get tasks with no assigned date that are not completed
+  const tasksWithoutDates = tasks
+    .filter(task => {
+      // Only include non-completed tasks with no assigned date
+      return task.status !== 'completed' && !task.assigned_date;
+    })
+    .sort((a, b) => {
+      // Sort by priority (high to low)
+      const priorityOrder: Record<string, number> = { high: 0, normal: 1, low: 2 };
       const aPriority = a.priority || 'normal';
       const bPriority = b.priority || 'normal';
       return priorityOrder[aPriority] - priorityOrder[bPriority];
     });
-  });
-  
-  // Get dates sorted chronologically
-  const sortedDates = Object.keys(onDeckByDay).sort();
 
-  // Filter for active tasks without due dates
-  const activeTasks = tasks.filter(task => {
-    // Only include tasks with active status
-    if (task.status !== 'active') {
-      return false;
-    }
-    
-    // Skip tasks that are already in other sections
-    if (todayTasks.includes(task) || onDeckTasks.includes(task)) {
-      return false;
-    }
-    
-    // Include active tasks with no due date
-    return !task.due_date;
-  });
+  // Get tasks with due dates in the next 3 days (not completed)
+  const today = new Date();
+  const threeDaysLater = addDays(today, 3);
   
-  // Sort by priority
-  activeTasks.sort((a, b) => {
-    const priorityOrder = { high: 0, normal: 1, low: 2 };
-    const aPriority = a.priority || 'normal';
-    const bPriority = b.priority || 'normal';
-    return priorityOrder[aPriority] - priorityOrder[bPriority];
-  });
+  const upcomingDueTasks = tasks
+    .filter(task => {
+      // Only include non-completed tasks
+      if (task.status === 'completed') return false;
+      
+      // Only include tasks with a due date in the next 3 days
+      const dueDate = task.due_date ? new Date(task.due_date) : null;
+      return dueDate && isWithinInterval(dueDate, { start: today, end: threeDaysLater });
+    })
+    .sort((a, b) => {
+      // Sort by due date (soonest first)
+      const aDate = a.due_date ? new Date(a.due_date).getTime() : 0;
+      const bDate = b.due_date ? new Date(b.due_date).getTime() : 0;
+      return aDate - bDate;
+    });
 
   // Get recent notes
   const recentNotes = [...notes]
@@ -255,16 +180,6 @@ const DashboardPage: React.FC = () => {
     }
   };
 
-  // Get status color for the status indicator
-  const getStatusColor = (status: TaskStatus): string => {
-    switch (status) {
-      case 'on_deck': return 'bg-yellow-100 text-yellow-800';
-      case 'active': return 'bg-green-100 text-green-800';
-      case 'completed': return 'bg-gray-100 text-gray-800';
-      default: return 'bg-gray-100 text-gray-800';
-    }
-  };
-
   return (
     <div className="space-y-6 py-6">
       <div className="flex justify-between items-center mb-6">
@@ -272,64 +187,41 @@ const DashboardPage: React.FC = () => {
         <NewEntryForm onEntryCreated={handleUpdate} />
       </div>
 
-      {/* Today's Focus Section */}
+      {/* Active Tasks Section (sorted by assigned date) */}
       <DashboardCard 
-        title="Today's Focus"
+        title="Active Tasks"
         content={
           <div className="space-y-3">
-            {todayTasks.length === 0 ? (
-              <div className="text-gray-500 text-center py-4">No tasks for today</div>
+            {activeTasks.length === 0 ? (
+              <div className="text-gray-500 text-center py-4">No active tasks</div>
             ) : (
-              todayTasks.map(task => (
+              activeTasks.map(task => (
                 <div key={task.id} className="p-3 bg-white rounded-lg border hover:shadow-sm transition-shadow">
                   <div className="flex justify-between items-start mb-2">
                     <div className="flex items-center">
-                      {/* Status dropdown menu */}
                       <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
+                        <DropdownMenuTrigger asChild disabled={loadingTasks[task.id]}>
                           <button
                             className="mr-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 rounded-sm disabled:opacity-50"
-                            disabled={loadingTasks[task.id]}
                             aria-label="Change task status"
                           >
                             {loadingTasks[task.id] ? (
                               <div className="h-5 w-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
                             ) : (
-                              <CheckSquare className={`h-5 w-5 ${task.status === 'completed' ? 'text-green-500 fill-green-500' : 'text-blue-500'}`} />
+                              <CheckSquare className="h-5 w-5 text-blue-500" />
                             )}
                           </button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="start">
-                          {task.status !== 'completed' && (
-                            <DropdownMenuItem
-                              onClick={() => updateTaskStatus(task.id, 'completed')}
-                              disabled={loadingTasks[task.id]}
-                            >
-                              Mark completed
-                              {task.status === 'completed' && <Check className="ml-2 h-4 w-4" />}
-                            </DropdownMenuItem>
-                          )}
-                          {task.status !== 'active' && (
-                            <DropdownMenuItem
-                              onClick={() => updateTaskStatus(task.id, 'active')}
-                              disabled={loadingTasks[task.id]}
-                            >
-                              Mark active
-                              {task.status === 'active' && <Check className="ml-2 h-4 w-4" />}
-                            </DropdownMenuItem>
-                          )}
-                          {task.status !== 'on_deck' && (
-                            <DropdownMenuItem
-                              onClick={() => updateTaskStatus(task.id, 'on_deck')}
-                              disabled={loadingTasks[task.id]}
-                            >
-                              Mark on deck
-                              {task.status === 'on_deck' && <Check className="ml-2 h-4 w-4" />}
-                            </DropdownMenuItem>
-                          )}
+                          <DropdownMenuItem onClick={() => updateTaskStatus(task.id, 'on_deck')}>
+                            Mark as On Deck
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => updateTaskStatus(task.id, 'completed')}>
+                            Mark as Completed
+                          </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
-                      <h3 className={`font-medium ${task.status === 'completed' ? 'text-gray-500 line-through' : 'text-gray-900'}`}>
+                      <h3 className="font-medium text-gray-900">
                         {task.item.title}
                       </h3>
                     </div>
@@ -344,7 +236,7 @@ const DashboardPage: React.FC = () => {
                   
                   <div className="ml-7 mt-2 flex flex-wrap gap-2 text-xs">
                     {task.due_date && (
-                      <span className={`flex items-center ${isPast(new Date(task.due_date)) && task.status !== 'completed' ? 'text-red-600 font-medium' : 'text-gray-500'}`}>
+                      <span className={`flex items-center ${isPast(new Date(task.due_date)) ? 'text-red-600 font-medium' : 'text-gray-500'}`}>
                         <Clock className="mr-1 h-3 w-3" />
                         Due: {format(new Date(task.due_date), 'MMM d')}
                       </span>
@@ -363,68 +255,53 @@ const DashboardPage: React.FC = () => {
         }
       />
 
-      {/* Due Soon Section */}
+      {/* Upcoming Due Tasks Section (next 3 days) */}
       <DashboardCard 
-        title="Due Soon"
+        title="Due Soon (Next 3 Days)"
         content={
           <div className="space-y-3">
-            {tasksWithDueDates.length === 0 ? (
-              <div className="text-gray-500 text-center py-4">No tasks due soon</div>
+            {upcomingDueTasks.length === 0 ? (
+              <div className="text-gray-500 text-center py-4">No tasks due in the next 3 days</div>
             ) : (
-              tasksWithDueDates.map(task => (
+              upcomingDueTasks.map(task => (
                 <div key={task.id} className="p-3 bg-white rounded-lg border hover:shadow-sm transition-shadow">
                   <div className="flex justify-between items-start mb-2">
                     <div className="flex items-center">
-                      {/* Status dropdown menu */}
                       <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
+                        <DropdownMenuTrigger asChild disabled={loadingTasks[task.id]}>
                           <button
                             className="mr-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 rounded-sm disabled:opacity-50"
-                            disabled={loadingTasks[task.id]}
                             aria-label="Change task status"
                           >
                             {loadingTasks[task.id] ? (
                               <div className="h-5 w-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
                             ) : (
-                              <CheckSquare className={`h-5 w-5 ${task.status === 'completed' ? 'text-green-500 fill-green-500' : task.status === 'on_deck' ? 'text-yellow-500' : 'text-blue-500'}`} />
+                              <CheckSquare className="h-5 w-5 text-blue-500" />
                             )}
                           </button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="start">
-                          <DropdownMenuItem
-                            onClick={() => updateTaskStatus(task.id, 'completed')}
-                            disabled={loadingTasks[task.id]}
-                          >
-                            Mark completed
-                            {task.status === 'completed' && <Check className="ml-2 h-4 w-4" />}
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() => updateTaskStatus(task.id, 'active')}
-                            disabled={loadingTasks[task.id]}
-                          >
-                            Mark active
-                            {task.status === 'active' && <Check className="ml-2 h-4 w-4" />}
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() => updateTaskStatus(task.id, 'on_deck')}
-                            disabled={loadingTasks[task.id]}
-                          >
-                            Mark on deck
-                            {task.status === 'on_deck' && <Check className="ml-2 h-4 w-4" />}
+                          {task.status !== 'active' && (
+                            <DropdownMenuItem onClick={() => updateTaskStatus(task.id, 'active')}>
+                              Mark as Active
+                            </DropdownMenuItem>
+                          )}
+                          {task.status !== 'on_deck' && (
+                            <DropdownMenuItem onClick={() => updateTaskStatus(task.id, 'on_deck')}>
+                              Mark as On Deck
+                            </DropdownMenuItem>
+                          )}
+                          <DropdownMenuItem onClick={() => updateTaskStatus(task.id, 'completed')}>
+                            Mark as Completed
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
-                      <div>
-                        <h3 className={`font-medium ${task.status === 'completed' ? 'text-gray-500 line-through' : 'text-gray-900'}`}>
-                          {task.item.title}
-                        </h3>
-                        <Badge className={`ml-0 mt-1 text-xs ${task.status === 'on_deck' ? 'bg-yellow-100 text-yellow-800' : 'bg-blue-100 text-blue-700'}`}>
-                          {task.status}
-                        </Badge>
-                      </div>
+                      <h3 className="font-medium text-gray-900">
+                        {task.item.title}
+                      </h3>
                     </div>
-                    <Badge className={getPriorityColor(task.priority)}>
-                      {task.priority || 'normal'}
+                    <Badge className={`${getStatusColor(task.status || 'on_deck')} mr-2`}>
+                      {task.status || 'on_deck'}
                     </Badge>
                   </div>
                   
@@ -434,21 +311,23 @@ const DashboardPage: React.FC = () => {
                   
                   <div className="ml-7 mt-2 flex flex-wrap gap-2 text-xs">
                     {task.due_date && (
-                      <span className={`flex items-center font-medium ${isToday(new Date(task.due_date)) ? 'text-orange-600' : isPast(new Date(task.due_date)) ? 'text-red-600' : 'text-green-600'}`}>
+                      <span className={`flex items-center font-medium ${isToday(new Date(task.due_date)) ? 'text-orange-600' : 'text-red-600'}`}>
                         <Clock className="mr-1 h-3 w-3" />
-                        Due: {format(new Date(task.due_date), 'MMM d')}
-                      </span>
-                    )}
-                    {task.assigned_date && (
-                      <span className="flex items-center text-gray-500">
-                        <Calendar className="mr-1 h-3 w-3" />
-                        Assigned: {format(new Date(task.assigned_date), 'MMM d')}
+                        Due: {formatDateDisplay(task.due_date)}
                       </span>
                     )}
                   </div>
                 </div>
               ))
             )}
+            
+            <div className="pt-2">
+              <Button variant="ghost" className="text-blue-600 hover:text-blue-700 p-0 h-auto" asChild>
+                <a href="/tasks">
+                  View all tasks <ArrowRight className="ml-1 h-4 w-4" />
+                </a>
+              </Button>
+            </div>
           </div>
         }
       />
@@ -480,87 +359,80 @@ const DashboardPage: React.FC = () => {
             </div>
           }
         />
-
-        {/* Active Tasks */}
+        
+        {/* Tasks Without Dates */}
         <DashboardCard 
-          title="Active Tasks"
+          title="Unscheduled Tasks"
           content={
             <div className="space-y-3">
-              {activeTasks.length === 0 ? (
-                <div className="text-gray-500 text-center py-4">No active tasks without dates</div>
+              {tasksWithoutDates.length === 0 ? (
+                <div className="text-gray-500 text-center py-4">No unscheduled tasks</div>
               ) : (
-                activeTasks.slice(0, 3).map(task => (
+                tasksWithoutDates.slice(0, 5).map(task => (
                   <div key={task.id} className="p-3 bg-white rounded-lg border hover:shadow-sm transition-shadow">
-                    <div className="flex justify-between items-start">
+                    <div className="flex justify-between items-start mb-2">
                       <div className="flex items-center">
-                        {/* Status dropdown menu */}
                         <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
+                          <DropdownMenuTrigger asChild disabled={loadingTasks[task.id]}>
                             <button
                               className="mr-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 rounded-sm disabled:opacity-50"
-                              disabled={loadingTasks[task.id]}
                               aria-label="Change task status"
                             >
                               {loadingTasks[task.id] ? (
                                 <div className="h-5 w-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
                               ) : (
-                                <CheckSquare className={`h-5 w-5 ${task.status === 'completed' ? 'text-green-500 fill-green-500' : 'text-blue-500'}`} />
+                                <CheckSquare className="h-5 w-5 text-blue-500" />
                               )}
                             </button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="start">
-                            <DropdownMenuItem
-                              onClick={() => updateTaskStatus(task.id, 'completed')}
-                              disabled={loadingTasks[task.id]}
-                            >
-                              Mark completed
-                              {task.status === 'completed' && <Check className="ml-2 h-4 w-4" />}
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() => updateTaskStatus(task.id, 'active')}
-                              disabled={loadingTasks[task.id]}
-                            >
-                              Mark active
-                              {task.status === 'active' && <Check className="ml-2 h-4 w-4" />}
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() => updateTaskStatus(task.id, 'on_deck')}
-                              disabled={loadingTasks[task.id]}
-                            >
-                              Mark on deck
-                              {task.status === 'on_deck' && <Check className="ml-2 h-4 w-4" />}
+                            {task.status !== 'active' && (
+                              <DropdownMenuItem onClick={() => updateTaskStatus(task.id, 'active')}>
+                                Mark as Active
+                              </DropdownMenuItem>
+                            )}
+                            {task.status !== 'on_deck' && (
+                              <DropdownMenuItem onClick={() => updateTaskStatus(task.id, 'on_deck')}>
+                                Mark as On Deck
+                              </DropdownMenuItem>
+                            )}
+                            <DropdownMenuItem onClick={() => updateTaskStatus(task.id, 'completed')}>
+                              Mark as Completed
                             </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
-                        <h3 className={`font-medium ${task.status === 'completed' ? 'text-gray-500 line-through' : 'text-gray-900'}`}>
+                        <h3 className="font-medium text-gray-900">
                           {task.item.title}
                         </h3>
                       </div>
-                      <Badge className={getPriorityColor(task.priority)}>
-                        {task.priority || 'normal'}
-                      </Badge>
+                      <div className="flex items-center gap-2">
+                        <Badge className={getStatusColor(task.status || 'on_deck')}>
+                          {task.status || 'on_deck'}
+                        </Badge>
+                        <Badge className={getPriorityColor(task.priority)}>
+                          {task.priority || 'normal'}
+                        </Badge>
+                      </div>
                     </div>
                     
                     {task.description && (
-                      <p className="ml-7 text-sm text-gray-600 mt-1">{task.description}</p>
+                      <p className="ml-7 text-sm text-gray-600">{task.description}</p>
                     )}
                   </div>
                 ))
               )}
               
-              {tasksWithoutDates.length > 3 && (
-                <div className="text-center text-sm text-gray-500 mt-2">
-                  +{tasksWithoutDates.length - 3} more active tasks
+              {tasksWithoutDates.length > 5 && (
+                <div className="text-center text-sm text-gray-500">
+                  +{tasksWithoutDates.length - 5} more unscheduled tasks
                 </div>
               )}
               
-              <div className="mt-2">
-                <Button variant="outline" className="w-full" onClick={() => {
-                  const addTaskBtn = document.querySelector('[class*="NewEntryForm"] button') as HTMLButtonElement;
-                  if (addTaskBtn) addTaskBtn.click();
-                }}>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Add New Task
+              <div className="pt-2">
+                <Button variant="ghost" className="text-blue-600 hover:text-blue-700 p-0 h-auto" asChild>
+                  <a href="/tasks">
+                    View all tasks <ArrowRight className="ml-1 h-4 w-4" />
+                  </a>
                 </Button>
               </div>
             </div>
@@ -569,6 +441,20 @@ const DashboardPage: React.FC = () => {
       </div>
     </div>
   );
+};
+
+// Helper function to get status color
+const getStatusColor = (status: TaskStatus): string => {
+  switch (status) {
+    case 'on_deck':
+      return 'bg-yellow-100 text-yellow-800';
+    case 'active':
+      return 'bg-green-100 text-green-800';
+    case 'completed':
+      return 'bg-gray-100 text-gray-800';
+    default:
+      return 'bg-gray-100 text-gray-800';
+  }
 };
 
 export default DashboardPage;
