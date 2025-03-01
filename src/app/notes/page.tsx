@@ -1,3 +1,5 @@
+'use client'
+
 import React from 'react';
 import { NotesTable } from '@/components/NotesTable';
 import { NewEntryForm } from '@/components/NewEntryForm';
