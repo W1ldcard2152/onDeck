@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useTasks } from '@/hooks/useTasks';
 import { useSupabaseAuth } from '@/hooks/useSupabaseAuth';
-import TaskTable from '@/components/TaskTable';
+import { TaskTable } from '@/components/TaskTable';
 import { NewEntryForm } from '@/components/NewEntryForm';
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { AlertCircle } from 'lucide-react';

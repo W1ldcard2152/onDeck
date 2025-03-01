@@ -1,3 +1,5 @@
+'use client'
+
 import React, { useState, useEffect, useMemo } from 'react';
 import TruncatedCell from './TruncatedCell';
 import { format } from 'date-fns';
@@ -13,7 +15,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import type { Database } from '@/types/database.types';
-import ScrollableTableWrapper from './layouts/responsiveNav/ScrollableTableWrapper';
 
 type NoteStatus = 'active' | 'archived';
 type SortDirection = 'asc' | 'desc' | null;
@@ -93,7 +94,6 @@ const NotesTableBase = ({
       )}
       
       <div className="relative">
-      <ScrollableTableWrapper>
         <Table>
           <TableHeader>
             <TableRow>
@@ -213,7 +213,6 @@ const NotesTableBase = ({
             })}
           </TableBody>
         </Table>
-        </ScrollableTableWrapper>
 
         {noteToEdit && (
           <NewEntryForm

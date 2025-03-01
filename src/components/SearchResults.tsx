@@ -1,3 +1,5 @@
+'use client'
+
 import React from 'react';
 import { format } from 'date-fns';
 import { FileText, CheckSquare } from 'lucide-react';
@@ -14,27 +16,6 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
   onClose 
 }) => {
   const { isSearching, searchResults, searchQuery } = useSearch();
-
-  const handleItemClick = (type: 'task' | 'note') => {
-    if (onItemClick) {
-      let section: SectionType = 'dashboard';
-      
-      // Map result type to section
-      switch (type) {
-        case 'task':
-          section = 'tasks';
-          break;
-        case 'note':
-          section = 'notes';
-          break;
-      }
-      
-      onItemClick(section);
-    }
-    if (onClose) {
-      onClose();
-    }
-  };
 
   if (isSearching) {
     return (
@@ -55,6 +36,15 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
   if (searchResults.length === 0) {
     return null;
   }
+
+  const handleItemClick = (type: 'task' | 'note') => {
+    if (onItemClick) {
+      onItemClick(type === 'task' ? 'tasks' : 'notes');
+    }
+    if (onClose) {
+      onClose();
+    }
+  };
 
   return (
     <div className="max-h-[400px] overflow-y-auto">
