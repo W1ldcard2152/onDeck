@@ -59,4 +59,43 @@ interface ProjectInfo {
   stepTitle?: string;
 }
 
-// Rest of the component code...
+// TaskTableBase Component
+const TaskTableBase: React.FC<TaskTableBaseProps> = ({ 
+  tasks, 
+  onTaskUpdate,
+  sorts,
+  onSort,
+  tableType
+}) => {
+  const [loading, setLoading] = useState<Record<string, boolean>>({});
+  const [error, setError] = useState<string | null>(null);
+  const [taskToEdit, setTaskToEdit] = useState<TaskWithDetails | null>(null);
+  const [projectInfoMap, setProjectInfoMap] = useState<Record<string, ProjectInfo>>({});
+  const supabase = createClientComponentClient<Database>();
+  const { user } = useSupabaseAuth();
+
+  // Rest of the component implementation...
+  
+  return (
+    <div>
+      {/* Component rendering */}
+    </div>
+  );
+};
+
+// Main TaskTable component
+const TaskTable: React.FC<TaskTableProps> = ({ tasks, onTaskUpdate }) => {
+  const [showCompleted, setShowCompleted] = useState(false);
+  const [sorts, setSorts] = useState<SortState[]>([]);
+
+  // Rest of the component implementation...
+
+  return (
+    <div className="space-y-6">
+      {/* Component rendering */}
+    </div>
+  );
+};
+
+export { TaskTable };
+export default TaskTable;
