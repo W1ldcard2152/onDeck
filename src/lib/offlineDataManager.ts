@@ -63,34 +63,37 @@ interface OfflineCache {
         console.error('Error updating offline cache:', error);
       }
     }
-  
-    // Store specific collection data (tasks, notes, etc.)
-    public async cacheCollection(collectionName: keyof OfflineCache, data: any[]): Promise<void> {
-      if (typeof window === 'undefined' || !['tasks', 'notes', 'projects'].includes(collectionName)) return;
-      
-      try {
-        const currentCache = await this.getCache();
-        currentCache[collectionName] = data;
-        currentCache.lastSynced = new Date().toISOString();
+      // Get specific collection data
+      public async getCollection<T>(collectionName: 'tasks' | 'notes' | 'projects'): Promise<T[]> {
+        if (typeof window === 'undefined') return [];
         
-        localStorage.setItem(this.storageKey, JSON.stringify(currentCache));
-      } catch (error) {
-        console.error(`Error caching ${collectionName}:`, error);
+        try {
+          const cache = await this.getCache();
+          // Double assertion to break the connection with the string type
+          return (cache[collectionName] as unknown as any[]) || [] as T[];
+        } catch (error) {
+          console.error(`Error getting ${collectionName} from cache:`, error);
+          return [];
+        }
       }
-    }
+    // Store specific collection data (tasks, notes, etc.)
+// Store specific collection data (tasks, notes, etc.)
+public async cacheCollection(
+  collectionName: 'tasks' | 'notes' | 'projects', 
+  data: any[]
+): Promise<void> {
+  if (typeof window === 'undefined') return;
   
-    // Get specific collection data
-    public async getCollection<T>(collectionName: keyof OfflineCache): Promise<T[]> {
-      if (typeof window === 'undefined') return [];
-      
-      try {
-        const cache = await this.getCache();
-        return (cache[collectionName] || []) as T[];
-      } catch (error) {
-        console.error(`Error getting ${collectionName} from cache:`, error);
-        return [];
-      }
-    }
+  try {
+    const currentCache = await this.getCache();
+    currentCache[collectionName] = data;
+    currentCache.lastSynced = new Date().toISOString();
+    
+    localStorage.setItem(this.storageKey, JSON.stringify(currentCache));
+  } catch (error) {
+    console.error(`Error caching ${collectionName}:`, error);
+  }
+}
   
     // Check if we are currently offline
     public isOffline(): boolean {
