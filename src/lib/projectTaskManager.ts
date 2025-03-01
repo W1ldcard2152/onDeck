@@ -59,11 +59,7 @@ export class ProjectTaskManager {
       const now = new Date().toISOString();
       
       // Calculate a sensible due date (7 days from now by default)
-      const dueDate = step.due_date || (() => {
-        const date = new Date();
-        date.setDate(date.getDate() + 7);
-        return date.toISOString();
-      })();
+      const dueDate = step.due_date || null;
 
       // Create the task item
       const { data: taskItemData, error: taskItemError } = await this.supabase

@@ -16,6 +16,9 @@ import { SearchInput } from '../SearchInput';
 import ClientLayout from './ClientLayout';
 import IntegratedSearch from '../IntegratedSearch';
 import ProjectsPage from '@/app/projects/page';
+import InstallPWA from '../InstallPWA';
+import PWAStatus from '../PWAStatus';
+import OfflineNotification from '../OfflineNotification';
 
 const DesktopLayout = () => {
   const { user, loading } = useSupabaseAuth();
@@ -70,33 +73,42 @@ const DesktopLayout = () => {
             className="md:hidden" 
             onSectionChange={setActiveSection}
           />
+          
+          {/* Install PWA Prompt - Only visible on mobile */}
+          <div className="md:hidden px-4 mt-16">
+            <InstallPWA />
+          </div>
 
           {/* Desktop Header */}
           <header className="hidden md:flex h-16 bg-white border-b items-center justify-between px-4">
-  <div className="flex items-center flex-1">
-  <IntegratedSearch 
-  className="max-w-md" 
-  onSectionChange={setActiveSection}
-  activeSection={activeSection}
-/>
-  </div>
-  
-  <div className="flex items-center space-x-4">
-    <button 
-      type="button"
-      className="p-2 hover:bg-gray-100 rounded-lg"
-    >
-      <Bell size={20} className="text-gray-600" />
-    </button>
-    <button 
-      type="button"
-      className="p-2 hover:bg-gray-100 rounded-lg"
-    >
-      <Settings size={20} className="text-gray-600" />
-    </button>
-    <UserMenu />
-  </div>
-</header>
+            <div className="flex items-center flex-1">
+              <IntegratedSearch 
+                className="max-w-md" 
+                onSectionChange={setActiveSection}
+                activeSection={activeSection}
+              />
+            </div>
+            
+            <div className="flex items-center space-x-4">
+              {/* Desktop Install Button */}
+              <div className="hidden md:block w-auto mr-2">
+                <InstallPWA />
+              </div>
+              <button 
+                type="button"
+                className="p-2 hover:bg-gray-100 rounded-lg"
+              >
+                <Bell size={20} className="text-gray-600" />
+              </button>
+              <button 
+                type="button"
+                className="p-2 hover:bg-gray-100 rounded-lg"
+              >
+                <Settings size={20} className="text-gray-600" />
+              </button>
+              <UserMenu />
+            </div>
+          </header>
 
           {/* Main Content */}
           <main className="flex-1 p-4 md:p-6 mt-16 md:mt-0 pb-20 md:pb-6">
@@ -112,6 +124,12 @@ const DesktopLayout = () => {
           />
         </div>
       </div>
+      
+      {/* PWA Status Debug (only visible in development) */}
+      <PWAStatus showDebug={process.env.NODE_ENV === 'development'} />
+      
+      {/* Offline notification */}
+      <OfflineNotification />
     </ClientLayout>
   );
 };
