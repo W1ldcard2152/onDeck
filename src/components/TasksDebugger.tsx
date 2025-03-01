@@ -1,3 +1,5 @@
+'use client'
+
 import React, { useState } from 'react';
 import type { TaskWithDetails } from '@/lib/types';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
