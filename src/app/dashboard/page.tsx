@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { TaskCard } from '@/components/TaskCard';
 import { NoteCard } from '@/components/NoteCard';
 import { DashboardCard } from '@/components/DashboardCard';
@@ -24,6 +24,21 @@ import type { TaskStatus, Priority } from '@/types/database.types';
 import type { Database } from '@/types/database.types';
 
 const DashboardPage: React.FC = () => {
+  useEffect(() => {
+    if ('serviceWorker' in navigator) {
+      console.log('Service Worker is supported');
+      navigator.serviceWorker.register('/sw.js')
+        .then(reg => {
+          console.log('Service Worker registered successfully', reg);
+        })
+        .catch(err => {
+          console.error('Service Worker registration failed', err);
+        });
+    } else {
+      console.error('Service Worker is NOT supported');
+    }
+  }, []);
+
   const { user } = useSupabaseAuth();
   const { tasks, isLoading: tasksLoading, refetch: refetchTasks } = useTasks(user?.id);
   const { notes, isLoading: notesLoading, refetch: refetchNotes } = useNotes(user?.id);

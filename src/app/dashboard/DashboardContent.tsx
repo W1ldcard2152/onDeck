@@ -7,6 +7,21 @@ import { TaskCard } from '@/components/TaskCard';
 import { NoteCard } from '@/components/NoteCard';
 import { DashboardCard } from '@/components/DashboardCard';
 
+useEffect(() => {
+  if ('serviceWorker' in navigator) {
+    console.log('Service Worker is supported');
+    navigator.serviceWorker.register('/sw.js')
+      .then(reg => {
+        console.log('Service Worker registered successfully', reg);
+      })
+      .catch(err => {
+        console.error('Service Worker registration failed', err);
+      });
+  } else {
+    console.error('Service Worker is NOT supported');
+  }
+}, []);
+
 const DashboardContent = () => {
   const { user } = useSupabaseAuth();
   const { tasks, isLoading: tasksLoading } = useTasks(user?.id, 5);
