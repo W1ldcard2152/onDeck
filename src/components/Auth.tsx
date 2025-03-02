@@ -4,6 +4,12 @@ import { Auth } from '@supabase/auth-ui-react'
 import { ThemeSupa } from '@supabase/auth-ui-shared'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 
+const redirectTo = typeof window !== 'undefined' 
+  ? `${window.location.origin}/auth/callback` 
+  : process.env.NEXT_PUBLIC_SITE_URL 
+    ? `${process.env.NEXT_PUBLIC_SITE_URL}/auth/callback` 
+    : 'http://localhost:3000/auth/callback';
+
 export default function AuthUI() {
   const supabase = createClientComponentClient()
 
@@ -15,22 +21,23 @@ export default function AuthUI() {
           <p className="mt-2 text-gray-600">Please sign in to continue</p>
         </div>
         <div className="rounded-lg bg-white p-8 shadow-sm">
-          <Auth
-            supabaseClient={supabase}
-            appearance={{
-              theme: ThemeSupa,
-              variables: {
-                default: {
-                  colors: {
-                    brand: '#2563eb', // blue-600
-                    brandAccent: '#1d4ed8', // blue-700
-                  },
-                },
-              },
-            }}
-            providers={['github', 'google']}
-            theme="light"
-          />
+        <Auth
+  supabaseClient={supabase}
+  appearance={{
+    theme: ThemeSupa,
+    variables: {
+      default: {
+        colors: {
+          brand: '#2563eb', // blue-600
+          brandAccent: '#1d4ed8', // blue-700
+        },
+      },
+    },
+  }}
+  providers={['github', 'google']}
+  theme="light"
+  redirectTo={redirectTo}
+/>
         </div>
       </div>
     </div>
