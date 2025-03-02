@@ -1,69 +1,132 @@
-// This is the service worker for the OnDeck application
+// Service Worker for OnDeck PWA
+// Place this file in public folder
 
-// Set this to your application version
-const CACHE_VERSION = 'v1';
-const CACHE_NAME = `ondeck-${CACHE_VERSION}`;
+const CACHE_NAME = 'ondeck-v1';
 
-// Application assets to cache
-const STATIC_ASSETS = [
+// Resources to cache on install
+const PRECACHE_RESOURCES = [
   '/',
+  '/index.html',
   '/manifest.json',
   '/offline.html',
   '/icons/icon-192x192.png',
+  '/icons/icon-512x512.png',
   '/icons/icon-384x384.png',
-  '/icons/icon-512x512.png'
+  '/next-pwa-setup.js',
+  '/splash.html',
+  '/favicon.ico'
 ];
 
 // Install event - cache static assets
 self.addEventListener('install', (event) => {
+  console.log('[ServiceWorker] Install');
+  
+  // Skip waiting so the new service worker activates immediately
+  self.skipWaiting();
+  
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(STATIC_ASSETS);
-    })
+    caches.open(CACHE_NAME)
+      .then((cache) => {
+        console.log('[ServiceWorker] Pre-caching offline resources');
+        return cache.addAll(PRECACHE_RESOURCES);
+      })
   );
 });
 
 // Activate event - clean up old caches
 self.addEventListener('activate', (event) => {
+  console.log('[ServiceWorker] Activate');
+  
   event.waitUntil(
-    caches.keys().then((cacheNames) => {
-      return Promise.all(
-        cacheNames
-          .filter((name) => name.startsWith('ondeck-') && name !== CACHE_NAME)
-          .map((name) => caches.delete(name))
-      );
+    caches.keys().then((keyList) => {
+      return Promise.all(keyList.map((key) => {
+        if (key !== CACHE_NAME) {
+          console.log('[ServiceWorker] Removing old cache', key);
+          return caches.delete(key);
+        }
+      }));
+    })
+    .then(() => {
+      console.log('[ServiceWorker] Claiming clients');
+      return self.clients.claim();
     })
   );
 });
 
-// Fetch event - serve from cache or network
+// Fetch event - network first strategy with offline fallback
 self.addEventListener('fetch', (event) => {
-  // Skip non-GET requests and requests to Supabase API
-  if (
-    event.request.method !== 'GET' ||
-    event.request.url.includes('supabase.co')
-  ) {
+  // Skip cross-origin requests and API calls
+  if (!event.request.url.startsWith(self.location.origin) || 
+      event.request.url.includes('/api/') ||
+      event.request.url.includes('supabase.co')) {
     return;
   }
-
-  event.respondWith(
-    caches.match(event.request).then((cachedResponse) => {
-      // Return cached response if available
-      if (cachedResponse) {
-        return cachedResponse;
-      }
-
-      // Otherwise, fetch from network
-      return fetch(event.request).then((response) => {
-        // Return the response
-        return response;
-      }).catch(() => {
-        // If both cache and network fail, return an offline fallback
-        if (event.request.mode === 'navigate') {
+  
+  // For HTML navigation requests - network first
+  if (event.request.mode === 'navigate' || 
+      (event.request.method === 'GET' && 
+       event.request.headers.get('accept').includes('text/html'))) {
+    
+    event.respondWith(
+      fetch(event.request)
+        .catch(() => {
+          // If network fails, serve offline page
           return caches.match('/offline.html');
-        }
-        return new Response('Network error', { status: 408 });
-      });
-    })
+        })
+    );
+    return;
+  }
+  
+  // For other GET requests - stale-while-revalidate
+  if (event.request.method === 'GET') {
+    event.respondWith(
+      caches.open(CACHE_NAME).then((cache) => {
+        return cache.match(event.request).then((cachedResponse) => {
+          const fetchPromise = fetch(event.request)
+            .then((networkResponse) => {
+              // Update cache with fresh response
+              if (networkResponse && networkResponse.status === 200) {
+                cache.put(event.request, networkResponse.clone());
+              }
+              return networkResponse;
+            })
+            .catch(() => {
+              console.log('[ServiceWorker] Fetch failed; returning offline page instead.');
+              // If no cached response exists and network fails, return offline page for HTML
+              if (event.request.headers.get('accept').includes('text/html')) {
+                return caches.match('/offline.html');
+              }
+            });
+          
+          // Return the cached response if we have one, otherwise wait for the network response
+          return cachedResponse || fetchPromise;
+        });
+      })
+    );
+  }
+});
+
+// Handle push notifications if needed
+self.addEventListener('push', (event) => {
+  console.log('[Service Worker] Push Received.');
+  console.log(`[Service Worker] Push had this data: "${event.data.text()}"`);
+
+  const title = 'OnDeck';
+  const options = {
+    body: event.data.text(),
+    icon: '/icons/icon-192x192.png',
+    badge: '/icons/icon-72x72.png'
+  };
+
+  event.waitUntil(self.registration.showNotification(title, options));
+});
+
+// Handle notification clicks
+self.addEventListener('notificationclick', (event) => {
+  console.log('[Service Worker] Notification click received.');
+  event.notification.close();
+  
+  event.waitUntil(
+    clients.openWindow('/')
   );
 });
