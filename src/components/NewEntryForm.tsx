@@ -338,7 +338,7 @@ export const NewEntryForm: React.FC<NewEntryFormProps> = ({
           </Button>
         ) : null}
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[500px]">
+      <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
             {isEditing ? 
