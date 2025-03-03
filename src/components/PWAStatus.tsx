@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useEffect } from 'react';
+import { useServiceWorker } from '@/hooks/useServiceWorker';
 
 interface PWAStatusProps {
   showDebug?: boolean;
@@ -10,7 +11,9 @@ const PWAStatus: React.FC<PWAStatusProps> = ({ showDebug = false }) => {
   const [installable, setInstallable] = useState<boolean | null>(null);
   const [installed, setInstalled] = useState<boolean | null>(null);
   const [online, setOnline] = useState<boolean>(true);
-  const [serviceWorkerActive, setServiceWorkerActive] = useState<boolean | null>(null);
+  
+  // Use the enhanced service worker hook
+  const { isActive, isRegistered, error } = useServiceWorker();
 
   useEffect(() => {
     // Only run in browser
@@ -30,21 +33,9 @@ const PWAStatus: React.FC<PWAStatusProps> = ({ showDebug = false }) => {
     const handleBeforeInstallPrompt = (e: Event) => {
       e.preventDefault();
       setInstallable(true);
+      console.log('App is installable - beforeinstallprompt event fired');
     };
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-
-    // Check if service worker is active
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.getRegistrations()
-        .then(registrations => {
-          setServiceWorkerActive(registrations.length > 0);
-        })
-        .catch(() => {
-          setServiceWorkerActive(false);
-        });
-    } else {
-      setServiceWorkerActive(false);
-    }
 
     return () => {
       window.removeEventListener('online', () => setOnline(true));
@@ -53,7 +44,8 @@ const PWAStatus: React.FC<PWAStatusProps> = ({ showDebug = false }) => {
     };
   }, []);
 
-  if (!showDebug) return null;
+  // If debugging is disabled or we're not in development mode
+  if (!showDebug && process.env.NODE_ENV !== 'development') return null;
 
   return (
     <div className="fixed bottom-2 right-2 bg-white border shadow-lg rounded-lg p-3 text-xs font-mono z-50 opacity-70 hover:opacity-100 transition-opacity">
@@ -74,10 +66,24 @@ const PWAStatus: React.FC<PWAStatusProps> = ({ showDebug = false }) => {
           {installed === null ? '❓ Unknown' : installed ? '✅ Yes' : '❌ No'}
         </span>
         
-        <span>Service Worker:</span>
-        <span className={serviceWorkerActive ? 'text-green-600' : 'text-red-600'}>
-          {serviceWorkerActive === null ? '❓ Unknown' : serviceWorkerActive ? '✅ Active' : '❌ Inactive'}
+        <span>SW Registered:</span>
+        <span className={isRegistered ? 'text-green-600' : 'text-red-600'}>
+          {isRegistered ? '✅ Yes' : '❌ No'}
         </span>
+        
+        <span>SW Active:</span>
+        <span className={isActive ? 'text-green-600' : 'text-red-600'}>
+          {isActive ? '✅ Yes' : '❌ No'}
+        </span>
+        
+        {error && (
+          <>
+            <span>Error:</span>
+            <span className="text-red-600">
+              {error.message.substring(0, 30)}...
+            </span>
+          </>
+        )}
       </div>
     </div>
   );

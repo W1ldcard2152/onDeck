@@ -1,7 +1,7 @@
 // Service Worker for OnDeck PWA
-// Place this file in public folder
+// Place this file in the public folder
 
-const CACHE_NAME = 'ondeck-v1';
+const CACHE_NAME = 'ondeck-v1.1'; // Incremented version number
 
 // Resources to cache on install
 const PRECACHE_RESOURCES = [
@@ -30,6 +30,9 @@ self.addEventListener('install', (event) => {
         console.log('[ServiceWorker] Pre-caching offline resources');
         return cache.addAll(PRECACHE_RESOURCES);
       })
+      .catch(err => {
+        console.error('[ServiceWorker] Pre-caching error:', err);
+      })
   );
 });
 
@@ -48,7 +51,7 @@ self.addEventListener('activate', (event) => {
     })
     .then(() => {
       console.log('[ServiceWorker] Claiming clients');
-      return self.clients.claim();
+      return self.clients.claim(); // This ensures the ServiceWorker takes control immediately
     })
   );
 });
@@ -71,13 +74,14 @@ self.addEventListener('fetch', (event) => {
       fetch(event.request)
         .catch(() => {
           // If network fails, serve offline page
+          console.log('[ServiceWorker] Fetch failed; returning offline page instead.');
           return caches.match('/offline.html');
         })
     );
     return;
   }
   
-  // For other GET requests - stale-while-revalidate
+  // For assets like JS, CSS, images - stale-while-revalidate
   if (event.request.method === 'GET') {
     event.respondWith(
       caches.open(CACHE_NAME).then((cache) => {
@@ -90,12 +94,9 @@ self.addEventListener('fetch', (event) => {
               }
               return networkResponse;
             })
-            .catch(() => {
-              console.log('[ServiceWorker] Fetch failed; returning offline page instead.');
-              // If no cached response exists and network fails, return offline page for HTML
-              if (event.request.headers.get('accept').includes('text/html')) {
-                return caches.match('/offline.html');
-              }
+            .catch((error) => {
+              console.log('[ServiceWorker] Fetch failed:', error);
+              return cachedResponse || new Response('Network error', { status: 408 });
             });
           
           // Return the cached response if we have one, otherwise wait for the network response
@@ -109,11 +110,11 @@ self.addEventListener('fetch', (event) => {
 // Handle push notifications if needed
 self.addEventListener('push', (event) => {
   console.log('[Service Worker] Push Received.');
-  console.log(`[Service Worker] Push had this data: "${event.data.text()}"`);
+  console.log(`[Service Worker] Push had this data: "${event.data ? event.data.text() : 'no data'}"`);
 
   const title = 'OnDeck';
   const options = {
-    body: event.data.text(),
+    body: event.data && event.data.text() ? event.data.text() : 'Something new happened!',
     icon: '/icons/icon-192x192.png',
     badge: '/icons/icon-72x72.png'
   };
@@ -130,3 +131,13 @@ self.addEventListener('notificationclick', (event) => {
     clients.openWindow('/')
   );
 });
+
+// Log any errors that occur in the service worker
+self.addEventListener('error', function(e) {
+  console.error('[ServiceWorker] Error:', e.filename, e.lineno, e.colno, e.message);
+});
+
+// Ensure the service worker stays active
+setInterval(() => {
+  console.log('[ServiceWorker] Keeping alive');
+}, 1000 * 60 * 10); // Log every 10 minutes to keep active
