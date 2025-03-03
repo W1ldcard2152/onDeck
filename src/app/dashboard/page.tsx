@@ -24,20 +24,8 @@ import type { TaskStatus, Priority } from '@/types/database.types';
 import type { Database } from '@/types/database.types';
 
 const DashboardPage: React.FC = () => {
-  useEffect(() => {
-    if ('serviceWorker' in navigator) {
-      console.log('Service Worker is supported');
-      navigator.serviceWorker.register('/sw.js')
-        .then(reg => {
-          console.log('Service Worker registered successfully', reg);
-        })
-        .catch(err => {
-          console.error('Service Worker registration failed', err);
-        });
-    } else {
-      console.error('Service Worker is NOT supported');
-    }
-  }, []);
+  // Remove the service worker registration from this component
+  // Service workers should be registered in _document.tsx or through next-pwa-setup.js
 
   const { user } = useSupabaseAuth();
   const { tasks, isLoading: tasksLoading, refetch: refetchTasks } = useTasks(user?.id);
