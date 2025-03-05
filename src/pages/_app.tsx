@@ -3,6 +3,17 @@ import type { AppProps } from 'next/app';
 import PWAHead from '@/components/PWAHead';
 import { useEffect } from 'react';
 
+useEffect(() => {
+  // Debug PWA install prompt
+  window.addEventListener('beforeinstallprompt', (e) => {
+    console.log('💡 beforeinstallprompt fired!', e);
+  });
+  
+  window.addEventListener('appinstalled', () => {
+    console.log('💡 App was installed successfully!');
+  });
+}, []);
+
 export default function App({ Component, pageProps }: AppProps) {
   // Register service worker
   useEffect(() => {
