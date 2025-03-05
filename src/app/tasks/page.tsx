@@ -13,24 +13,23 @@ export default function TasksPage() {
   const { user } = useSupabaseAuth();
   const { tasks, isLoading, error, refetch } = useTasks(user?.id);
   const [refreshKey, setRefreshKey] = useState(0);
-  const [hasInitialized, setHasInitialized] = useState(false);
+  const [localTasks, setLocalTasks] = useState<typeof tasks>([]);
 
-  // Prevent the handleTaskUpdate function from being recreated on every render
+  // Update localTasks whenever tasks changes
+  useEffect(() => {
+    console.log('Tasks changed, updating local state...');
+    setLocalTasks(tasks);
+    // Increment refreshKey to force table re-render
+    setRefreshKey(prev => prev + 1);
+  }, [tasks]);
+
+  // Callback for explicit task updates
   const handleTaskUpdate = useCallback(() => {
-    console.log('Task updated, refreshing data...');
+    console.log('Task updated, manually refreshing data...');
     refetch();
-    setRefreshKey(prevKey => prevKey + 1);
   }, [refetch]);
 
-  // Only run the initial refresh once
-  useEffect(() => {
-    if (!hasInitialized && !isLoading) {
-      console.log('Running one-time initialization');
-      setHasInitialized(true);
-    }
-  }, [hasInitialized, isLoading]);
-
-  if (isLoading) {
+  if (isLoading && localTasks.length === 0) {
     return (
       <div className="py-6">
         <div className="bg-white rounded-lg shadow p-6">
@@ -64,18 +63,18 @@ export default function TasksPage() {
 
       {/* Add key to force re-render on data changes */}
       <TaskTable 
-        tasks={tasks} 
+        tasks={localTasks} 
         onTaskUpdate={handleTaskUpdate} 
         key={`tasks-table-${refreshKey}`} 
       />
       
       {/* Debug information */}
       <div className="text-xs text-gray-400 mt-8">
-        Tasks with project links: {tasks.filter(t => t.project_id).length} / {tasks.length}
+        Tasks with project links: {localTasks.filter(t => t.project_id).length} / {localTasks.length}
       </div>
       
       {/* Add TasksDebugger but only manually trigger refreshes */}
-      <TasksDebugger tasks={tasks} />
+      <TasksDebugger tasks={localTasks} />
     </div>
   );
 }

@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
-import { RealtimeChannel } from '@supabase/supabase-js'
 import type { TaskWithDetails } from '@/lib/types'
 import type { Database } from '@/types/database.types'
 
@@ -14,33 +13,30 @@ export function useTasks(userId: string | undefined, limit: number = 50) {
   
   // Use a ref to track if we're already fetching to prevent duplicate requests
   const isFetchingRef = useRef(false)
-  // Use a ref to store last user ID to prevent duplicate fetches for the same user
-  const lastUserIdRef = useRef<string | undefined>(undefined)
+  // Track last refresh time to avoid duplicate fetches in short time periods
+  const lastRefreshTimeRef = useRef<number>(0)
 
   const fetchTasks = useCallback(async () => {
-    // Prevent duplicate fetches
+    // Prevent fetch if already in progress
     if (isFetchingRef.current) {
       console.log('Already fetching tasks, request ignored')
       return
     }
     
-    // If user hasn't changed, don't fetch again
-    if (lastUserIdRef.current === userId && tasks.length > 0) {
-      console.log('User has not changed and we already have tasks, skipping fetch')
+    // Skip fetching if no user ID
+    if (!userId) {
+      setTasks([])
+      setIsLoading(false)
       return
     }
     
+    // Set fetching flag to true
+    isFetchingRef.current = true
+    
+    // Record fetch timestamp
+    lastRefreshTimeRef.current = Date.now()
+    
     try {
-      if (!userId) {
-        setTasks([])
-        setIsLoading(false)
-        return
-      }
-      
-      // Set fetching flag to true
-      isFetchingRef.current = true
-      lastUserIdRef.current = userId
-  
       console.log('Fetching tasks for user:', userId)
       setIsLoading(true)
       
@@ -130,16 +126,25 @@ export function useTasks(userId: string | undefined, limit: number = 50) {
       // Reset the fetching flag
       isFetchingRef.current = false
     }
-  }, [userId, tasks.length])
+  }, [userId])
 
-  // Set up data fetching and real-time subscriptions
+  // Initial data fetch when userId changes
+  useEffect(() => {
+    if (userId) {
+      fetchTasks()
+    } else {
+      setTasks([])
+      setIsLoading(false)
+    }
+  }, [userId, fetchTasks])
+  
+  // Set up real-time subscriptions - separate from initial data fetch
   useEffect(() => {
     if (!userId) return
     
     const supabase = supabaseRef.current
     
-    // Initial data fetch
-    fetchTasks()
+    console.log('Setting up real-time subscriptions for tasks')
     
     // Set up real-time subscriptions for both tasks and items tables
     const tasksChannel = supabase
@@ -147,8 +152,8 @@ export function useTasks(userId: string | undefined, limit: number = 50) {
       .on('postgres_changes', 
         { event: '*', schema: 'public', table: 'tasks' }, 
         (payload) => {
-          console.log('Task change detected:', payload)
-          fetchTasks() // Refresh data when changes occur
+          console.log('Task change detected, refreshing data...')
+          fetchTasks() // Always refresh when real-time events occur
         }
       )
       .subscribe()
@@ -158,8 +163,8 @@ export function useTasks(userId: string | undefined, limit: number = 50) {
       .on('postgres_changes',
         { event: '*', schema: 'public', table: 'items', filter: `user_id=eq.${userId}` },
         (payload) => {
-          console.log('Item change detected:', payload)
-          fetchTasks() // Refresh data when changes occur
+          console.log('Item change detected, refreshing data...')
+          fetchTasks() // Always refresh when real-time events occur
         }
       )
       .subscribe()
