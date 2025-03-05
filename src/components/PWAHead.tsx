@@ -31,30 +31,39 @@ const PWAHead: React.FC<PWAHeadProps> = ({
       <meta name="msapplication-tap-highlight" content="no" />
       <meta name="theme-color" content="#2563eb" />
       
-      {/* Icons */}
-      <link rel="icon" type="image/png" sizes="32x32" href="/icons/icon-32x32.png" />
-      <link rel="icon" type="image/png" sizes="16x16" href="/icons/icon-16x16.png" />
-      <link rel="icon" href="/favicon.ico" />
+      {/* Web Manifest */}
       <link rel="manifest" href="/manifest.json" />
       
-      {/* Apple Specific */}
-      <link rel="apple-touch-icon" href="/icons/icon-192x192.png" />
-      <link rel="apple-touch-icon" sizes="152x152" href="/icons/icon-152x152.png" />
-      <link rel="apple-touch-icon" sizes="180x180" href="/icons/icon-180x180.png" />
-      <link rel="apple-touch-icon" sizes="167x167" href="/icons/icon-167x167.png" />
+      {/* Basic Favicon */}
+      <link rel="icon" type="image/png" sizes="16x16" href="/icons/ios/16.png" />
+      <link rel="icon" type="image/png" sizes="32x32" href="/icons/ios/32.png" />
+      <link rel="icon" href="/favicon.ico" />
+      
+      {/* Apple iOS Icons */}
+      <link rel="apple-touch-icon" href="/icons/ios/180.png" />
+      <link rel="apple-touch-icon" sizes="57x57" href="/icons/ios/57.png" />
+      <link rel="apple-touch-icon" sizes="60x60" href="/icons/ios/60.png" />
+      <link rel="apple-touch-icon" sizes="72x72" href="/icons/ios/72.png" />
+      <link rel="apple-touch-icon" sizes="76x76" href="/icons/ios/76.png" />
+      <link rel="apple-touch-icon" sizes="114x114" href="/icons/ios/114.png" />
+      <link rel="apple-touch-icon" sizes="120x120" href="/icons/ios/120.png" />
+      <link rel="apple-touch-icon" sizes="144x144" href="/icons/ios/144.png" />
+      <link rel="apple-touch-icon" sizes="152x152" href="/icons/ios/152.png" />
+      <link rel="apple-touch-icon" sizes="167x167" href="/icons/ios/167.png" />
+      <link rel="apple-touch-icon" sizes="180x180" href="/icons/ios/180.png" />
       
       {/* Apple Splash Screens */}
-      <link rel="apple-touch-startup-image" href="/splash/apple-splash-2048-2732.png" media="(device-width: 1024px) and (device-height: 1366px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" />
-      <link rel="apple-touch-startup-image" href="/splash/apple-splash-1668-2388.png" media="(device-width: 834px) and (device-height: 1194px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" />
-      <link rel="apple-touch-startup-image" href="/splash/apple-splash-1536-2048.png" media="(device-width: 768px) and (device-height: 1024px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" />
-      <link rel="apple-touch-startup-image" href="/splash/apple-splash-1125-2436.png" media="(device-width: 375px) and (device-height: 812px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" />
-      <link rel="apple-touch-startup-image" href="/splash/apple-splash-1242-2688.png" media="(device-width: 414px) and (device-height: 896px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" />
-      <link rel="apple-touch-startup-image" href="/splash/apple-splash-828-1792.png" media="(device-width: 414px) and (device-height: 896px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" />
-      <link rel="apple-touch-startup-image" href="/splash/apple-splash-750-1334.png" media="(device-width: 375px) and (device-height: 667px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" />
-      <link rel="apple-touch-startup-image" href="/splash/apple-splash-640-1136.png" media="(device-width: 320px) and (device-height: 568px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" />
+      <link rel="apple-touch-startup-image" href="/icons/SplashScreen.scale-100.png" media="(device-width: 320px) and (device-height: 568px) and (-webkit-device-pixel-ratio: 2)" />
+      <link rel="apple-touch-startup-image" href="/icons/SplashScreen.scale-125.png" media="(device-width: 375px) and (device-height: 667px) and (-webkit-device-pixel-ratio: 2)" />
+      <link rel="apple-touch-startup-image" href="/icons/SplashScreen.scale-150.png" media="(device-width: 414px) and (device-height: 736px) and (-webkit-device-pixel-ratio: 3)" />
+      <link rel="apple-touch-startup-image" href="/icons/SplashScreen.scale-200.png" media="(device-width: 375px) and (device-height: 812px) and (-webkit-device-pixel-ratio: 3)" />
+      <link rel="apple-touch-startup-image" href="/icons/SplashScreen.scale-400.png" media="(min-device-width: 768px) and (max-device-width: 1024px)" />
       
-      {/* Service Worker Registration Script */}
-      <script src="/next-pwa-setup.js" defer></script>
+      {/* Microsoft - Windows Tiles */}
+      <meta name="msapplication-square70x70logo" content="/icons/windows11/SmallTile.scale-100.png" />
+      <meta name="msapplication-square150x150logo" content="/icons/windows11/Square150x150Logo.scale-100.png" />
+      <meta name="msapplication-wide310x150logo" content="/icons/windows11/Wide310x150Logo.scale-100.png" />
+      <meta name="msapplication-square310x310logo" content="/icons/windows11/Square150x150Logo.scale-200.png" />
     </Head>
   );
 };
