@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Manifest Test</title>
+  <link rel="manifest" href="/manifest.json">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body>
+  <h1>Manifest Test</h1>
+  <div id="result">Testing manifest...</div>
+  
+  <script>
+    document.addEventListener('DOMContentLoaded', async () => {
+      const resultElement = document.getElementById('result');
+      
+      try {
+        const response = await fetch('/manifest.json');
+        if (!response.ok) {
+          throw new Error(`HTTP error! Status: ${response.status}`);
+        }
+        
+        try {
+          const data = await response.json();
+          resultElement.innerHTML = `
+            <p style="color: green">✅ Manifest found and valid!</p>
+            <p>Content-Type: ${response.headers.get('content-type')}</p>
+            <pre>${JSON.stringify(data, null, 2)}</pre>
+          `;
+        } catch (parseError) {
+          resultElement.innerHTML = `
+            <p style="color: red">❌ Manifest found but JSON is invalid!</p>
+            <p>Error: ${parseError.message}</p>
+          `;
+        }
+      } catch (error) {
+        resultElement.innerHTML = `
+          <p style="color: red">❌ Error fetching manifest!</p>
+          <p>Error: ${error.message}</p>
+        `;
+      }
+    });
+  </script>
+</body>
+</html>

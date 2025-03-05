@@ -7,19 +7,15 @@ export default function App({ Component, pageProps }: AppProps) {
   // Register service worker
   useEffect(() => {
     if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
-      // Skip service worker registration in development
-      if (process.env.NODE_ENV === 'production') {
-        const registerSW = async () => {
-          try {
-            await navigator.serviceWorker.register('/sw.js');
-            console.log('Service worker registered successfully');
-          } catch (error) {
+      window.addEventListener('load', function() {
+        navigator.serviceWorker.register('/sw.js')
+          .then(function(registration) {
+            console.log('Service worker registered successfully:', registration.scope);
+          })
+          .catch(function(error) {
             console.error('Service worker registration failed:', error);
-          }
-        };
-        
-        registerSW();
-      }
+          });
+      });
     }
   }, []);
 
