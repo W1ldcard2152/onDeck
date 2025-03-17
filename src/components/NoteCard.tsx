@@ -26,7 +26,7 @@ export const NoteCard: React.FC<NoteCardProps> = ({ note, preview = false }) => 
   return (
     <div className="p-4 bg-white rounded-lg shadow hover:shadow-md transition-shadow">
       <div className="flex justify-between items-start mb-2">
-        <h3 className="text-lg font-medium text-gray-900">{note.item.title}</h3>
+        <h3 className="text-sm font-medium text-gray-900">{note.item.title}</h3>
         <div className="flex items-center text-sm text-gray-500">
           <Calendar className="w-4 h-4 mr-1" />
           <span>{format(new Date(note.item.created_at), 'MMM d, yyyy')}</span>
