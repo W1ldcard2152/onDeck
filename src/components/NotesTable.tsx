@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import TruncatedCell from './TruncatedCell';
 import { format } from 'date-fns';
-import { ChevronDown, ChevronUp, ChevronRight, MoreHorizontal } from 'lucide-react';
+import { ChevronDown, ChevronUp, ChevronRight, MoreHorizontal, Trash2 } from 'lucide-react';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import { NewEntryForm } from '@/components/NewEntryForm';
 import {
@@ -14,6 +14,16 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import type { Database } from '@/types/database.types';
 
 type NoteStatus = 'active' | 'archived';
@@ -38,6 +48,7 @@ interface NotesTableBaseProps {
   onSort: (field: SortField) => void;
   tableType: 'active' | 'archived';
   updateNoteStatus: (noteId: string, isArchived: boolean) => Promise<void>;
+  deleteNote: (noteId: string) => Promise<void>;
 }
 
 const NotesTableBase = ({ 
@@ -46,11 +57,14 @@ const NotesTableBase = ({
   sorts,
   onSort,
   tableType,
-  updateNoteStatus
+  updateNoteStatus,
+  deleteNote
 }: NotesTableBaseProps) => {
   const [loading, setLoading] = useState<Record<string, boolean>>({});
   const [error, setError] = useState<string | null>(null);
   const [noteToEdit, setNoteToEdit] = useState<any | null>(null);
+  const [noteToDelete, setNoteToDelete] = useState<string | null>(null);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
 
   const getStatusColor = (isArchived: boolean): string => {
     return isArchived ? 'bg-gray-100 text-gray-800' : 'bg-green-100 text-green-800';
@@ -83,6 +97,26 @@ const NotesTableBase = ({
         </div>
       </span>
     );
+  };
+
+  const handleDeleteClick = (noteId: string) => {
+    setNoteToDelete(noteId);
+    setDeleteConfirmOpen(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (noteToDelete) {
+      setLoading(prev => ({ ...prev, [noteToDelete]: true }));
+      try {
+        await deleteNote(noteToDelete);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to delete note');
+      } finally {
+        setLoading(prev => ({ ...prev, [noteToDelete]: false }));
+        setNoteToDelete(null);
+        setDeleteConfirmOpen(false);
+      }
+    }
   };
 
   return (
@@ -205,6 +239,14 @@ const NotesTableBase = ({
                         >
                           {isArchived ? 'Unarchive Note' : 'Archive Note'}
                         </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() => handleDeleteClick(note.id)}
+                          disabled={isLoading}
+                          className="text-red-600 hover:text-red-700 focus:text-red-700"
+                        >
+                          <Trash2 className="h-4 w-4 mr-2" />
+                          Delete Note
+                        </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </TableCell>
@@ -225,6 +267,26 @@ const NotesTableBase = ({
             onClose={() => setNoteToEdit(null)}
           />
         )}
+
+        <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Are you sure you want to delete this note?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This action cannot be undone. This will permanently delete the note and all its content.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction 
+                onClick={handleDeleteConfirm}
+                className="bg-red-600 hover:bg-red-700 focus:ring-red-600"
+              >
+                Delete
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </div>
   );
@@ -302,6 +364,36 @@ const NotesTable = ({ notes: initialNotes, onNoteUpdate }: NotesTableProps) => {
     }
   };
 
+  const deleteNote = async (noteId: string): Promise<void> => {
+    try {
+      // First, delete from the notes table
+      const { error: noteError } = await supabase
+        .from('notes')
+        .delete()
+        .eq('id', noteId);
+
+      if (noteError) throw noteError;
+
+      // Then, delete from the items table
+      const { error: itemError } = await supabase
+        .from('items')
+        .delete()
+        .eq('id', noteId);
+
+      if (itemError) throw itemError;
+
+      // Remove from local state
+      setLocalNotes(prevNotes => prevNotes.filter(note => note.id !== noteId));
+      
+      // Notify parent component
+      await onNoteUpdate();
+
+    } catch (err) {
+      console.error('Error deleting note:', err);
+      throw err;
+    }
+  };
+
   const sortedNotes = useMemo(() => {
     const sortNotes = (notesToSort: any[]): any[] => {
       return [...notesToSort].sort((a, b) => {
@@ -356,6 +448,7 @@ const NotesTable = ({ notes: initialNotes, onNoteUpdate }: NotesTableProps) => {
           onSort={handleSort}
           tableType="active"
           updateNoteStatus={updateNoteStatus}
+          deleteNote={deleteNote}
         />
       </div>
 
@@ -387,6 +480,7 @@ const NotesTable = ({ notes: initialNotes, onNoteUpdate }: NotesTableProps) => {
                 onSort={handleSort}
                 tableType="archived"
                 updateNoteStatus={updateNoteStatus}
+                deleteNote={deleteNote}
               />
             )}
           </div>

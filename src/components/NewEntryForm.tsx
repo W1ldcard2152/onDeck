@@ -1,7 +1,7 @@
 'use client'
 
-import React, { useState, useEffect } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from '@/components/ui/dialog';
+import React, { useState, useEffect, useRef } from 'react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -27,6 +27,20 @@ interface NewEntryFormProps {
 }
 
 type EntryType = 'task' | 'note';
+
+// Function to preserve local date - storing just the YYYY-MM-DD part
+function preserveLocalDate(date: Date | undefined): string | null {
+  if (!date) return null;
+  
+  // Extract year, month, and day components
+  const year = date.getFullYear();
+  const month = date.getMonth(); // 0-11
+  const day = date.getDate();
+  
+  // Create a new ISO date string in format YYYY-MM-DD
+  // This completely ignores time and timezone
+  return `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
 
 // Custom DatePicker component to avoid hooks issues
 const DatePickerField: React.FC<{
@@ -91,10 +105,26 @@ export const NewEntryForm: React.FC<NewEntryFormProps> = ({
   const [description, setDescription] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [viewportHeight, setViewportHeight] = useState<number>(0);
+
+  // Add refs for the text areas
+  const contentRef = useRef<HTMLTextAreaElement>(null);
+  const descriptionRef = useRef<HTMLTextAreaElement>(null);
 
   // Determine if we're editing a task or a note
   const isEditingTask = isEditing && initialData && 'status' in initialData;
   const isEditingNote = isEditing && initialData && !('status' in initialData);
+
+  // Parse a date from YYYY-MM-DD format
+  const parseStoredDate = (dateString: string | null): Date | undefined => {
+    if (!dateString) return undefined;
+    
+    // Split the date string by hyphens
+    const [year, month, day] = dateString.split('-').map(Number);
+    
+    // Create a new date using local components
+    return new Date(year, month - 1, day);
+  };
 
   // Initialize form with data when editing
   useEffect(() => {
@@ -110,11 +140,11 @@ export const NewEntryForm: React.FC<NewEntryFormProps> = ({
         setStatus(taskData.status || 'active');
         
         if (taskData.due_date) {
-          setDueDate(new Date(taskData.due_date));
+          setDueDate(parseStoredDate(taskData.due_date));
         }
         
         if (taskData.assigned_date) {
-          setAssignedDate(new Date(taskData.assigned_date));
+          setAssignedDate(parseStoredDate(taskData.assigned_date));
         }
       } else if (isEditingNote) {
         // It's a note
@@ -124,6 +154,34 @@ export const NewEntryForm: React.FC<NewEntryFormProps> = ({
       }
     }
   }, [initialData, isEditing, isEditingTask, isEditingNote]);
+
+  // Add viewport height tracking
+  useEffect(() => {
+    const handleResize = () => {
+      setViewportHeight(window.innerHeight);
+    };
+
+    // Set initial height
+    setViewportHeight(window.innerHeight);
+    
+    // Listen for viewport changes (e.g., when keyboard appears)
+    window.addEventListener('resize', handleResize);
+    
+    return () => {
+      window.removeEventListener('resize', handleResize);
+    };
+  }, []);
+
+  // Focus handler to scroll field into view when focused
+  const handleTextAreaFocus = (ref: React.RefObject<HTMLTextAreaElement>) => {
+    // Wait a bit for the keyboard to appear
+    setTimeout(() => {
+      if (ref.current) {
+        // Scroll the element into view
+        ref.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }, 300);
+  };
 
   const resetForm = () => {
     setTitle('');
@@ -155,8 +213,8 @@ export const NewEntryForm: React.FC<NewEntryFormProps> = ({
           const { error: taskError } = await supabase
             .from('tasks')
             .update({
-              due_date: dueDate?.toISOString() || null,
-              assigned_date: assignedDate?.toISOString() || null,
+              due_date: preserveLocalDate(dueDate),
+              assigned_date: preserveLocalDate(assignedDate),
               status: status,
               description: description.trim() || null,
               priority: priority
@@ -206,8 +264,8 @@ export const NewEntryForm: React.FC<NewEntryFormProps> = ({
           type,
           user_id: user.id,
           content: type === 'note' ? content.trim() : null,
-          due_date: dueDate?.toISOString() || null,
-          assigned_date: assignedDate?.toISOString() || null,
+          due_date: preserveLocalDate(dueDate),
+          assigned_date: preserveLocalDate(assignedDate),
           status: type === 'task' ? status : undefined,
           priority: type === 'task' ? priority : undefined,
           description: type === 'task' ? description.trim() : null,
@@ -231,94 +289,6 @@ export const NewEntryForm: React.FC<NewEntryFormProps> = ({
     }
   };
 
-  const renderTypeSpecificFields = () => {
-    switch (type) {
-      case 'task':
-        return (
-          <>
-            <DatePickerField
-              label="Assigned Date"
-              selectedDate={assignedDate}
-              onDateChange={setAssignedDate}
-            />
-            <DatePickerField
-              label="Due Date"
-              selectedDate={dueDate}
-              onDateChange={setDueDate}
-            />
-            
-            <div className="space-y-2">
-              <Label htmlFor="status">Status</Label>
-              <Select 
-                value={status} 
-                onValueChange={(value) => {
-                  if (value === 'on_deck' || value === 'active' || value === 'completed') {
-                    setStatus(value);
-                  }
-                }}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="on_deck">On Deck</SelectItem>
-                  <SelectItem value="active">Active</SelectItem>
-                  <SelectItem value="completed">Completed</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="priority">Priority</Label>
-              <Select 
-                value={priority} 
-                onValueChange={(value) => {
-                  if (value === 'low' || value === 'normal' || value === 'high') {
-                    setPriority(value);
-                  }
-                }}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select priority" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="low">Low</SelectItem>
-                  <SelectItem value="normal">Normal</SelectItem>
-                  <SelectItem value="high">High</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="description">Description</Label>
-              <Textarea
-                id="description"
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder="Enter description"
-                className="h-32"
-              />
-            </div>
-          </>
-        );
-      case 'note':
-        return (
-          <div className="space-y-2">
-            <Label htmlFor="content">Content</Label>
-            <Textarea
-              id="content"
-              value={content}
-              onChange={(e) => setContent(e.target.value)}
-              placeholder="Enter content"
-              className="h-32"
-            />
-          </div>
-        );
-      default:
-        return null;
-    }
-  };
-
   return (
     <Dialog 
       open={open} 
@@ -338,7 +308,7 @@ export const NewEntryForm: React.FC<NewEntryFormProps> = ({
           </Button>
         ) : null}
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto pb-20 md:pb-6">
         <DialogHeader>
           <DialogTitle>
             {isEditing ? 
@@ -390,70 +360,76 @@ export const NewEntryForm: React.FC<NewEntryFormProps> = ({
             />
           </div>
 
-          {/* Render fields specific to the selected type */}
+          {/* Show fields based on entry type */}
           {(type === 'task' || isEditingTask) ? (
             <>
-              <DatePickerField
-                label="Assigned Date"
-                selectedDate={assignedDate}
-                onDateChange={setAssignedDate}
-              />
-              <DatePickerField
-                label="Due Date"
-                selectedDate={dueDate}
-                onDateChange={setDueDate}
-              />
-              
-              <div className="space-y-2">
-                <Label htmlFor="status">Status</Label>
-                <Select 
-                  value={status} 
-                  onValueChange={(value) => {
-                    if (value === 'on_deck' || value === 'active' || value === 'completed') {
-                      setStatus(value);
-                    }
-                  }}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select status" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="on_deck">On Deck</SelectItem>
-                    <SelectItem value="active">Active</SelectItem>
-                    <SelectItem value="completed">Completed</SelectItem>
-                  </SelectContent>
-                </Select>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <DatePickerField
+                  label="Assigned Date"
+                  selectedDate={assignedDate}
+                  onDateChange={setAssignedDate}
+                />
+                <DatePickerField
+                  label="Due Date"
+                  selectedDate={dueDate}
+                  onDateChange={setDueDate}
+                />
               </div>
+              
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="status">Status</Label>
+                  <Select 
+                    value={status} 
+                    onValueChange={(value) => {
+                      if (value === 'on_deck' || value === 'active' || value === 'completed') {
+                        setStatus(value);
+                      }
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="on_deck">On Deck</SelectItem>
+                      <SelectItem value="active">Active</SelectItem>
+                      <SelectItem value="completed">Completed</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="priority">Priority</Label>
-                <Select 
-                  value={priority} 
-                  onValueChange={(value) => {
-                    if (value === 'low' || value === 'normal' || value === 'high') {
-                      setPriority(value);
-                    }
-                  }}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select priority" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="low">Low</SelectItem>
-                    <SelectItem value="normal">Normal</SelectItem>
-                    <SelectItem value="high">High</SelectItem>
-                  </SelectContent>
-                </Select>
+                <div className="space-y-2">
+                  <Label htmlFor="priority">Priority</Label>
+                  <Select 
+                    value={priority} 
+                    onValueChange={(value) => {
+                      if (value === 'low' || value === 'normal' || value === 'high') {
+                        setPriority(value);
+                      }
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select priority" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="low">Low</SelectItem>
+                      <SelectItem value="normal">Normal</SelectItem>
+                      <SelectItem value="high">High</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
 
               <div className="space-y-2">
                 <Label htmlFor="description">Description</Label>
                 <Textarea
                   id="description"
+                  ref={descriptionRef}
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                   placeholder="Enter description"
-                  className="h-32"
+                  className="h-24 min-h-[6rem]"
+                  onFocus={() => handleTextAreaFocus(descriptionRef)}
                 />
               </div>
             </>
@@ -462,23 +438,27 @@ export const NewEntryForm: React.FC<NewEntryFormProps> = ({
               <Label htmlFor="content">Content</Label>
               <Textarea
                 id="content"
+                ref={contentRef}
                 value={content}
                 onChange={(e) => setContent(e.target.value)}
                 placeholder="Enter content"
-                className="h-32"
+                className="h-24 min-h-[6rem]"
+                onFocus={() => handleTextAreaFocus(contentRef)}
               />
             </div>
           )}
 
-          <Button 
-            type="submit" 
-            className="w-full bg-blue-600 hover:bg-blue-700"
-            disabled={isSubmitting}
-          >
-            {isSubmitting ? (isEditing ? "Saving..." : "Creating...") : (isEditing ? "Save Changes" : "Create Entry")}
-          </Button>
+          <DialogFooter className="sticky bottom-0 pt-4 pb-2 bg-white border-t mt-4">
+            <Button 
+              type="submit" 
+              className="w-full bg-blue-600 hover:bg-blue-700"
+              disabled={isSubmitting}
+            >
+              {isSubmitting ? (isEditing ? "Saving..." : "Creating...") : (isEditing ? "Save Changes" : "Create Entry")}
+            </Button>
+          </DialogFooter>
         </form>
       </DialogContent>
     </Dialog>
   );
-};
+}

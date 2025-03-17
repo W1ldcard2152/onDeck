@@ -57,6 +57,24 @@ interface ProjectInfo {
   stepTitle?: string;
 }
 
+function parseDateForDisplay(dateString: string | null): Date | null {
+  if (!dateString) return null;
+  
+  try {
+    // For dates stored as YYYY-MM-DD
+    if (dateString.includes('-') && dateString.length <= 10) {
+      const [year, month, day] = dateString.split('-').map(Number);
+      return new Date(year, month - 1, day);
+    }
+    
+    // For ISO dates, create a new Date object
+    return new Date(dateString);
+  } catch (e) {
+    console.error('Error parsing date:', e);
+    return null;
+  }
+}
+
 // TaskTableBase Component
 const TaskTableBase: React.FC<TaskTableBaseProps> = ({ 
   tasks, 
@@ -695,7 +713,7 @@ const TaskTableBase: React.FC<TaskTableBaseProps> = ({
                     </TableCell>
                     
                     <TableCell>
-                      {task.assigned_date ? format(new Date(task.assigned_date), 'MMM d, yyyy') : '-'}
+                      {task.assigned_date ? format(parseDateForDisplay(task.assigned_date)!, 'MMM d, yyyy') : '-'}
                     </TableCell>
                     
                     <TableCell className="max-w-[12rem] truncate">
@@ -703,7 +721,7 @@ const TaskTableBase: React.FC<TaskTableBaseProps> = ({
                     </TableCell>
                     
                     <TableCell>
-                      {task.due_date ? format(new Date(task.due_date), 'MMM d, yyyy') : '-'}
+                      {task.due_date ? format(parseDateForDisplay(task.due_date)!, 'MMM d, yyyy') : '-'}
                     </TableCell>
                     
                     <TableCell>

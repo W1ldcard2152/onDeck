@@ -76,24 +76,23 @@ interface OfflineCache {
           return [];
         }
       }
-    // Store specific collection data (tasks, notes, etc.)
-// Store specific collection data (tasks, notes, etc.)
-public async cacheCollection(
-  collectionName: 'tasks' | 'notes' | 'projects', 
-  data: any[]
-): Promise<void> {
-  if (typeof window === 'undefined') return;
-  
-  try {
-    const currentCache = await this.getCache();
-    currentCache[collectionName] = data;
-    currentCache.lastSynced = new Date().toISOString();
-    
-    localStorage.setItem(this.storageKey, JSON.stringify(currentCache));
-  } catch (error) {
-    console.error(`Error caching ${collectionName}:`, error);
-  }
-}
+        // Store specific collection data (tasks, notes, etc.)
+    public async cacheCollection(
+      collectionName: 'tasks' | 'notes' | 'projects', 
+      data: any[]
+    ): Promise<void> {
+      if (typeof window === 'undefined') return;
+      
+      try {
+        const currentCache = await this.getCache();
+        currentCache[collectionName] = data;
+        currentCache.lastSynced = new Date().toISOString();
+        
+        localStorage.setItem(this.storageKey, JSON.stringify(currentCache));
+      } catch (error) {
+        console.error(`Error caching ${collectionName}:`, error);
+      }
+    }
   
     // Check if we are currently offline
     public isOffline(): boolean {
