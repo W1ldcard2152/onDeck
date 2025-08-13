@@ -1,12 +1,15 @@
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import type { Database } from '@/types/database.types'
-import type { TaskStatus, Priority } from '@/types/database.types'
+import type { TaskStatus, Priority, EntryType } from '@/types/database.types'
 
 interface CreateEntryParams {
   title: string;
   type: 'task' | 'note';
   user_id: string;
   content?: string | null;
+  url?: string | null;
+  knowledge_base_id?: string | null;
+  entry_type?: EntryType;
   due_date?: string | null;
   assigned_date?: string | null;
   status?: TaskStatus;
@@ -67,7 +70,10 @@ export class EntryService {
       if (entry.type === 'note') {
         const noteData = {
           id: itemData.id,
-          content: entry.content?.trim() || null
+          content: entry.content?.trim() || null,
+          url: entry.url?.trim() || null,
+          knowledge_base_id: entry.knowledge_base_id || null,
+          entry_type: entry.entry_type || 'note'
         };
 
         const { error: noteError } = await supabase

@@ -1,6 +1,7 @@
 export type TaskStatus = 'on_deck' | 'active' | 'completed';
 export type Priority = 'low' | 'normal' | 'high' | null;
 export type EntryType = 'task' | 'note' | 'project';
+export type KnowledgeEntryType = 'article' | 'video' | 'document' | 'resource' | 'note' | 'link';
 export type ProjectStatus = 'active' | 'completed' | 'on_hold';
 export type StepStatus = 'pending' | 'in_progress' | 'completed';
 
@@ -50,7 +51,12 @@ export interface TaskWithDetails {
 export interface NoteWithDetails {
   id: string;
   content: string | null;
+  url: string | null;
+  file_path: string | null;
+  entry_type: KnowledgeEntryType;
+  knowledge_base_id: string | null;
   item: Item;
+  knowledge_base?: KnowledgeBase;
 }
 
 export interface ProjectStep {
@@ -102,4 +108,30 @@ export interface ProjectWithDetails {
   tasks: Task[];
   item: Item;
   steps: ProjectStep[];
+}
+
+export interface Keystone {
+  id: string;
+  user_id: string;
+  name: string;
+  description: string | null;
+  color: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface KnowledgeBase {
+  id: string;
+  user_id: string;
+  name: string;
+  description: string | null;
+  keystone_id: string | null;
+  entry_count: number;
+  created_at: string;
+  updated_at: string;
+  keystone?: Keystone;
+}
+
+export interface KnowledgeBaseWithDetails extends KnowledgeBase {
+  entries: NoteWithDetails[];
 }

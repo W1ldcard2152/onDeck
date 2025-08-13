@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import TruncatedCell from './TruncatedCell';
 import { format } from 'date-fns';
-import { ChevronDown, ChevronUp, ChevronRight, MoreHorizontal, Trash2 } from 'lucide-react';
+import { ChevronDown, ChevronUp, ChevronRight, MoreHorizontal, Trash2, ExternalLink, FileText, Video, File, Link, BookOpen } from 'lucide-react';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import { NewEntryForm } from '@/components/NewEntryForm';
 import {
@@ -25,10 +25,29 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import type { Database } from '@/types/database.types';
+import type { KnowledgeEntryType, NoteWithDetails } from '@/lib/types';
 
 type NoteStatus = 'active' | 'archived';
 type SortDirection = 'asc' | 'desc' | null;
-type SortField = 'status' | 'title' | 'created_at' | 'content' | null;
+type SortField = 'status' | 'title' | 'created_at' | 'content' | 'entry_type' | 'knowledge_base' | null;
+
+const entryTypeIcons: Record<KnowledgeEntryType, React.ComponentType<{ className?: string }>> = {
+  article: FileText,
+  video: Video,
+  document: File,
+  resource: Link,
+  note: BookOpen,
+  link: ExternalLink
+};
+
+const entryTypeColors: Record<KnowledgeEntryType, string> = {
+  article: 'bg-blue-100 text-blue-800',
+  video: 'bg-red-100 text-red-800',
+  document: 'bg-green-100 text-green-800',
+  resource: 'bg-purple-100 text-purple-800',
+  note: 'bg-yellow-100 text-yellow-800',
+  link: 'bg-gray-100 text-gray-800'
+};
 
 interface SortState {
   field: SortField;
@@ -37,12 +56,12 @@ interface SortState {
 }
 
 interface NotesTableProps {
-  notes: any[];
+  notes: NoteWithDetails[];
   onNoteUpdate: () => void;
 }
 
 interface NotesTableBaseProps {
-  notes: any[];
+  notes: NoteWithDetails[];
   onNoteUpdate: () => void;
   sorts: SortState[];
   onSort: (field: SortField) => void;
@@ -161,6 +180,25 @@ const NotesTableBase = ({
               <TableHead>
                 <Button 
                   variant="ghost" 
+                  onClick={() => onSort('entry_type')}
+                  className="hover:bg-gray-100"
+                >
+                  Type {getSortIcon('entry_type')}
+                </Button>
+              </TableHead>
+              <TableHead>
+                <Button 
+                  variant="ghost" 
+                  onClick={() => onSort('knowledge_base')}
+                  className="hover:bg-gray-100"
+                >
+                  Knowledge Base {getSortIcon('knowledge_base')}
+                </Button>
+              </TableHead>
+              <TableHead>URL</TableHead>
+              <TableHead>
+                <Button 
+                  variant="ghost" 
                   onClick={() => onSort('content')}
                   className="hover:bg-gray-100"
                 >
@@ -209,6 +247,47 @@ const NotesTableBase = ({
                   </TableCell>
                   <TableCell>
                     {format(new Date(note.item.created_at), 'MMM d, yyyy')}
+                  </TableCell>
+                  <TableCell>
+                    {note.entry_type && entryTypeColors[note.entry_type] && entryTypeIcons[note.entry_type] && (
+                      <Badge 
+                        variant="secondary" 
+                        className={`${entryTypeColors[note.entry_type as KnowledgeEntryType]} flex items-center gap-1 w-fit`}
+                      >
+                        {React.createElement(entryTypeIcons[note.entry_type as KnowledgeEntryType], { className: "w-3 h-3" })}
+                        {note.entry_type}
+                      </Badge>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    {note.knowledge_base ? (
+                      <Badge variant="outline" className="flex items-center gap-1 w-fit">
+                        {note.knowledge_base.keystone && (
+                          <div 
+                            className="w-2 h-2 rounded-full"
+                            style={{ backgroundColor: note.knowledge_base.keystone.color }}
+                          />
+                        )}
+                        {note.knowledge_base.name}
+                      </Badge>
+                    ) : (
+                      <span className="text-gray-400">None</span>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    {note.url ? (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => note.url && window.open(note.url, '_blank', 'noopener,noreferrer')}
+                        className="h-8 p-0 text-blue-600 hover:text-blue-800"
+                      >
+                        <ExternalLink className="w-4 h-4 mr-1" />
+                        Open
+                      </Button>
+                    ) : (
+                      <span className="text-gray-400">None</span>
+                    )}
                   </TableCell>
                   <TableCell className="max-w-[24rem]">
                     <TruncatedCell content={note.content} maxLength={100} />
@@ -417,6 +496,16 @@ const NotesTable = ({ notes: initialNotes, onNoteUpdate }: NotesTableProps) => {
             }
             case 'content': {
               comparison = (a.content || '').localeCompare(b.content || '');
+              break;
+            }
+            case 'entry_type': {
+              comparison = (a.entry_type || '').localeCompare(b.entry_type || '');
+              break;
+            }
+            case 'knowledge_base': {
+              const aKB = a.knowledge_base?.name || '';
+              const bKB = b.knowledge_base?.name || '';
+              comparison = aKB.localeCompare(bKB);
               break;
             }
           }

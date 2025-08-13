@@ -1,5 +1,6 @@
 export type TaskStatus = 'on_deck' | 'active' | 'completed';
 export type Priority = 'low' | 'normal' | 'high';
+export type EntryType = 'article' | 'video' | 'document' | 'resource' | 'note' | 'link';
 
 export interface NoteWithDetails {
   id: string;
@@ -63,17 +64,90 @@ export interface Database {
         Row: {
           id: string;
           content: string | null;
+          url: string | null;
+          file_path: string | null;
+          entry_type: EntryType;
+          knowledge_base_id: string | null;
           created_at: string;
         };
         Insert: {
           id: string;  // Must match items.id
           content?: string | null;
+          url?: string | null;
+          file_path?: string | null;
+          entry_type?: EntryType;
+          knowledge_base_id?: string | null;
           created_at?: string;
         };
         Update: {
           id?: string;
           content?: string | null;
+          url?: string | null;
+          file_path?: string | null;
+          entry_type?: EntryType;
+          knowledge_base_id?: string | null;
           created_at?: string;
+        };
+      };
+      keystones: {
+        Row: {
+          id: string;
+          user_id: string;
+          name: string;
+          description: string | null;
+          color: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          name: string;
+          description?: string | null;
+          color?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          name?: string;
+          description?: string | null;
+          color?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
+      knowledge_bases: {
+        Row: {
+          id: string;
+          user_id: string;
+          name: string;
+          description: string | null;
+          keystone_id: string | null;
+          entry_count: number;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          name: string;
+          description?: string | null;
+          keystone_id?: string | null;
+          entry_count?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          name?: string;
+          description?: string | null;
+          keystone_id?: string | null;
+          entry_count?: number;
+          created_at?: string;
+          updated_at?: string;
         };
       };
       tasks: {

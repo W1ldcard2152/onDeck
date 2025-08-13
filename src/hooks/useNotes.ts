@@ -42,11 +42,23 @@ export function useNotes(userId: string | undefined, limit: number = 10) {
         return;
       }
 
-      // Get the note content for each item
+      // Get the note content for each item with knowledge base relationships
       const itemIds = itemsData.map(item => item.id);
       const { data: notesData, error: notesError } = await supabase
         .from('notes')
-        .select('*')
+        .select(`
+          *,
+          knowledge_bases (
+            id,
+            name,
+            description,
+            keystones (
+              id,
+              name,
+              color
+            )
+          )
+        `)
         .in('id', itemIds);
 
       console.log('Notes query response:', { notesData, notesError });
@@ -55,11 +67,27 @@ export function useNotes(userId: string | undefined, limit: number = 10) {
 
       // Combine items and notes
       const combinedNotes = itemsData.map(item => {
-        const noteContent = notesData?.find(note => note.id === item.id)?.content || null;
+        const noteData = notesData?.find(note => note.id === item.id);
         
         return {
           id: item.id,
-          content: noteContent,
+          content: noteData?.content || null,
+          url: noteData?.url || null,
+          file_path: noteData?.file_path || null,
+          entry_type: noteData?.entry_type || 'note',
+          knowledge_base_id: noteData?.knowledge_base_id || null,
+          knowledge_base: noteData?.knowledge_bases ? {
+            id: noteData.knowledge_bases.id,
+            name: noteData.knowledge_bases.name,
+            description: noteData.knowledge_bases.description,
+            keystone: noteData.knowledge_bases.keystones ? {
+              id: noteData.knowledge_bases.keystones.id,
+              name: noteData.knowledge_bases.keystones.name,
+              color: noteData.knowledge_bases.keystones.color,
+              user_id: '', created_at: '', updated_at: '', description: ''
+            } : undefined,
+            user_id: '', keystone_id: '', entry_count: 0, created_at: '', updated_at: ''
+          } : undefined,
           item: {
             id: item.id,
             user_id: item.user_id,

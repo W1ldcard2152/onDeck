@@ -16,6 +16,7 @@ import UserMenu from '../UserMenu';
 import IntegratedSearch from '../IntegratedSearch';
 import ClientLayout from './ClientLayout';
 import ProjectsPage from '@/app/projects/page';
+import KnowledgePage from '@/app/knowledge/page';
 import InstallPWA from '../InstallPWA';
 import PWAStatus from '../PWAStatus';
 import OfflineNotification from '../OfflineNotification';
@@ -79,6 +80,8 @@ const DesktopLayout = () => {
         return <NotesPage />;
       case 'projects':
         return <ProjectsPage />;
+      case 'knowledge':
+        return <KnowledgePage />;
       case 'habits':
         return <div className="text-center py-12">Habits feature coming soon</div>;
       case 'journal':

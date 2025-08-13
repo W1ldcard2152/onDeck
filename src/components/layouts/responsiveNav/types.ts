@@ -1,4 +1,4 @@
-export type SectionType = 'dashboard' | 'tasks' | 'notes' | 'projects' | 'habits' | 'journal';
+export type SectionType = 'dashboard' | 'tasks' | 'notes' | 'projects' | 'knowledge' | 'habits' | 'journal';
 
 export interface NavProps {
   activeSection: SectionType;

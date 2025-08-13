@@ -12,8 +12,9 @@ import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { CalendarIcon, Plus } from 'lucide-react';
 import { useSupabaseAuth } from '@/hooks/useSupabaseAuth';
+import { useKnowledgeBases } from '@/hooks/useKnowledgeBases';
 import { EntryService } from '@/lib/entryService';
-import type { TaskStatus, Priority } from '@/types/database.types';
+import type { TaskStatus, Priority, EntryType as KnowledgeEntryType } from '@/types/database.types';
 import type { TaskWithDetails, NoteWithDetails } from '@/lib/types';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import { DayPicker } from "react-day-picker";
@@ -93,6 +94,7 @@ export const NewEntryForm: React.FC<NewEntryFormProps> = ({
   onClose 
 }) => {
   const { user } = useSupabaseAuth();
+  const { knowledgeBases } = useKnowledgeBases(user?.id);
   const supabase = createClientComponentClient();
   const [open, setOpen] = useState(isEditing);
   const [type, setType] = useState<EntryType>('note'); // Default to note
@@ -103,6 +105,9 @@ export const NewEntryForm: React.FC<NewEntryFormProps> = ({
   const [priority, setPriority] = useState<Priority>('normal');
   const [status, setStatus] = useState<TaskStatus>('active');
   const [description, setDescription] = useState('');
+  const [url, setUrl] = useState('');
+  const [knowledgeBaseId, setKnowledgeBaseId] = useState<string>('');
+  const [entryType, setEntryType] = useState<KnowledgeEntryType>('note');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [viewportHeight, setViewportHeight] = useState<number>(0);
@@ -151,6 +156,9 @@ export const NewEntryForm: React.FC<NewEntryFormProps> = ({
         setType('note');
         const noteData = initialData as NoteWithDetails;
         setContent(noteData.content || '');
+        setUrl(noteData.url || '');
+        setKnowledgeBaseId(noteData.knowledge_base_id || 'none');
+        setEntryType(noteData.entry_type || 'note');
       }
     }
   }, [initialData, isEditing, isEditingTask, isEditingNote]);
@@ -191,6 +199,9 @@ export const NewEntryForm: React.FC<NewEntryFormProps> = ({
     setPriority('normal');
     setStatus('active');
     setDescription('');
+    setUrl('');
+    setKnowledgeBaseId('none');
+    setEntryType('note');
     setType('note');
     setError(null);
   };
@@ -237,7 +248,10 @@ export const NewEntryForm: React.FC<NewEntryFormProps> = ({
           const { error: noteError } = await supabase
             .from('notes')
             .update({
-              content: content.trim() || null
+              content: content.trim() || null,
+              url: url.trim() || null,
+              knowledge_base_id: knowledgeBaseId === 'none' ? null : knowledgeBaseId || null,
+              entry_type: entryType
             })
             .eq('id', initialData.id);
 
@@ -264,6 +278,9 @@ export const NewEntryForm: React.FC<NewEntryFormProps> = ({
           type,
           user_id: user.id,
           content: type === 'note' ? content.trim() : null,
+          url: type === 'note' ? url.trim() || null : null,
+          knowledge_base_id: type === 'note' ? (knowledgeBaseId === 'none' ? null : knowledgeBaseId || null) : null,
+          entry_type: type === 'note' ? entryType : undefined,
           due_date: preserveLocalDate(dueDate),
           assigned_date: preserveLocalDate(assignedDate),
           status: type === 'task' ? status : undefined,
@@ -434,18 +451,85 @@ export const NewEntryForm: React.FC<NewEntryFormProps> = ({
               </div>
             </>
           ) : (
-            <div className="space-y-2">
-              <Label htmlFor="content">Content</Label>
-              <Textarea
-                id="content"
-                ref={contentRef}
-                value={content}
-                onChange={(e) => setContent(e.target.value)}
-                placeholder="Enter content"
-                className="h-24 min-h-[6rem]"
-                onFocus={() => handleTextAreaFocus(contentRef)}
-              />
-            </div>
+            <>
+              <div className="space-y-2">
+                <Label htmlFor="url">URL (optional)</Label>
+                <Input
+                  id="url"
+                  type="url"
+                  value={url}
+                  onChange={(e) => setUrl(e.target.value)}
+                  placeholder="https://example.com"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="entry_type">Entry Type</Label>
+                  <Select 
+                    value={entryType} 
+                    onValueChange={(value) => {
+                      if (['article', 'video', 'document', 'resource', 'note', 'link'].includes(value)) {
+                        setEntryType(value as KnowledgeEntryType);
+                      }
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select entry type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="article">Article</SelectItem>
+                      <SelectItem value="video">Video</SelectItem>
+                      <SelectItem value="document">Document</SelectItem>
+                      <SelectItem value="resource">Resource</SelectItem>
+                      <SelectItem value="note">Note</SelectItem>
+                      <SelectItem value="link">Link</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="knowledge_base">Knowledge Base</Label>
+                  <Select
+                    value={knowledgeBaseId}
+                    onValueChange={setKnowledgeBaseId}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select knowledge base" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">No knowledge base</SelectItem>
+                      {knowledgeBases.map((kb) => (
+                        <SelectItem key={kb.id} value={kb.id}>
+                          <div className="flex items-center gap-2">
+                            {kb.keystone && (
+                              <div 
+                                className="w-2 h-2 rounded-full"
+                                style={{ backgroundColor: kb.keystone.color }}
+                              />
+                            )}
+                            {kb.name}
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="content">Content</Label>
+                <Textarea
+                  id="content"
+                  ref={contentRef}
+                  value={content}
+                  onChange={(e) => setContent(e.target.value)}
+                  placeholder="Enter content"
+                  className="h-24 min-h-[6rem]"
+                  onFocus={() => handleTextAreaFocus(contentRef)}
+                />
+              </div>
+            </>
           )}
 
           <DialogFooter className="sticky bottom-0 pt-4 pb-2 bg-white border-t mt-4">
