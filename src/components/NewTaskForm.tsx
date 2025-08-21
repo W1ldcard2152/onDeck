@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Plus } from 'lucide-react';
+import { Plus, CheckSquare } from 'lucide-react';
 import { NewEntryForm } from '@/components/NewEntryForm';
 
 interface NewTaskFormProps {
@@ -16,7 +16,7 @@ export const NewTaskForm: React.FC<NewTaskFormProps> = ({ onEntryCreated }) => {
   return (
     <>
       <Button variant="outline" onClick={() => setOpen(true)} className="flex items-center gap-2">
-        <Plus className="h-4 w-4" />
+        <CheckSquare className="h-4 w-4" />
         Task
       </Button>
       
