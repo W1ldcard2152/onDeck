@@ -472,6 +472,7 @@ const TaskTableBase: React.FC<TaskTableBaseProps> = ({
   };
 
   const getSortIcon = (field: SortField): JSX.Element | null => {
+    if (!sorts || sorts.length === 0) return null;
     const sort = sorts.find(s => s.field === field);
     if (!sort) return null;
 
@@ -514,85 +515,61 @@ const TaskTableBase: React.FC<TaskTableBaseProps> = ({
             <TableHeader>
               <TableRow>
                 <TableHead>
-                  {tableType === 'active' ? (
-                    <Button 
-                      variant="ghost" 
-                      onClick={() => onSort('status')}
-                      className="hover:bg-gray-100"
-                    >
-                      Status {getSortIcon('status')}
-                    </Button>
-                  ) : (
-                    <span className="text-sm font-medium">Status</span>
-                  )}
+                  <Button 
+                    variant="ghost" 
+                    onClick={() => onSort('status')}
+                    className="hover:bg-gray-100"
+                  >
+                    Status {getSortIcon('status')}
+                  </Button>
                 </TableHead>
                 <TableHead>
-                  {tableType === 'active' ? (
-                    <Button 
-                      variant="ghost" 
-                      onClick={() => onSort('title')}
-                      className="hover:bg-gray-100"
-                    >
-                      Title {getSortIcon('title')}
-                    </Button>
-                  ) : (
-                    <span className="text-sm font-medium">Title</span>
-                  )}
+                  <Button 
+                    variant="ghost" 
+                    onClick={() => onSort('title')}
+                    className="hover:bg-gray-100"
+                  >
+                    Title {getSortIcon('title')}
+                  </Button>
                 </TableHead>
                 <TableHead>
-                  {tableType === 'active' ? (
-                    <Button 
-                      variant="ghost" 
-                      onClick={() => onSort('priority')}
-                      className="hover:bg-gray-100"
-                    >
-                      Priority {getSortIcon('priority')}
-                    </Button>
-                  ) : (
-                    <span className="text-sm font-medium">Priority</span>
-                  )}
+                  <Button 
+                    variant="ghost" 
+                    onClick={() => onSort('priority')}
+                    className="hover:bg-gray-100"
+                  >
+                    Priority {getSortIcon('priority')}
+                  </Button>
                 </TableHead>
                 <TableHead>
-                  {tableType === 'active' ? (
-                    <Button 
-                      variant="ghost" 
-                      onClick={() => onSort('assigned_date')}
-                      className="hover:bg-gray-100"
-                    >
-                      Assigned Date {getSortIcon('assigned_date')}
-                    </Button>
-                  ) : (
-                    <span className="text-sm font-medium">Assigned Date</span>
-                  )}
+                  <Button 
+                    variant="ghost" 
+                    onClick={() => onSort('assigned_date')}
+                    className="hover:bg-gray-100"
+                  >
+                    Assigned Date {getSortIcon('assigned_date')}
+                  </Button>
                 </TableHead>
                 <TableHead>
                   <span className="text-sm font-medium">Description</span>
                 </TableHead>
                 <TableHead>
-                  {tableType === 'active' ? (
-                    <Button 
-                      variant="ghost" 
-                      onClick={() => onSort('due_date')}
-                      className="hover:bg-gray-100"
-                    >
-                      Due Date {getSortIcon('due_date')}
-                    </Button>
-                  ) : (
-                    <span className="text-sm font-medium">Due Date</span>
-                  )}
+                  <Button 
+                    variant="ghost" 
+                    onClick={() => onSort('due_date')}
+                    className="hover:bg-gray-100"
+                  >
+                    Due Date {getSortIcon('due_date')}
+                  </Button>
                 </TableHead>
                 <TableHead>
-                  {tableType === 'active' ? (
-                    <Button 
-                      variant="ghost" 
-                      onClick={() => onSort('project')}
-                      className="hover:bg-gray-100"
-                    >
-                      Linked Project {getSortIcon('project')}
-                    </Button>
-                  ) : (
-                    <span className="text-sm font-medium">Linked Project</span>
-                  )}
+                  <Button 
+                    variant="ghost" 
+                    onClick={() => onSort('project')}
+                    className="hover:bg-gray-100"
+                  >
+                    Linked Project {getSortIcon('project')}
+                  </Button>
                 </TableHead>
                 <TableHead className="w-12 text-right">
                   <span className="text-sm font-medium">Actions</span>
@@ -819,36 +796,78 @@ const TaskTableBase: React.FC<TaskTableBaseProps> = ({
 
 // Main TaskTable component
 const TaskTable: React.FC<TaskTableProps> = ({ tasks, onTaskUpdate }) => {
-  const [showCompleted, setShowCompleted] = useState(false);
-  const [sorts, setSorts] = useState<SortState[]>([]);
+  const [showCompleted, setShowCompleted] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('taskTable_showCompleted');
+      return saved ? JSON.parse(saved) : false;
+    }
+    return false;
+  });
+  
+  // Initialize sorts from localStorage
+  const [activeSorts, setActiveSorts] = useState<SortState[]>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('taskTable_activeSorts');
+      return saved ? JSON.parse(saved) : [];
+    }
+    return [];
+  });
+  
+  const [completedSorts, setCompletedSorts] = useState<SortState[]>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('taskTable_completedSorts');
+        return saved ? JSON.parse(saved) : [];
+      } catch (error) {
+        console.error('Error loading completed sorts from localStorage:', error);
+        return [];
+      }
+    }
+    return [];
+  });
 
-  const handleSort = (field: SortField): void => {
+  const createSortHandler = (setSorts: React.Dispatch<React.SetStateAction<SortState[]>>, storageKey: string) => (field: SortField): void => {
     setSorts(prevSorts => {
       const existingIndex = prevSorts.findIndex(sort => sort.field === field);
 
+      let newSorts: SortState[];
+      
       if (existingIndex === -1) {
         if (prevSorts.length >= 3) return prevSorts;
-        return [...prevSorts, { field, direction: 'asc', level: prevSorts.length + 1 }];
-      }
-
-      const existing = prevSorts[existingIndex];
-      const newSorts = [...prevSorts];
-
-      if (existing.direction === 'asc') {
-        newSorts[existingIndex] = { ...existing, direction: 'desc' };
+        newSorts = [...prevSorts, { field, direction: 'asc', level: prevSorts.length + 1 }];
       } else {
-        newSorts.splice(existingIndex, 1);
-        return newSorts.map((sort, index) => ({
-          ...sort,
-          level: index + 1
-        }));
+        const existing = prevSorts[existingIndex];
+        const tempSorts = [...prevSorts];
+
+        if (existing.direction === 'asc') {
+          tempSorts[existingIndex] = { ...existing, direction: 'desc' };
+          newSorts = tempSorts;
+        } else {
+          tempSorts.splice(existingIndex, 1);
+          newSorts = tempSorts.map((sort, index) => ({
+            ...sort,
+            level: index + 1
+          }));
+        }
       }
 
+      // Save to localStorage
+      if (typeof window !== 'undefined') {
+        try {
+          localStorage.setItem(storageKey, JSON.stringify(newSorts));
+        } catch (error) {
+          console.error('Error saving sorts to localStorage:', error);
+        }
+      }
+      
       return newSorts;
     });
   };
 
-  const sortTasks = (tasksToSort: TaskWithDetails[]): TaskWithDetails[] => {
+  const handleActiveSort = createSortHandler(setActiveSorts, 'taskTable_activeSorts');
+  const handleCompletedSort = createSortHandler(setCompletedSorts, 'taskTable_completedSorts');
+
+  const sortTasks = (tasksToSort: TaskWithDetails[], sorts: SortState[]): TaskWithDetails[] => {
     return [...tasksToSort].sort((a, b) => {
       for (const sort of sorts) {
         let comparison = 0;
@@ -903,12 +922,12 @@ const TaskTable: React.FC<TaskTableProps> = ({ tasks, onTaskUpdate }) => {
   const activeTasks = sortTasks(tasks.filter(task => {
     const status = task?.status?.toLowerCase() || 'on_deck';
     return status === 'active' || status === 'on_deck';
-  }));
+  }), activeSorts);
   
   const completedTasks = sortTasks(tasks.filter(task => {
     const status = task?.status?.toLowerCase() || 'on_deck';
     return status === 'completed';
-  }));
+  }), completedSorts);
 
   const completedCount = completedTasks.length;
 
@@ -918,16 +937,23 @@ const TaskTable: React.FC<TaskTableProps> = ({ tasks, onTaskUpdate }) => {
         <TaskTableBase 
           tasks={activeTasks}
           onTaskUpdate={onTaskUpdate}
-          sorts={sorts}
-          onSort={handleSort}
+          sorts={activeSorts}
+          onSort={handleActiveSort}
           tableType="active"
+          key={`active-${activeSorts.map(s => `${s.field}-${s.direction}-${s.level}`).join(',')}`}
         />
       </div>
 
       <div className="bg-white rounded-lg shadow">
         <div 
           className="p-4 border-b cursor-pointer hover:bg-gray-50 transition-colors"
-          onClick={() => setShowCompleted(!showCompleted)}
+          onClick={() => {
+            const newValue = !showCompleted;
+            setShowCompleted(newValue);
+            if (typeof window !== 'undefined') {
+              localStorage.setItem('taskTable_showCompleted', JSON.stringify(newValue));
+            }
+          }}
         >
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-2">
@@ -948,9 +974,10 @@ const TaskTable: React.FC<TaskTableProps> = ({ tasks, onTaskUpdate }) => {
               <TaskTableBase 
                 tasks={completedTasks}
                 onTaskUpdate={onTaskUpdate}
-                sorts={sorts}
-                onSort={handleSort}
+                sorts={completedSorts}
+                onSort={handleCompletedSort}
                 tableType="completed"
+                key={`completed-${completedSorts.map(s => `${s.field}-${s.direction}-${s.level}`).join(',')}`}
               />
             )}
           </div>

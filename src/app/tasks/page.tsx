@@ -4,7 +4,10 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useTasks } from '@/hooks/useTasks';
 import { useSupabaseAuth } from '@/hooks/useSupabaseAuth';
 import { TaskTable } from '@/components/TaskTable';
+import { NewTaskForm } from '@/components/NewTaskForm';
+import { NewNoteForm } from '@/components/NewNoteForm';
 import { NewEntryForm } from '@/components/NewEntryForm';
+import { DoneEntryForm } from '@/components/DoneEntryForm';
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { AlertCircle } from 'lucide-react';
 import TasksDebugger from '@/components/TasksDebugger';
@@ -56,9 +59,26 @@ export default function TasksPage() {
 
   return (
     <div className="space-y-6 py-6">
-      <div className="flex justify-between items-center">
-        <h1 className="text-2xl font-bold">Tasks</h1>
-        <NewEntryForm onEntryCreated={handleTaskUpdate} />
+      <div className="mb-6">
+        {/* Desktop layout: title and buttons on same line */}
+        <div className="hidden sm:flex justify-between items-center">
+          <h1 className="text-2xl font-bold">Tasks</h1>
+          <div className="flex gap-2">
+            <DoneEntryForm onEntryCreated={handleTaskUpdate} />
+            <NewTaskForm onEntryCreated={handleTaskUpdate} />
+            <NewNoteForm onEntryCreated={handleTaskUpdate} />
+          </div>
+        </div>
+        
+        {/* Mobile layout: title on top, buttons underneath */}
+        <div className="sm:hidden space-y-4">
+          <h1 className="text-2xl font-bold">Tasks</h1>
+          <div className="flex flex-wrap gap-2">
+            <DoneEntryForm onEntryCreated={handleTaskUpdate} />
+            <NewTaskForm onEntryCreated={handleTaskUpdate} />
+            <NewNoteForm onEntryCreated={handleTaskUpdate} />
+          </div>
+        </div>
       </div>
 
       {/* Add key to force re-render on data changes */}

@@ -25,6 +25,7 @@ interface NewEntryFormProps {
   initialData?: TaskWithDetails | NoteWithDetails;
   isEditing?: boolean;
   onClose?: () => void;
+  defaultType?: EntryType;
 }
 
 type EntryType = 'task' | 'note';
@@ -91,13 +92,14 @@ export const NewEntryForm: React.FC<NewEntryFormProps> = ({
   onEntryCreated, 
   initialData,
   isEditing = false,
-  onClose 
+  onClose,
+  defaultType = 'note'
 }) => {
   const { user } = useSupabaseAuth();
   const { knowledgeBases } = useKnowledgeBases(user?.id);
   const supabase = createClientComponentClient();
   const [open, setOpen] = useState(isEditing);
-  const [type, setType] = useState<EntryType>('note'); // Default to note
+  const [type, setType] = useState<EntryType>(defaultType);
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [dueDate, setDueDate] = useState<Date | undefined>();

@@ -2,7 +2,10 @@
 
 import React from 'react';
 import { NotesTable } from '@/components/NotesTable';
+import { NewTaskForm } from '@/components/NewTaskForm';
+import { NewNoteForm } from '@/components/NewNoteForm';
 import { NewEntryForm } from '@/components/NewEntryForm';
+import { DoneEntryForm } from '@/components/DoneEntryForm';
 import { useSupabaseAuth } from '@/hooks/useSupabaseAuth';
 import { useNotes } from '@/hooks/useNotes';
 
@@ -11,10 +14,27 @@ export default function NotesPage() {
   const { notes, isLoading, error, refetch } = useNotes(user?.id || '');
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-semibold">Notes</h1>
-        <NewEntryForm onEntryCreated={() => refetch()} />
+    <div className="space-y-6 py-6">
+      <div className="mb-6">
+        {/* Desktop layout: title and buttons on same line */}
+        <div className="hidden sm:flex justify-between items-center">
+          <h1 className="text-2xl font-bold">Notes</h1>
+          <div className="flex gap-2">
+            <DoneEntryForm onEntryCreated={() => refetch()} />
+            <NewTaskForm onEntryCreated={() => refetch()} />
+            <NewNoteForm onEntryCreated={() => refetch()} />
+          </div>
+        </div>
+        
+        {/* Mobile layout: title on top, buttons underneath */}
+        <div className="sm:hidden space-y-4">
+          <h1 className="text-2xl font-bold">Notes</h1>
+          <div className="flex flex-wrap gap-2">
+            <DoneEntryForm onEntryCreated={() => refetch()} />
+            <NewTaskForm onEntryCreated={() => refetch()} />
+            <NewNoteForm onEntryCreated={() => refetch()} />
+          </div>
+        </div>
       </div>
 
       <div className="bg-white rounded-xl shadow-sm">
