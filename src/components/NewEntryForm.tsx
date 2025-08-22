@@ -26,6 +26,9 @@ interface NewEntryFormProps {
   isEditing?: boolean;
   onClose?: () => void;
   defaultType?: EntryType;
+  hideTypeSelector?: boolean;
+  open?: boolean;
+  setOpen?: (open: boolean) => void;
 }
 
 type EntryType = 'task' | 'note';
@@ -93,12 +96,17 @@ export const NewEntryForm: React.FC<NewEntryFormProps> = ({
   initialData,
   isEditing = false,
   onClose,
-  defaultType = 'note'
+  defaultType = 'note',
+  hideTypeSelector = false,
+  open: externalOpen,
+  setOpen: externalSetOpen
 }) => {
   const { user } = useSupabaseAuth();
   const { knowledgeBases } = useKnowledgeBases(user?.id);
   const supabase = createClientComponentClient();
-  const [open, setOpen] = useState(isEditing);
+  const [internalOpen, setInternalOpen] = useState(isEditing);
+  const open = externalOpen !== undefined ? externalOpen : internalOpen;
+  const setOpen = externalSetOpen || setInternalOpen;
   const [type, setType] = useState<EntryType>(defaultType);
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
@@ -320,7 +328,7 @@ export const NewEntryForm: React.FC<NewEntryFormProps> = ({
       }}
     >
       <DialogTrigger asChild>
-        {!isEditing ? (
+        {!isEditing && externalOpen === undefined ? (
           <Button className="bg-blue-600 text-white rounded-lg hover:bg-blue-700">
             <Plus className="w-4 h-4 mr-2" />
             New Item
@@ -332,12 +340,16 @@ export const NewEntryForm: React.FC<NewEntryFormProps> = ({
           <DialogTitle>
             {isEditing ? 
               (isEditingTask ? 'Edit Task' : 'Edit Note') : 
-              'Create New Entry'}
+              hideTypeSelector ? 
+                (type === 'task' ? 'Create New Task' : 'Create New Note') :
+                'Create New Entry'}
           </DialogTitle>
           <DialogDescription>
             {isEditing ? 
               (isEditingTask ? 'Update task details.' : 'Update note details.') : 
-              'Create a new task or note.'}
+              hideTypeSelector ? 
+                (type === 'task' ? 'Create a new task with due dates and priorities.' : 'Create a new note with content and knowledge base linking.') :
+                'Create a new task or note.'}
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -346,7 +358,7 @@ export const NewEntryForm: React.FC<NewEntryFormProps> = ({
           )}
           
           {/* Type selection (only for new entries) */}
-          {!isEditing && (
+          {!isEditing && !hideTypeSelector && (
             <div className="space-y-2">
               <Label htmlFor="type">Type</Label>
               <Select

@@ -699,16 +699,6 @@ const DashboardPage: React.FC = () => {
                   <NoteCard key={note.id} note={note} preview={true} />
                 ))
               )}
-              
-              <div className="mt-2">
-                <Button variant="outline" className="w-full" onClick={() => {
-                  const addNoteBtn = document.querySelector('[class*="NewEntryForm"] button') as HTMLButtonElement;
-                  if (addNoteBtn) addNoteBtn.click();
-                }}>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Add New Note
-                </Button>
-              </div>
             </div>
           }
         />

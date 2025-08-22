@@ -2,7 +2,7 @@ import { useSupabaseAuth } from '@/hooks/useSupabaseAuth';
 import React, { useState, useEffect } from 'react';
 import TruncatedCell from './TruncatedCell';
 import { format } from 'date-fns';
-import { Check, MoreHorizontal, Link, ChevronDown, ChevronUp, ChevronRight, AlertCircle } from 'lucide-react';
+import { Check, MoreHorizontal, Link, ChevronDown, ChevronUp, ChevronRight, ChevronLeft, AlertCircle } from 'lucide-react';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import { NewEntryForm } from '@/components/NewEntryForm';
 import {
@@ -804,6 +804,9 @@ const TaskTable: React.FC<TaskTableProps> = ({ tasks, onTaskUpdate }) => {
     return false;
   });
   
+  const [completedTasksPage, setCompletedTasksPage] = useState(1);
+  const completedTasksPerPage = 100;
+  
   // Initialize sorts from localStorage
   const [activeSorts, setActiveSorts] = useState<SortState[]>(() => {
     if (typeof window !== 'undefined') {
@@ -866,6 +869,11 @@ const TaskTable: React.FC<TaskTableProps> = ({ tasks, onTaskUpdate }) => {
 
   const handleActiveSort = createSortHandler(setActiveSorts, 'taskTable_activeSorts');
   const handleCompletedSort = createSortHandler(setCompletedSorts, 'taskTable_completedSorts');
+  
+  // Reset to page 1 when completed sorts change
+  useEffect(() => {
+    setCompletedTasksPage(1);
+  }, [completedSorts]);
 
   const sortTasks = (tasksToSort: TaskWithDetails[], sorts: SortState[]): TaskWithDetails[] => {
     return [...tasksToSort].sort((a, b) => {
@@ -924,12 +932,18 @@ const TaskTable: React.FC<TaskTableProps> = ({ tasks, onTaskUpdate }) => {
     return status === 'active' || status === 'on_deck';
   }), activeSorts);
   
-  const completedTasks = sortTasks(tasks.filter(task => {
+  const allCompletedTasks = sortTasks(tasks.filter(task => {
     const status = task?.status?.toLowerCase() || 'on_deck';
     return status === 'completed';
   }), completedSorts);
 
-  const completedCount = completedTasks.length;
+  const completedCount = allCompletedTasks.length;
+  const totalCompletedPages = Math.ceil(completedCount / completedTasksPerPage);
+  
+  // Get the current page of completed tasks
+  const startIndex = (completedTasksPage - 1) * completedTasksPerPage;
+  const endIndex = startIndex + completedTasksPerPage;
+  const paginatedCompletedTasks = allCompletedTasks.slice(startIndex, endIndex);
 
   return (
     <div className="space-y-6">
@@ -968,17 +982,77 @@ const TaskTable: React.FC<TaskTableProps> = ({ tasks, onTaskUpdate }) => {
         
         {showCompleted && (
           <div className="p-6">
-            {completedTasks.length === 0 ? (
+            {paginatedCompletedTasks.length === 0 ? (
               <div className="text-gray-500 text-center py-4">No completed tasks</div>
             ) : (
-              <TaskTableBase 
-                tasks={completedTasks}
-                onTaskUpdate={onTaskUpdate}
-                sorts={completedSorts}
-                onSort={handleCompletedSort}
-                tableType="completed"
-                key={`completed-${completedSorts.map(s => `${s.field}-${s.direction}-${s.level}`).join(',')}`}
-              />
+              <>
+                <TaskTableBase 
+                  tasks={paginatedCompletedTasks}
+                  onTaskUpdate={onTaskUpdate}
+                  sorts={completedSorts}
+                  onSort={handleCompletedSort}
+                  tableType="completed"
+                  key={`completed-${completedSorts.map(s => `${s.field}-${s.direction}-${s.level}`).join(',')}`}
+                />
+                
+                {/* Pagination Controls */}
+                {totalCompletedPages > 1 && (
+                  <div className="flex items-center justify-center gap-2 mt-6 py-4">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCompletedTasksPage(prev => Math.max(prev - 1, 1))}
+                      disabled={completedTasksPage === 1}
+                      className="flex items-center gap-1"
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                      Previous
+                    </Button>
+                    
+                    <div className="flex items-center gap-1">
+                      {Array.from({ length: Math.min(5, totalCompletedPages) }, (_, i) => {
+                        let pageNum;
+                        if (totalCompletedPages <= 5) {
+                          pageNum = i + 1;
+                        } else if (completedTasksPage <= 3) {
+                          pageNum = i + 1;
+                        } else if (completedTasksPage >= totalCompletedPages - 2) {
+                          pageNum = totalCompletedPages - 4 + i;
+                        } else {
+                          pageNum = completedTasksPage - 2 + i;
+                        }
+                        
+                        return (
+                          <Button
+                            key={pageNum}
+                            variant={pageNum === completedTasksPage ? "default" : "outline"}
+                            size="sm"
+                            onClick={() => setCompletedTasksPage(pageNum)}
+                            className="w-8 h-8 p-0"
+                          >
+                            {pageNum}
+                          </Button>
+                        );
+                      })}
+                    </div>
+                    
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCompletedTasksPage(prev => Math.min(prev + 1, totalCompletedPages))}
+                      disabled={completedTasksPage === totalCompletedPages}
+                      className="flex items-center gap-1"
+                    >
+                      Next
+                      <ChevronRight className="h-4 w-4" />
+                    </Button>
+                    
+                    <span className="text-sm text-gray-500 ml-4">
+                      Page {completedTasksPage} of {totalCompletedPages} ({completedCount} total tasks)
+                    </span>
+                  </div>
+                )}
+              </>
             )}
           </div>
         )}

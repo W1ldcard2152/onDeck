@@ -1,9 +1,8 @@
 'use client'
 
 import React, { useState } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Plus, CheckSquare } from 'lucide-react';
+import { CheckSquare } from 'lucide-react';
 import { NewEntryForm } from '@/components/NewEntryForm';
 
 interface NewTaskFormProps {
@@ -20,16 +19,17 @@ export const NewTaskForm: React.FC<NewTaskFormProps> = ({ onEntryCreated }) => {
         Task
       </Button>
       
-      {open && (
-        <NewEntryForm
-          onEntryCreated={(entry) => {
-            if (onEntryCreated) onEntryCreated(entry);
-            setOpen(false);
-          }}
-          onClose={() => setOpen(false)}
-          defaultType="task"
-        />
-      )}
+      <NewEntryForm
+        onEntryCreated={(entry) => {
+          if (onEntryCreated) onEntryCreated(entry);
+          setOpen(false);
+        }}
+        onClose={() => setOpen(false)}
+        defaultType="task"
+        hideTypeSelector={true}
+        open={open}
+        setOpen={setOpen}
+      />
     </>
   );
 };

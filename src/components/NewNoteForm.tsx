@@ -1,9 +1,8 @@
 'use client'
 
 import React, { useState } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Plus, FileText } from 'lucide-react';
+import { FileText } from 'lucide-react';
 import { NewEntryForm } from '@/components/NewEntryForm';
 
 interface NewNoteFormProps {
@@ -20,16 +19,17 @@ export const NewNoteForm: React.FC<NewNoteFormProps> = ({ onEntryCreated }) => {
         Note
       </Button>
       
-      {open && (
-        <NewEntryForm
-          onEntryCreated={(entry) => {
-            if (onEntryCreated) onEntryCreated(entry);
-            setOpen(false);
-          }}
-          onClose={() => setOpen(false)}
-          defaultType="note"
-        />
-      )}
+      <NewEntryForm
+        onEntryCreated={(entry) => {
+          if (onEntryCreated) onEntryCreated(entry);
+          setOpen(false);
+        }}
+        onClose={() => setOpen(false)}
+        defaultType="note"
+        hideTypeSelector={true}
+        open={open}
+        setOpen={setOpen}
+      />
     </>
   );
 };
