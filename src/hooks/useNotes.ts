@@ -1,43 +1,45 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
 import type { NoteWithDetails } from '@/lib/types'
 import type { Database } from '@/types/database.types'
+import { getSupabaseClient } from '@/lib/supabase-client'
 
 export function useNotes(userId: string | undefined, limit: number = 10) {
   const [notes, setNotes] = useState<NoteWithDetails[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<Error | null>(null)
+  const supabaseRef = useRef(getSupabaseClient())
+  const isFetchingRef = useRef(false)
 
-  async function fetchNotes() {
+  const fetchNotes = useCallback(async () => {
+    if (isFetchingRef.current) return
+    
+    if (!userId) {
+      setNotes([]);
+      setIsLoading(false);
+      return;
+    }
+
+    isFetchingRef.current = true
+    
     try {
-      // Return early if no userId is provided
-      if (!userId) {
-        setNotes([]);
-        setIsLoading(false);
-        return;
-      }
-
-      console.log('Fetching notes for user:', userId)
       setIsLoading(true)
       
-      const supabase = createClientComponentClient<Database>()
+      const supabase = supabaseRef.current
 
-      // Query items first, then notes
+      // Query items first
       const { data: itemsData, error: itemsError } = await supabase
         .from('items')
         .select('*')
         .eq('user_id', userId)
         .eq('item_type', 'note')
+        .eq('is_archived', false)
         .order('created_at', { ascending: false })
         .limit(limit);
 
-      console.log('Items query response:', { itemsData, itemsError });
-
       if (itemsError) throw itemsError;
       if (!itemsData || itemsData.length === 0) {
-        console.log('No items found');
         setNotes([]);
         return;
       }
@@ -61,12 +63,10 @@ export function useNotes(userId: string | undefined, limit: number = 10) {
         `)
         .in('id', itemIds);
 
-      console.log('Notes query response:', { notesData, notesError });
-
       if (notesError) throw notesError;
 
       // Combine items and notes
-      const combinedNotes = itemsData.map(item => {
+      const combinedNotes: NoteWithDetails[] = itemsData.map(item => {
         const noteData = notesData?.find(note => note.id === item.id);
         
         return {
@@ -88,21 +88,10 @@ export function useNotes(userId: string | undefined, limit: number = 10) {
             } : undefined,
             user_id: '', keystone_id: '', entry_count: 0, created_at: '', updated_at: ''
           } : undefined,
-          item: {
-            id: item.id,
-            user_id: item.user_id,
-            title: item.title,
-            created_at: item.created_at,
-            updated_at: item.updated_at,
-            item_type: item.item_type,
-            is_archived: item.is_archived,
-            archived_at: item.archived_at,
-            archive_reason: item.archive_reason
-          }
+          item: item
         };
       });
 
-      console.log('Combined notes:', combinedNotes);
       setNotes(combinedNotes);
       
     } catch (e) {
@@ -110,12 +99,13 @@ export function useNotes(userId: string | undefined, limit: number = 10) {
       setError(e instanceof Error ? e : new Error('An error occurred while fetching notes'))
     } finally {
       setIsLoading(false)
+      isFetchingRef.current = false
     }
-  }
+  }, [userId, limit])
 
   useEffect(() => {
     fetchNotes()
-  }, [userId, limit])
+  }, [fetchNotes])
 
   return { notes, isLoading, error, refetch: fetchNotes }
 }

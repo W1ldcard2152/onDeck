@@ -90,7 +90,7 @@ const TaskTableBase: React.FC<TaskTableBaseProps> = ({
   const supabase = createClientComponentClient<Database>();
   const { user } = useSupabaseAuth();
 
-  // Fetch project information for project-linked tasks
+  // Fetch project information for project-linked tasks with optimized query
   useEffect(() => {
     const fetchProjectInfo = async () => {
       try {
@@ -101,46 +101,43 @@ const TaskTableBase: React.FC<TaskTableBaseProps> = ({
             .map(task => task.project_id)
         )].filter(Boolean) as string[];
         
-        if (projectIds.length === 0) return;
-        
-        // First, fetch the items separately
-        const { data: itemsData, error: itemsError } = await supabase
-          .from('items')
-          .select('id, title')
-          .in('id', projectIds);
-            
-        if (itemsError) throw itemsError;
-            
-        // Create a map of item IDs to titles
-        const itemTitles: Record<string, string> = {};
-        if (itemsData) {
-          itemsData.forEach(item => {
-            itemTitles[item.id] = item.title;
-          });
+        if (projectIds.length === 0) {
+          setProjectInfoMap({});
+          return;
         }
+
+        // Get project task IDs for step lookup
+        const projectTaskIds = tasks
+          .filter(task => task.project_id)
+          .map(task => task.id);
         
-        // Fetch project data
-        const { data: projectsData, error: projectsError } = await supabase
+        // Single optimized query with joins
+        const { data: projectsWithItems, error: projectsError } = await supabase
           .from('projects')
-          .select('id, status')
+          .select(`
+            id,
+            status,
+            items!inner (
+              id,
+              title
+            )
+          `)
           .in('id', projectIds);
         
         if (projectsError) throw projectsError;
         
-        // Fetch step data for each task that is linked to a project step
-        const projectTaskIds = tasks
-          .filter(task => task.project_id)
-          .map(task => task.id);
+        // Fetch step data in parallel if we have project tasks
+        let stepsData = null;
+        if (projectTaskIds.length > 0) {
+          const { data, error: stepsError } = await supabase
+            .from('project_steps')
+            .select('converted_task_id, title')
+            .in('converted_task_id', projectTaskIds)
+            .not('converted_task_id', 'is', null);
           
-        if (projectTaskIds.length === 0) return;
-        
-        const { data: stepsData, error: stepsError } = await supabase
-          .from('project_steps')
-          .select('converted_task_id, title')
-          .in('converted_task_id', projectTaskIds)
-          .not('converted_task_id', 'is', null);
-        
-        if (stepsError) throw stepsError;
+          if (stepsError) throw stepsError;
+          stepsData = data;
+        }
         
         // Create a map of task IDs to step titles
         const taskToStepMap: Record<string, string> = {};
@@ -154,13 +151,10 @@ const TaskTableBase: React.FC<TaskTableBaseProps> = ({
         
         // Build project info map
         const infoMap: Record<string, ProjectInfo> = {};
-        if (projectsData) {
-          projectsData.forEach(project => {
-            // Use the item title from our map
-            const projectTitle = itemTitles[project.id] || 'Unknown Project';
-            
+        if (projectsWithItems) {
+          projectsWithItems.forEach(project => {
             infoMap[project.id] = {
-              title: projectTitle,
+              title: (project.items as any).title || 'Unknown Project',
               status: project.status
             };
           });
@@ -179,7 +173,18 @@ const TaskTableBase: React.FC<TaskTableBaseProps> = ({
       }
     };
     
-    fetchProjectInfo();
+    // Only fetch if tasks have changed meaningfully
+    const projectTasksSignature = tasks
+      .filter(task => task.project_id)
+      .map(task => `${task.id}:${task.project_id}`)
+      .sort()
+      .join(',');
+    
+    if (projectTasksSignature) {
+      fetchProjectInfo();
+    } else {
+      setProjectInfoMap({});
+    }
   }, [tasks, supabase]);
 
   const deleteTask = async (taskId: string): Promise<void> => {

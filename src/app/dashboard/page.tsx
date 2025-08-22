@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { TaskCard } from '@/components/TaskCard';
 import { NoteCard } from '@/components/NoteCard';
 import { DashboardCard } from '@/components/DashboardCard';
@@ -199,6 +199,163 @@ const DashboardPage: React.FC = () => {
     }
   };
 
+  // Memoize expensive calculations to prevent unnecessary re-computation
+  const dashboardData = useMemo(() => {
+    // Date reference points
+    const today = new Date();
+    const tomorrow = addDays(today, 1);
+    const dayAfterTomorrow = addDays(today, 2);
+    const threeDaysLater = addDays(today, 3);
+    
+    // Get non-completed tasks
+    const activeTasks = tasks.filter(task => task.status !== 'completed');
+    
+    return { today, tomorrow, dayAfterTomorrow, threeDaysLater, activeTasks };
+  }, [tasks]);
+
+  const { today, tomorrow, dayAfterTomorrow, threeDaysLater, activeTasks } = dashboardData;
+
+  // Memoize task filtering and sorting to prevent unnecessary recalculation
+  const taskSections = useMemo(() => {
+    const priorityOrder: Record<string, number> = { high: 0, normal: 1, low: 2 };
+    
+    // Tasks for Today (due today or in the past, or assigned today or in the past)
+    const todayDueTasks = activeTasks.filter(task => {
+      if (!task.due_date) return false;
+      return isDateToday(task.due_date) || isDatePast(task.due_date);
+    }).sort((a, b) => {
+      // First sort by past due (oldest first)
+      if (isDatePast(a.due_date) && isDatePast(b.due_date)) {
+        const aDate = parseDateForDisplay(a.due_date!)?.getTime() || 0;
+        const bDate = parseDateForDisplay(b.due_date!)?.getTime() || 0;
+        return aDate - bDate; // Oldest past due first
+      }
+      
+      // Then sort by priority (high to low)
+      const aPriority = a.priority || 'normal';
+      const bPriority = b.priority || 'normal';
+      return priorityOrder[aPriority] - priorityOrder[bPriority];
+    });
+    
+    const todayAssignedTasks = activeTasks.filter(task => {
+      // Skip if already in due today/past list
+      if (task.due_date && (isDateToday(task.due_date) || isDatePast(task.due_date))) {
+        return false;
+      }
+      
+      // Include if assigned today or in the past
+      return task.assigned_date && (isDateToday(task.assigned_date) || isDatePast(task.assigned_date));
+    }).sort((a, b) => {
+      // First sort by past assigned date (oldest first)
+      if (isDatePast(a.assigned_date) && isDatePast(b.assigned_date)) {
+        const aDate = parseDateForDisplay(a.assigned_date!)?.getTime() || 0;
+        const bDate = parseDateForDisplay(b.assigned_date!)?.getTime() || 0;
+        return aDate - bDate; // Oldest first
+      }
+      
+      // Then sort by priority (high to low)
+      const aPriority = a.priority || 'normal';
+      const bPriority = b.priority || 'normal';
+      return priorityOrder[aPriority] - priorityOrder[bPriority];
+    });
+    
+    // Tasks for Upcoming (due or assigned in next 3 days, excluding today)
+    const upcomingDueTasks = activeTasks.filter(task => {
+      if (!task.due_date) return false;
+      
+      // Skip if due today or in the past (already covered in Today section)
+      if (isDateToday(task.due_date) || isDatePast(task.due_date)) return false;
+      
+      // Include if due tomorrow or within the next 3 days
+      return isDateWithinUpcoming(task.due_date, tomorrow, threeDaysLater);
+    }).sort((a, b) => {
+      // First sort by due date
+      const aDate = parseDateForDisplay(a.due_date!)?.getTime() || 0;
+      const bDate = parseDateForDisplay(b.due_date!)?.getTime() || 0;
+      
+      // If same date, sort by priority
+      if (aDate === bDate) {
+        const aPriority = a.priority || 'normal';
+        const bPriority = b.priority || 'normal';
+        return priorityOrder[aPriority] - priorityOrder[bPriority];
+      }
+      
+      return aDate - bDate;
+    });
+    
+    const upcomingAssignedTasks = activeTasks.filter(task => {
+      // Skip if due in upcoming period, due today, or due in past
+      if (task.due_date) {
+        if (isDateToday(task.due_date) || isDatePast(task.due_date)) return false;
+        if (isDateWithinUpcoming(task.due_date, tomorrow, threeDaysLater)) return false;
+      }
+      
+      // Skip if assigned today or in the past (already covered in Today section)
+      if (task.assigned_date && (isDateToday(task.assigned_date) || isDatePast(task.assigned_date))) {
+        return false;
+      }
+      
+      // Check for tomorrow specifically to ensure those tasks appear
+      if (task.assigned_date) {
+        const assignedDate = parseDateForDisplay(task.assigned_date);
+        if (assignedDate && isTomorrow(assignedDate)) {
+          return true;
+        }
+      }
+      
+      // Include if assigned within the next 3 days
+      return task.assigned_date && isDateWithinUpcoming(task.assigned_date, tomorrow, threeDaysLater);
+    }).sort((a, b) => {
+      // First sort by assigned date
+      const aDate = parseDateForDisplay(a.assigned_date!)?.getTime() || 0;
+      const bDate = parseDateForDisplay(b.assigned_date!)?.getTime() || 0;
+      
+      // If same date, sort by priority
+      if (aDate === bDate) {
+        const aPriority = a.priority || 'normal';
+        const bPriority = b.priority || 'normal';
+        return priorityOrder[aPriority] - priorityOrder[bPriority];
+      }
+      
+      return aDate - bDate;
+    });
+    
+    // Tasks with no date assigned (limited to 5)
+    const tasksWithoutDates = activeTasks
+      .filter(task => !task.due_date && !task.assigned_date)
+      .sort((a, b) => {
+        // Sort by priority (high to low)
+        const aPriority = a.priority || 'normal';
+        const bPriority = b.priority || 'normal';
+        return priorityOrder[aPriority] - priorityOrder[bPriority];
+      })
+      .slice(0, 5);
+
+    return {
+      todayDueTasks,
+      todayAssignedTasks,
+      upcomingDueTasks,
+      upcomingAssignedTasks,
+      tasksWithoutDates
+    };
+  }, [activeTasks, today, tomorrow, threeDaysLater]);
+
+  const { todayDueTasks, todayAssignedTasks, upcomingDueTasks, upcomingAssignedTasks, tasksWithoutDates } = taskSections;
+
+  // Memoize recent notes filtering
+  const recentNotes = useMemo(() => {
+    return [...notes]
+      .filter(note => {
+        const createdDate = new Date(note.item.created_at);
+        return isWithinInterval(createdDate, { start: addDays(today, -7), end: today });
+      })
+      .sort((a, b) => {
+        // Sort by newest first
+        return new Date(b.item.created_at).getTime() - new Date(a.item.created_at).getTime();
+      })
+      .slice(0, 3); // Only show 3 most recent notes
+  }, [notes, today]);
+
   if (tasksLoading || notesLoading) {
     return (
       <div className="py-6">
@@ -210,144 +367,6 @@ const DashboardPage: React.FC = () => {
       </div>
     );
   }
-
-  // Date reference points
-  const today = new Date();
-  const tomorrow = addDays(today, 1);
-  const dayAfterTomorrow = addDays(today, 2);
-  const threeDaysLater = addDays(today, 3);
-  
-  // Get non-completed tasks
-  const activeTasks = tasks.filter(task => task.status !== 'completed');
-  
-  // Tasks for Today (due today or in the past, or assigned today or in the past)
-  const todayDueTasks = activeTasks.filter(task => {
-    if (!task.due_date) return false;
-    return isDateToday(task.due_date) || isDatePast(task.due_date);
-  }).sort((a, b) => {
-    // First sort by past due (oldest first)
-    if (isDatePast(a.due_date) && isDatePast(b.due_date)) {
-      const aDate = parseDateForDisplay(a.due_date!)?.getTime() || 0;
-      const bDate = parseDateForDisplay(b.due_date!)?.getTime() || 0;
-      return aDate - bDate; // Oldest past due first
-    }
-    
-    // Then sort by priority (high to low)
-    const priorityOrder: Record<string, number> = { high: 0, normal: 1, low: 2 };
-    const aPriority = a.priority || 'normal';
-    const bPriority = b.priority || 'normal';
-    return priorityOrder[aPriority] - priorityOrder[bPriority];
-  });
-  
-  const todayAssignedTasks = activeTasks.filter(task => {
-    // Skip if already in due today/past list
-    if (task.due_date && (isDateToday(task.due_date) || isDatePast(task.due_date))) {
-      return false;
-    }
-    
-    // Include if assigned today or in the past
-    return task.assigned_date && (isDateToday(task.assigned_date) || isDatePast(task.assigned_date));
-  }).sort((a, b) => {
-    // First sort by past assigned date (oldest first)
-    if (isDatePast(a.assigned_date) && isDatePast(b.assigned_date)) {
-      const aDate = parseDateForDisplay(a.assigned_date!)?.getTime() || 0;
-      const bDate = parseDateForDisplay(b.assigned_date!)?.getTime() || 0;
-      return aDate - bDate; // Oldest first
-    }
-    
-    // Then sort by priority (high to low)
-    const priorityOrder: Record<string, number> = { high: 0, normal: 1, low: 2 };
-    const aPriority = a.priority || 'normal';
-    const bPriority = b.priority || 'normal';
-    return priorityOrder[aPriority] - priorityOrder[bPriority];
-  });
-  
-  // Tasks for Upcoming (due or assigned in next 3 days, excluding today)
-  const upcomingDueTasks = activeTasks.filter(task => {
-    if (!task.due_date) return false;
-    
-    // Skip if due today or in the past (already covered in Today section)
-    if (isDateToday(task.due_date) || isDatePast(task.due_date)) return false;
-    
-    // Include if due tomorrow or within the next 3 days
-    return isDateWithinUpcoming(task.due_date, tomorrow, threeDaysLater);
-  }).sort((a, b) => {
-    // First sort by due date
-    const aDate = parseDateForDisplay(a.due_date!)?.getTime() || 0;
-    const bDate = parseDateForDisplay(b.due_date!)?.getTime() || 0;
-    
-    // If same date, sort by priority
-    if (aDate === bDate) {
-      const priorityOrder: Record<string, number> = { high: 0, normal: 1, low: 2 };
-      const aPriority = a.priority || 'normal';
-      const bPriority = b.priority || 'normal';
-      return priorityOrder[aPriority] - priorityOrder[bPriority];
-    }
-    
-    return aDate - bDate;
-  });
-  
-  const upcomingAssignedTasks = activeTasks.filter(task => {
-    // Skip if due in upcoming period, due today, or due in past
-    if (task.due_date) {
-      if (isDateToday(task.due_date) || isDatePast(task.due_date)) return false;
-      if (isDateWithinUpcoming(task.due_date, tomorrow, threeDaysLater)) return false;
-    }
-    
-    // Skip if assigned today or in the past (already covered in Today section)
-    if (task.assigned_date && (isDateToday(task.assigned_date) || isDatePast(task.assigned_date))) {
-      return false;
-    }
-    
-    // Check for tomorrow specifically to ensure those tasks appear
-    if (task.assigned_date) {
-      const assignedDate = parseDateForDisplay(task.assigned_date);
-      if (assignedDate && isTomorrow(assignedDate)) {
-        return true;
-      }
-    }
-    
-    // Include if assigned within the next 3 days
-    return task.assigned_date && isDateWithinUpcoming(task.assigned_date, tomorrow, threeDaysLater);
-  }).sort((a, b) => {
-    // First sort by assigned date
-    const aDate = parseDateForDisplay(a.assigned_date!)?.getTime() || 0;
-    const bDate = parseDateForDisplay(b.assigned_date!)?.getTime() || 0;
-    
-    // If same date, sort by priority
-    if (aDate === bDate) {
-      const priorityOrder: Record<string, number> = { high: 0, normal: 1, low: 2 };
-      const aPriority = a.priority || 'normal';
-      const bPriority = b.priority || 'normal';
-      return priorityOrder[aPriority] - priorityOrder[bPriority];
-    }
-    
-    return aDate - bDate;
-  });
-  
-  // Tasks with no date assigned (limited to 5)
-  const tasksWithoutDates = activeTasks
-    .filter(task => !task.due_date && !task.assigned_date)
-    .sort((a, b) => {
-      // Sort by priority (high to low)
-      const priorityOrder: Record<string, number> = { high: 0, normal: 1, low: 2 };
-      const aPriority = a.priority || 'normal';
-      const bPriority = b.priority || 'normal';
-      return priorityOrder[aPriority] - priorityOrder[bPriority];
-    })
-    .slice(0, 5);
-
-  // Get recent notes
-  const recentNotes = [...notes]
-    .filter(note => {
-      const createdDate = new Date(note.item.created_at);
-      return isWithinInterval(createdDate, { start: addDays(today, -7), end: today });
-    })
-    .sort((a, b) => {
-      // Sort by newest first
-      return new Date(b.item.created_at).getTime() - new Date(a.item.created_at).getTime();
-    })
-    .slice(0, 3); // Only show 3 most recent notes
 
   // Get priority badge color
   const getPriorityColor = (priority: string | null) => {
