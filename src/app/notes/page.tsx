@@ -11,7 +11,7 @@ import { useNotes } from '@/hooks/useNotes';
 
 export default function NotesPage() {
   const { user } = useSupabaseAuth();
-  const { notes, isLoading, error, refetch } = useNotes(user?.id || '');
+  const { notes, isLoading, error, refetch } = useNotes(user?.id || '', 50, true); // Include archived notes
 
   return (
     <div className="space-y-6 py-6">

@@ -346,6 +346,9 @@ const DashboardPage: React.FC = () => {
   const recentNotes = useMemo(() => {
     return [...notes]
       .filter(note => {
+        // Skip notes without item data
+        if (!note.item || !note.item.created_at) return false;
+        
         const createdDate = new Date(note.item.created_at);
         return isWithinInterval(createdDate, { start: addDays(today, -7), end: today });
       })
