@@ -70,7 +70,7 @@ export function useNotes(userId: string | undefined, limit: number = 10, include
       if (notesError) throw notesError;
 
       // Combine items and notes - only include items that have corresponding notes
-      const combinedNotes: NoteWithDetails[] = itemsData
+      const combinedNotes = itemsData
         .map(item => {
           const noteData = notesData?.find(note => note.id === item.id);
           
@@ -99,9 +99,7 @@ export function useNotes(userId: string | undefined, limit: number = 10, include
             item: item
           };
         })
-        .filter((note): note is NoteWithDetails => {
-          return note !== null && note !== undefined;
-        });
+        .filter((note): note is NoteWithDetails => note !== null) as NoteWithDetails[];
 
       setNotes(combinedNotes);
       
