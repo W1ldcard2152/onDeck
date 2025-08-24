@@ -84,8 +84,8 @@ export function useNotes(userId: string | undefined, limit: number = 10, include
             file_path: noteData.file_path || null,
             entry_type: noteData.entry_type || 'note',
             knowledge_base_id: noteData.knowledge_base_id || null,
-            knowledge_base: undefined, // Simplified for now to fix build
             item: item
+            // knowledge_base omitted - it's optional
           };
         })
         .filter((note): note is NoteWithDetails => note !== null) as NoteWithDetails[];
