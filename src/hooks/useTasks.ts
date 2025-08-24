@@ -72,8 +72,8 @@ export function useTasks(userId: string | undefined, limit: number = 50, include
       }
       
       const { data: taskData, error: taskError } = await taskQuery
-        .order('due_date', { ascending: true, nullsLast: true })
-        .order('assigned_date', { ascending: true, nullsLast: true })
+        .order('due_date', { ascending: true })
+        .order('assigned_date', { ascending: true })
       
       if (taskError) throw taskError
       if (!taskData || taskData.length === 0) {
