@@ -1,4 +1,4 @@
-export type TaskStatus = 'on_deck' | 'active' | 'completed';
+export type TaskStatus = 'on_deck' | 'active' | 'completed' | 'habit';
 export type Priority = 'low' | 'normal' | 'high' | null;
 export type EntryType = 'task' | 'note' | 'project';
 export type KnowledgeEntryType = 'article' | 'video' | 'document' | 'resource' | 'note' | 'link';
@@ -25,6 +25,7 @@ export interface Task {
   description: string | null;
   priority: Priority;
   project_id: string | null;
+  habit_id: string | null;
   is_project_converted: boolean;
   converted_project_id: string | null;
 }
@@ -43,6 +44,7 @@ export interface TaskWithDetails {
   priority: Priority;
   description: string | null;
   project_id: string | null;
+  habit_id: string | null;
   is_project_converted: boolean;
   converted_project_id: string | null;
   item: Item;

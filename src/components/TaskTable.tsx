@@ -2,7 +2,7 @@ import { useSupabaseAuth } from '@/hooks/useSupabaseAuth';
 import React, { useState, useEffect } from 'react';
 import TruncatedCell from './TruncatedCell';
 import { format } from 'date-fns';
-import { Check, MoreHorizontal, Link, ChevronDown, ChevronUp, ChevronRight, ChevronLeft, AlertCircle } from 'lucide-react';
+import { Check, MoreHorizontal, Link, ChevronDown, ChevronUp, ChevronRight, ChevronLeft, AlertCircle, Repeat } from 'lucide-react';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import { NewEntryForm } from '@/components/NewEntryForm';
 import {
@@ -587,12 +587,13 @@ const TaskTableBase: React.FC<TaskTableBaseProps> = ({
                 const status = task.status || 'on_deck';
                 const priority = task.priority || 'normal';
                 const isProjectTask = Boolean(task.project_id);
+                const isHabitTask = Boolean(task.habit_id);
                 const projectInfo = task.project_id ? projectInfoMap[task.project_id] : null;
                 
                 return (
                   <TableRow 
                     key={task.id}
-                    className={isProjectTask ? "bg-blue-50/30" : ""}
+                    className={isProjectTask ? "bg-blue-50/30" : isHabitTask ? "bg-green-50/30" : ""}
                   >
                     <TableCell>
                       <DropdownMenu>
@@ -645,6 +646,12 @@ const TaskTableBase: React.FC<TaskTableBaseProps> = ({
                           <span className="inline-flex items-center bg-blue-100 text-blue-800 text-xs px-2 py-0.5 rounded-full">
                             <Link className="h-3 w-3 mr-1" />
                             Project Task
+                          </span>
+                        )}
+                        {isHabitTask && (
+                          <span className="inline-flex items-center bg-green-100 text-green-800 text-xs px-2 py-0.5 rounded-full">
+                            <Repeat className="h-3 w-3 mr-1" />
+                            Habit Task
                           </span>
                         )}
                       </div>

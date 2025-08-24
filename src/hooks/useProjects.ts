@@ -72,6 +72,7 @@ export function useProjects(userId: string | undefined) {
             priority: task.priority || null,
             assigned_date: task.assigned_date,
             project_id: task.project_id?.toString() || null,
+            habit_id: task.habit_id || null,
             is_project_converted: task.is_project_converted || false,
             converted_project_id: task.converted_project_id || null
           })) || [];

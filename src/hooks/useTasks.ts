@@ -5,7 +5,7 @@ import type { TaskWithDetails } from '@/lib/types'
 import type { Database } from '@/types/database.types'
 import { getSupabaseClient } from '@/lib/supabase-client'
 
-export function useTasks(userId: string | undefined, limit: number = 50) {
+export function useTasks(userId: string | undefined, limit: number = 50, includeHabitTasks: boolean = false) {
   const [tasks, setTasks] = useState<TaskWithDetails[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<Error | null>(null)
@@ -61,11 +61,19 @@ export function useTasks(userId: string | undefined, limit: number = 50) {
       
       // Get tasks for those items
       const itemIds = itemsData.map(item => item.id)
-      const { data: taskData, error: taskError } = await supabase
+      let taskQuery = supabase
         .from('tasks')
         .select('*')
-        .in('id', itemIds)
-        .order('due_date', { ascending: true })
+        .in('id', itemIds);
+      
+      // Conditionally exclude habit tasks (filter by habit_id instead of status)
+      if (!includeHabitTasks) {
+        taskQuery = taskQuery.is('habit_id', null);
+      }
+      
+      const { data: taskData, error: taskError } = await taskQuery
+        .order('due_date', { ascending: true, nullsLast: true })
+        .order('assigned_date', { ascending: true, nullsLast: true })
       
       if (taskError) throw taskError
       if (!taskData || taskData.length === 0) {
@@ -89,6 +97,7 @@ export function useTasks(userId: string | undefined, limit: number = 50) {
             converted_project_id: task.converted_project_id,
             priority: task.priority || 'normal',
             project_id: task.project_id,
+            habit_id: task.habit_id,
             created_at: item.created_at,
             updated_at: item.updated_at,
             title: item.title,
@@ -109,7 +118,7 @@ export function useTasks(userId: string | undefined, limit: number = 50) {
       setIsLoading(false)
       isFetchingRef.current = false
     }
-  }, [userId])
+  }, [userId, includeHabitTasks])
 
   // Initial data fetch when userId changes
   useEffect(() => {
@@ -119,7 +128,7 @@ export function useTasks(userId: string | undefined, limit: number = 50) {
       setTasks([])
       setIsLoading(false)
     }
-  }, [userId, fetchTasks])
+  }, [userId, fetchTasks, includeHabitTasks])
   
   // Set up real-time subscriptions with debouncing
   useEffect(() => {
@@ -152,7 +161,7 @@ export function useTasks(userId: string | undefined, limit: number = 50) {
       clearTimeout(refreshTimeout)
       channel.unsubscribe()
     }
-  }, [userId, fetchTasks])
+  }, [userId, fetchTasks, includeHabitTasks])
 
   return { 
     tasks, 

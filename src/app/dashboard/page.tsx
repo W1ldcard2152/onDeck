@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { TaskCard } from '@/components/TaskCard';
 import { NoteCard } from '@/components/NoteCard';
 import { DashboardCard } from '@/components/DashboardCard';
@@ -32,14 +32,52 @@ import {
 import type { TaskWithDetails, NoteWithDetails } from '@/lib/types';
 import type { TaskStatus, Priority } from '@/types/database.types';
 import type { Database } from '@/types/database.types';
+import { HabitTaskGenerator } from '@/lib/habitTaskGenerator';
+import { getSupabaseClient } from '@/lib/supabase-client';
 
 const DashboardPage: React.FC = () => {
   const { user } = useSupabaseAuth();
-  const { tasks, isLoading: tasksLoading, refetch: refetchTasks } = useTasks(user?.id);
+  const { tasks, isLoading: tasksLoading, refetch: refetchTasks } = useTasks(user?.id, 50, true);
   const { notes, isLoading: notesLoading, refetch: refetchNotes } = useNotes(user?.id);
   const [refreshKey, setRefreshKey] = useState(0);
   const [loadingTasks, setLoadingTasks] = useState<Record<string, boolean>>({});
   const [taskToEdit, setTaskToEdit] = useState<TaskWithDetails | null>(null);
+  
+  // Automatic daily cleanup on dashboard load
+  useEffect(() => {
+    const performDailyCleanup = async () => {
+      if (!user?.id) return;
+      
+      // Check if cleanup was already done today
+      const lastCleanup = localStorage.getItem('lastHabitCleanup');
+      const today = new Date().toISOString().split('T')[0];
+      
+      if (lastCleanup === today) {
+        return; // Already done today
+      }
+      
+      try {
+        const supabase = getSupabaseClient();
+        const taskGenerator = new HabitTaskGenerator(supabase, user.id);
+        
+        await taskGenerator.cleanupPastHabitTasks();
+        
+        // Mark cleanup as done for today
+        localStorage.setItem('lastHabitCleanup', today);
+        console.log('Daily habit cleanup completed automatically');
+        
+        // Refresh tasks to reflect the cleanup
+        refetchTasks();
+      } catch (err) {
+        console.error('Failed to perform daily habit cleanup:', err);
+      }
+    };
+    
+    // Run cleanup after a short delay to allow the dashboard to load
+    const cleanupTimer = setTimeout(performDailyCleanup, 3000);
+    
+    return () => clearTimeout(cleanupTimer);
+  }, [user?.id, refetchTasks]);
   const [taskToView, setTaskToView] = useState<TaskWithDetails | null>(null);
   const supabase = createClientComponentClient<Database>();
 
@@ -210,6 +248,12 @@ const DashboardPage: React.FC = () => {
     // Get non-completed tasks
     const activeTasks = tasks.filter(task => task.status !== 'completed');
     
+    // Debug logging to see what tasks we have
+    console.log('All tasks:', tasks.length);
+    console.log('Active tasks:', activeTasks.length);
+    console.log('Habit tasks in all tasks:', tasks.filter(task => task.habit_id).length);
+    console.log('Habit tasks in active tasks:', activeTasks.filter(task => task.habit_id).length);
+    
     return { today, tomorrow, dayAfterTomorrow, threeDaysLater, activeTasks };
   }, [tasks]);
 
@@ -222,6 +266,18 @@ const DashboardPage: React.FC = () => {
     // Tasks for Today (due today or in the past, or assigned today or in the past)
     const todayDueTasks = activeTasks.filter(task => {
       if (!task.due_date) return false;
+      
+      // Debug logging for habit tasks
+      if (task.habit_id) {
+        console.log('Habit task found:', {
+          title: task.title,
+          due_date: task.due_date,
+          isToday: isDateToday(task.due_date),
+          parsedDate: parseDateForDisplay(task.due_date),
+          todayDate: new Date().toDateString()
+        });
+      }
+      
       return isDateToday(task.due_date) || isDatePast(task.due_date);
     }).sort((a, b) => {
       // First sort by past due (oldest first)
@@ -263,6 +319,9 @@ const DashboardPage: React.FC = () => {
     const upcomingDueTasks = activeTasks.filter(task => {
       if (!task.due_date) return false;
       
+      // Skip habit tasks in upcoming section
+      if (task.habit_id) return false;
+      
       // Skip if due today or in the past (already covered in Today section)
       if (isDateToday(task.due_date) || isDatePast(task.due_date)) return false;
       
@@ -284,6 +343,9 @@ const DashboardPage: React.FC = () => {
     });
     
     const upcomingAssignedTasks = activeTasks.filter(task => {
+      // Skip habit tasks in upcoming section
+      if (task.habit_id) return false;
+      
       // Skip if due in upcoming period, due today, or due in past
       if (task.due_date) {
         if (isDateToday(task.due_date) || isDatePast(task.due_date)) return false;

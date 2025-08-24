@@ -99,7 +99,9 @@ export function useNotes(userId: string | undefined, limit: number = 10, include
             item: item
           };
         })
-        .filter((note): note is NoteWithDetails => note !== null);
+        .filter((note): note is NoteWithDetails => {
+          return note !== null && note !== undefined;
+        });
 
       setNotes(combinedNotes);
       
