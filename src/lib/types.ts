@@ -1,4 +1,4 @@
-export type TaskStatus = 'on_deck' | 'active' | 'completed' | 'habit';
+export type TaskStatus = 'on_deck' | 'active' | 'completed';
 export type Priority = 'low' | 'normal' | 'high' | null;
 export type EntryType = 'task' | 'note' | 'project';
 export type KnowledgeEntryType = 'article' | 'video' | 'document' | 'resource' | 'note' | 'link';

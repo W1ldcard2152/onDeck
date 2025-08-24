@@ -202,7 +202,7 @@ export default function HabitsPage() {
               Habit Tasks (Debug View)
             </h3>
             <p className="text-sm text-gray-500">
-              Shows all tasks with 'habit' status
+              Shows all tasks linked to habits
             </p>
           </div>
           {showHabitTasks ? (
