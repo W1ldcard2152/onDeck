@@ -156,6 +156,8 @@ export function useHabits(userId: string | undefined) {
   }, [userId, fetchHabits])
 
   const updateHabit = useCallback(async (habitId: string, updates: Partial<Habit>) => {
+    if (!userId) throw new Error('User ID required')
+    
     const supabase = supabaseRef.current
     
     const { data, error } = await supabase
@@ -167,11 +169,23 @@ export function useHabits(userId: string | undefined) {
 
     if (error) throw error
 
+    // If the habit is active and we're updating the recurrence rule, regenerate tasks
+    if (data.is_active && updates.recurrence_rule) {
+      try {
+        const taskGenerator = new HabitTaskGenerator(supabase, userId)
+        await taskGenerator.generateTasksForHabit(data, true) // true = full regeneration
+        console.log('Tasks regenerated after habit update')
+      } catch (taskGenError) {
+        console.error('Error regenerating tasks after habit update:', taskGenError)
+        // Don't throw - let the habit update succeed even if task generation fails
+      }
+    }
+
     // Refresh habits list
     await fetchHabits()
     
     return data
-  }, [fetchHabits])
+  }, [fetchHabits, userId])
 
   const deleteHabit = useCallback(async (habitId: string) => {
     const supabase = supabaseRef.current

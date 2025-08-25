@@ -30,7 +30,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 
 // Define types
 type SortDirection = 'asc' | 'desc' | null;
-type SortField = 'status' | 'title' | 'priority' | 'assigned_date' | 'description' | 'due_date' | 'project' | null;
+type SortField = 'status' | 'title' | 'priority' | 'assigned_date' | 'description' | 'due_date' | 'project' | 'reminder_time' | null;
 
 interface SortState {
   field: SortField;
@@ -73,6 +73,32 @@ function parseDateForDisplay(dateString: string | null): Date | null {
     console.error('Error parsing date:', e);
     return null;
   }
+}
+
+function formatTimeForDisplay(dateTimeString: string | null): string {
+  if (!dateTimeString) return '';
+  
+  try {
+    const date = new Date(dateTimeString);
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  } catch (e) {
+    console.error('Error parsing time:', e);
+    return '';
+  }
+}
+
+// Helper function for future notification system
+function canSendNotification(task: TaskWithDetails): boolean {
+  return Boolean(task.reminder_time && task.assigned_date);
+}
+
+function getUpcomingReminders(tasks: TaskWithDetails[]): TaskWithDetails[] {
+  const now = new Date();
+  return tasks.filter(task => {
+    if (!task.reminder_time) return false;
+    const reminderTime = new Date(task.reminder_time);
+    return reminderTime > now;
+  });
 }
 
 // TaskTableBase Component
@@ -567,6 +593,15 @@ const TaskTableBase: React.FC<TaskTableBaseProps> = ({
                     Due Date {getSortIcon('due_date')}
                   </Button>
                 </TableHead>
+                <TableHead className="bg-blue-50">
+                  <Button 
+                    variant="ghost" 
+                    onClick={() => onSort('reminder_time')}
+                    className="hover:bg-gray-100 font-semibold text-blue-800"
+                  >
+                    🔔 Reminder {getSortIcon('reminder_time')}
+                  </Button>
+                </TableHead>
                 <TableHead>
                   <Button 
                     variant="ghost" 
@@ -711,6 +746,24 @@ const TaskTableBase: React.FC<TaskTableBaseProps> = ({
                     
                     <TableCell>
                       {task.due_date ? format(parseDateForDisplay(task.due_date)!, 'MMM d, yyyy') : '-'}
+                    </TableCell>
+                    
+                    <TableCell className="bg-blue-50">
+                      <div className="space-y-1">
+                        {task.reminder_time && (
+                          <div className="text-sm font-medium text-blue-700">
+                            🔔 {formatTimeForDisplay(task.reminder_time)}
+                          </div>
+                        )}
+                        {task.assigned_date && task.reminder_time && (
+                          <div className="text-xs text-gray-600">
+                            on {format(parseDateForDisplay(task.assigned_date)!, 'MMM d')}
+                          </div>
+                        )}
+                        {!task.reminder_time && (
+                          <div className="text-gray-400 text-sm">No reminder</div>
+                        )}
+                      </div>
                     </TableCell>
                     
                     <TableCell>
@@ -921,6 +974,12 @@ const TaskTable: React.FC<TaskTableProps> = ({ tasks, onTaskUpdate }) => {
             const aDue = a.due_date ? new Date(a.due_date).getTime() : 0;
             const bDue = b.due_date ? new Date(b.due_date).getTime() : 0;
             comparison = aDue - bDue;
+            break;
+          }
+          case 'reminder_time': {
+            const aReminder = a.reminder_time ? new Date(a.reminder_time).getTime() : 0;
+            const bReminder = b.reminder_time ? new Date(b.reminder_time).getTime() : 0;
+            comparison = aReminder - bReminder;
             break;
           }
           case 'project': {

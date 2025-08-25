@@ -153,36 +153,42 @@ export interface Database {
       tasks: {
         Row: {
           id: string;
-          do_date: string | null;
           due_date: string | null;
+          reminder_time: string | null;
           status: TaskStatus;
           description: string | null;
           is_project_converted: boolean;
           converted_project_id: string | null;
           assigned_date: string | null;
           priority: Priority;
+          project_id: string | null;
+          habit_id: string | null;
         };
         Insert: {
           id: string;  // Must match items.id
-          do_date?: string | null;
           due_date?: string | null;
+          reminder_time?: string | null;
           status?: TaskStatus;
           description?: string | null;
           is_project_converted?: boolean;
           converted_project_id?: string | null;
           assigned_date?: string | null;
           priority?: Priority;
+          project_id?: string | null;
+          habit_id?: string | null;
         };
         Update: {
           id?: string;
-          do_date?: string | null;
           due_date?: string | null;
+          reminder_time?: string | null;
           status?: TaskStatus;
           description?: string | null;
           is_project_converted?: boolean;
           converted_project_id?: string | null;
           assigned_date?: string | null;
           priority?: Priority;
+          project_id?: string | null;
+          habit_id?: string | null;
         };
       };
     };

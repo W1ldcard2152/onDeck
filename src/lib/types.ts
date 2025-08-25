@@ -21,6 +21,7 @@ export interface Task {
   id: string;
   assigned_date: string | null;
   due_date: string | null;
+  reminder_time: string | null;
   status: TaskStatus;
   description: string | null;
   priority: Priority;
@@ -40,6 +41,7 @@ export interface TaskWithDetails {
   content: string | null;
   due_date: string | null;
   assigned_date: string | null;
+  reminder_time: string | null;
   status: TaskStatus | null;
   priority: Priority;
   description: string | null;

@@ -20,14 +20,17 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Plus } from 'lucide-react';
-import { useHabits, type RecurrenceRule } from '@/hooks/useHabits';
+import { useHabits, type RecurrenceRule, type Habit } from '@/hooks/useHabits';
 import { useSupabaseAuth } from '@/hooks/useSupabaseAuth';
 
 interface NewHabitFormProps {
   onHabitCreated: () => void;
+  editingHabit?: Habit | null;
+  onHabitUpdated?: () => void;
 }
 
-const NewHabitForm = ({ onHabitCreated }: NewHabitFormProps) => {
+const NewHabitForm = ({ onHabitCreated, editingHabit, onHabitUpdated }: NewHabitFormProps) => {
+  console.log('NewHabitForm loaded - Monthly scheduling available!');
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [title, setTitle] = useState('');
@@ -36,13 +39,49 @@ const NewHabitForm = ({ onHabitCreated }: NewHabitFormProps) => {
   const [frequencyType, setFrequencyType] = useState<'daily' | 'weekly' | 'monthly'>('daily');
   const [interval, setInterval] = useState(1);
   const [selectedDays, setSelectedDays] = useState<string[]>([]);
+  const [selectedDaysOfMonth, setSelectedDaysOfMonth] = useState<number[]>([]);
   
   const { user } = useSupabaseAuth();
-  const { createHabit } = useHabits(user?.id);
+  const { createHabit, updateHabit } = useHabits(user?.id);
 
   const dayOptions = [
     'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'
   ];
+
+  // Effect to handle editing habit
+  React.useEffect(() => {
+    if (editingHabit) {
+      setOpen(true);
+      setTitle(editingHabit.title);
+      setDescription(editingHabit.description || '');
+      setPriority(editingHabit.priority);
+      
+      const rule = editingHabit.recurrence_rule;
+      setFrequencyType(rule.type as 'daily' | 'weekly' | 'monthly');
+      setInterval(rule.interval || 1);
+      setSelectedDays(rule.days_of_week || []);
+      setSelectedDaysOfMonth(rule.days_of_month || []);
+    }
+  }, [editingHabit]);
+
+  // Separate effect to handle clearing edit state
+  const prevEditingHabit = React.useRef(editingHabit);
+  React.useEffect(() => {
+    // Only reset form if we were editing and now we're not
+    if (prevEditingHabit.current && !editingHabit) {
+      setTitle('');
+      setDescription('');
+      setPriority('normal');
+      setFrequencyType('daily');
+      setInterval(1);
+      setSelectedDays([]);
+      setSelectedDaysOfMonth([]);
+      if (open) {
+        setOpen(false);
+      }
+    }
+    prevEditingHabit.current = editingHabit;
+  }, [editingHabit, open]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -52,20 +91,34 @@ const NewHabitForm = ({ onHabitCreated }: NewHabitFormProps) => {
     try {
       const recurrenceRule: RecurrenceRule = {
         type: frequencyType,
-        start_date: new Date().toISOString().split('T')[0], // Use YYYY-MM-DD format for today
+        start_date: editingHabit?.recurrence_rule.start_date || new Date().toISOString().split('T')[0], // Use existing start_date when editing
         interval,
         unit: frequencyType === 'daily' ? 'day' : frequencyType === 'weekly' ? 'week' : 'month',
         ...(frequencyType === 'weekly' && selectedDays.length > 0 && { days_of_week: selectedDays }),
+        ...(frequencyType === 'monthly' && selectedDaysOfMonth.length > 0 && { days_of_month: selectedDaysOfMonth }),
         end_condition: { type: 'none' }
       };
 
-      await createHabit({
-        title: title.trim(),
-        description: description.trim() || null,
-        priority,
-        recurrence_rule: recurrenceRule,
-        is_active: true
-      });
+      if (editingHabit) {
+        // Update existing habit
+        await updateHabit(editingHabit.id, {
+          title: title.trim(),
+          description: description.trim() || null,
+          priority,
+          recurrence_rule: recurrenceRule,
+        });
+        onHabitUpdated?.();
+      } else {
+        // Create new habit
+        await createHabit({
+          title: title.trim(),
+          description: description.trim() || null,
+          priority,
+          recurrence_rule: recurrenceRule,
+          is_active: true
+        });
+        onHabitCreated();
+      }
 
       // Reset form
       setTitle('');
@@ -74,11 +127,11 @@ const NewHabitForm = ({ onHabitCreated }: NewHabitFormProps) => {
       setFrequencyType('daily');
       setInterval(1);
       setSelectedDays([]);
+      setSelectedDaysOfMonth([]);
       setOpen(false);
       
-      onHabitCreated();
     } catch (error) {
-      console.error('Error creating habit:', error);
+      console.error(`Error ${editingHabit ? 'updating' : 'creating'} habit:`, error);
       // Handle error (you might want to show a toast or error message)
     } finally {
       setLoading(false);
@@ -93,6 +146,14 @@ const NewHabitForm = ({ onHabitCreated }: NewHabitFormProps) => {
     );
   };
 
+  const handleDayOfMonthToggle = (day: number) => {
+    setSelectedDaysOfMonth(prev => 
+      prev.includes(day) 
+        ? prev.filter(d => d !== day)
+        : [...prev, day].sort((a, b) => a - b)
+    );
+  };
+
   return (
     <>
       <Button onClick={() => setOpen(true)} className="flex items-center gap-2">
@@ -100,10 +161,16 @@ const NewHabitForm = ({ onHabitCreated }: NewHabitFormProps) => {
         New Habit
       </Button>
 
-      <Dialog open={open} onOpenChange={setOpen}>
+      <Dialog open={open} onOpenChange={(isOpen) => {
+        setOpen(isOpen);
+        if (!isOpen && editingHabit) {
+          // If closing the dialog while editing, notify parent to clear edit state
+          onHabitUpdated?.();
+        }
+      }}>
         <DialogContent className="sm:max-w-[500px]">
           <DialogHeader>
-            <DialogTitle>Create New Habit</DialogTitle>
+            <DialogTitle>{editingHabit ? 'Edit Habit' : 'Create New Habit'}</DialogTitle>
           </DialogHeader>
           
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -148,6 +215,7 @@ const NewHabitForm = ({ onHabitCreated }: NewHabitFormProps) => {
               <Select value={frequencyType} onValueChange={(value: 'daily' | 'weekly' | 'monthly') => {
                 setFrequencyType(value);
                 setSelectedDays([]);
+                setSelectedDaysOfMonth([]);
               }}>
                 <SelectTrigger>
                   <SelectValue />
@@ -205,6 +273,37 @@ const NewHabitForm = ({ onHabitCreated }: NewHabitFormProps) => {
               </div>
             )}
 
+            {frequencyType === 'monthly' && (
+              <div className="space-y-2">
+                <Label>Days of Month</Label>
+                <div className="grid grid-cols-8 gap-1">
+                  {Array.from({ length: 31 }, (_, i) => i + 1).map(day => (
+                    <button
+                      key={day}
+                      type="button"
+                      onClick={() => handleDayOfMonthToggle(day)}
+                      className={`px-2 py-2 text-sm rounded-md border ${
+                        selectedDaysOfMonth.includes(day)
+                          ? 'bg-blue-500 text-white border-blue-500'
+                          : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                      }`}
+                    >
+                      {day}
+                    </button>
+                  ))}
+                </div>
+                <div className="text-xs text-gray-500 space-y-1">
+                  <p>Select one or more days of the month (1-31)</p>
+                  <p>💡 For months with fewer days, the habit will skip (e.g., day 31 won't occur in February)</p>
+                  {selectedDaysOfMonth.length > 0 && (
+                    <p className="font-medium">
+                      Selected: {selectedDaysOfMonth.join(', ')} of each month
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
+
             <DialogFooter>
               <Button
                 type="button"
@@ -216,9 +315,14 @@ const NewHabitForm = ({ onHabitCreated }: NewHabitFormProps) => {
               </Button>
               <Button
                 type="submit"
-                disabled={loading || !title.trim() || (frequencyType === 'weekly' && selectedDays.length === 0)}
+                disabled={loading || !title.trim() || 
+                         (frequencyType === 'weekly' && selectedDays.length === 0) ||
+                         (frequencyType === 'monthly' && selectedDaysOfMonth.length === 0)}
               >
-                {loading ? 'Creating...' : 'Create Habit'}
+                {loading 
+                  ? (editingHabit ? 'Updating...' : 'Creating...')
+                  : (editingHabit ? 'Update Habit' : 'Create Habit')
+                }
               </Button>
             </DialogFooter>
           </form>

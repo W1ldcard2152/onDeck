@@ -3,7 +3,7 @@
 import React from 'react';
 import { TaskWithDetails } from '@/lib/types';
 import { format } from 'date-fns';
-import { Calendar, Clock } from 'lucide-react';
+import { Calendar, Clock, Bell } from 'lucide-react';
 
 interface TaskCardProps {
   task: TaskWithDetails;
@@ -12,6 +12,12 @@ interface TaskCardProps {
 export const TaskCard: React.FC<TaskCardProps> = ({ task }) => {
   const hasAssignedDate = Boolean(task.assigned_date);
   const hasDueDate = Boolean(task.due_date);
+  const hasReminderTime = Boolean(task.reminder_time);
+
+  const formatReminderTime = (reminderTime: string): string => {
+    const date = new Date(reminderTime);
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  };
 
   return (
     <div className="p-4 mb-2 bg-white rounded-lg shadow hover:shadow-md transition-shadow">
@@ -26,6 +32,12 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task }) => {
           <div className="flex items-center text-sm text-gray-600">
             <Calendar className="w-4 h-4 mr-1" />
             <span>Assigned: {format(new Date(task.assigned_date), 'MMM d, yyyy')}</span>
+          </div>
+        )}
+        
+        {hasReminderTime && task.reminder_time && (
+          <div className="flex items-center text-sm text-blue-600 font-medium">
+            <span>Reminder: {formatReminderTime(task.reminder_time)}</span>
           </div>
         )}
         

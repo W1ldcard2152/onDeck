@@ -11,6 +11,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { CalendarIcon, Plus } from 'lucide-react';
+import { TimePicker } from '@/components/TimePicker';
 import { useSupabaseAuth } from '@/hooks/useSupabaseAuth';
 import { useKnowledgeBases } from '@/hooks/useKnowledgeBases';
 import { EntryService } from '@/lib/entryService';
@@ -45,6 +46,17 @@ function preserveLocalDate(date: Date | undefined): string | null {
   // Create a new ISO date string in format YYYY-MM-DD
   // This completely ignores time and timezone
   return `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
+
+// Function to combine date and time into ISO timestamp
+function combineDateAndTime(date: Date | undefined, time: string): string | null {
+  if (!date || !time) return null;
+  
+  const [hours, minutes] = time.split(':').map(Number);
+  const combined = new Date(date);
+  combined.setHours(hours, minutes, 0, 0);
+  
+  return combined.toISOString();
 }
 
 // Custom DatePicker component to avoid hooks issues
@@ -112,6 +124,7 @@ export const NewEntryForm: React.FC<NewEntryFormProps> = ({
   const [content, setContent] = useState('');
   const [dueDate, setDueDate] = useState<Date | undefined>();
   const [assignedDate, setAssignedDate] = useState<Date | undefined>();
+  const [reminderTime, setReminderTime] = useState('');
   const [priority, setPriority] = useState<Priority>('normal');
   const [status, setStatus] = useState<TaskStatus>('active');
   const [description, setDescription] = useState('');
@@ -161,6 +174,11 @@ export const NewEntryForm: React.FC<NewEntryFormProps> = ({
         if (taskData.assigned_date) {
           setAssignedDate(parseStoredDate(taskData.assigned_date));
         }
+        
+        if (taskData.reminder_time) {
+          const reminderDate = new Date(taskData.reminder_time);
+          setReminderTime(reminderDate.toTimeString().slice(0, 5)); // HH:MM format
+        }
       } else if (isEditingNote) {
         // It's a note
         setType('note');
@@ -206,6 +224,7 @@ export const NewEntryForm: React.FC<NewEntryFormProps> = ({
     setContent('');
     setDueDate(undefined);
     setAssignedDate(undefined);
+    setReminderTime('');
     setPriority('normal');
     setStatus('active');
     setDescription('');
@@ -236,6 +255,7 @@ export const NewEntryForm: React.FC<NewEntryFormProps> = ({
             .update({
               due_date: preserveLocalDate(dueDate),
               assigned_date: preserveLocalDate(assignedDate),
+              reminder_time: combineDateAndTime(assignedDate, reminderTime),
               status: status,
               description: description.trim() || null,
               priority: priority
@@ -293,6 +313,7 @@ export const NewEntryForm: React.FC<NewEntryFormProps> = ({
           entry_type: type === 'note' ? entryType : undefined,
           due_date: preserveLocalDate(dueDate),
           assigned_date: preserveLocalDate(assignedDate),
+          reminder_time: combineDateAndTime(assignedDate, reminderTime),
           status: type === 'task' ? status : undefined,
           priority: type === 'task' ? priority : undefined,
           description: type === 'task' ? description.trim() : null,
@@ -405,6 +426,36 @@ export const NewEntryForm: React.FC<NewEntryFormProps> = ({
                   selectedDate={dueDate}
                   onDateChange={setDueDate}
                 />
+              </div>
+              
+              <div className="space-y-4 border-t pt-4 bg-blue-50 p-4 rounded-lg">
+                <div className="text-sm font-semibold text-blue-800">🔔 Reminder (Optional)</div>
+                <div className="text-xs text-blue-600">Get notified when it's time to work on this task</div>
+                
+                <div className="grid grid-cols-1 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="reminder-time">Reminder Time</Label>
+                    <TimePicker
+                      value={reminderTime}
+                      onChange={(time) => {
+                        console.log('Reminder time changed:', time);
+                        setReminderTime(time);
+                      }}
+                      disabled={!assignedDate}
+                      placeholder="Select reminder time"
+                    />
+                    {assignedDate && reminderTime && (
+                      <div className="text-xs text-gray-500">
+                        You'll be reminded at this time on {format(assignedDate, 'MMM d, yyyy')}
+                      </div>
+                    )}
+                    {!assignedDate && (
+                      <div className="text-xs text-gray-600 italic">
+                        Set an "Assigned Date" above to enable reminders
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
               
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

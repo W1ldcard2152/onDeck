@@ -19,9 +19,9 @@ export const navItems: Array<{
   { icon: Home, label: 'Dashboard', id: 'dashboard' },
   { icon: CheckSquare, label: 'Tasks', id: 'tasks' },
   { icon: BookOpen, label: 'Notes', id: 'notes' },
-  { icon: Brain, label: 'Knowledge', id: 'knowledge' },
   { icon: FolderOpen, label: 'Projects', id: 'projects' },
   { icon: Star, label: 'Habits', id: 'habits' },
+  { icon: Brain, label: 'Knowledge', id: 'knowledge' },
   { icon: Calendar, label: 'Journal', id: 'journal' },
 ];
 

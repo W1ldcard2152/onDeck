@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { HabitsTable } from '@/components/HabitsTable';
 import { NewHabitForm } from '@/components/NewHabitForm';
 import { useSupabaseAuth } from '@/hooks/useSupabaseAuth';
-import { useHabits } from '@/hooks/useHabits';
+import { useHabits, type Habit } from '@/hooks/useHabits';
 import { getSupabaseClient } from '@/lib/supabase-client';
 import { ChevronDown, ChevronUp, RefreshCw } from 'lucide-react';
 import type { TaskWithDetails } from '@/lib/types';
@@ -19,6 +19,9 @@ export default function HabitsPage() {
   const [showHabitTasks, setShowHabitTasks] = useState(false);
   const [loadingHabitTasks, setLoadingHabitTasks] = useState(false);
   const [refreshingAllTasks, setRefreshingAllTasks] = useState(false);
+  
+  // State for habit editing
+  const [editingHabit, setEditingHabit] = useState<Habit | null>(null);
   
   const fetchHabitTasks = useCallback(async () => {
     if (!user?.id) return;
@@ -126,6 +129,20 @@ export default function HabitsPage() {
     }
   };
 
+  const handleEditHabit = (habit: Habit) => {
+    setEditingHabit(habit);
+  };
+
+  const handleHabitUpdated = async () => {
+    setEditingHabit(null);
+    refetch();
+    
+    // Also refresh the debug view if it's open
+    if (showHabitTasks) {
+      await fetchHabitTasks();
+    }
+  };
+
   return (
     <div className="space-y-6 py-6">
       <div className="mb-6">
@@ -141,7 +158,11 @@ export default function HabitsPage() {
               <RefreshCw className={`h-4 w-4 mr-2 ${refreshingAllTasks ? 'animate-spin' : ''}`} />
               {refreshingAllTasks ? 'Refreshing...' : 'Refresh Tasks'}
             </button>
-            <NewHabitForm onHabitCreated={refetch} />
+            <NewHabitForm 
+              onHabitCreated={refetch} 
+              editingHabit={editingHabit}
+              onHabitUpdated={handleHabitUpdated}
+            />
           </div>
         </div>
         
@@ -157,7 +178,11 @@ export default function HabitsPage() {
               <RefreshCw className={`h-4 w-4 mr-2 ${refreshingAllTasks ? 'animate-spin' : ''}`} />
               {refreshingAllTasks ? 'Refreshing...' : 'Refresh Tasks'}
             </button>
-            <NewHabitForm onHabitCreated={refetch} />
+            <NewHabitForm 
+              onHabitCreated={refetch} 
+              editingHabit={editingHabit}
+              onHabitUpdated={handleHabitUpdated}
+            />
           </div>
         </div>
       </div>
@@ -187,6 +212,7 @@ export default function HabitsPage() {
           <HabitsTable 
             habits={habits} 
             onHabitUpdate={refetch}
+            onEditHabit={handleEditHabit}
           />
         )}
       </div>

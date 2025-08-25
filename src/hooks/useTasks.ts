@@ -91,6 +91,7 @@ export function useTasks(userId: string | undefined, limit: number = 50, include
             id: task.id,
             assigned_date: task.assigned_date,
             due_date: task.due_date,
+            reminder_time: task.reminder_time,
             status: task.status || 'on_deck',
             description: task.description,
             is_project_converted: task.is_project_converted || false,

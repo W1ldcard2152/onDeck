@@ -12,6 +12,7 @@ interface CreateEntryParams {
   entry_type?: EntryType;
   due_date?: string | null;
   assigned_date?: string | null;
+  reminder_time?: string | null;
   status?: TaskStatus;
   priority?: Priority | null;
   description?: string | null;
@@ -51,6 +52,7 @@ export class EntryService {
           id: itemData.id,
           due_date: entry.due_date || null,
           assigned_date: entry.assigned_date || null,
+          reminder_time: entry.reminder_time || null,
           status: entry.status || 'on_deck',
           description: entry.description || null,
           is_project_converted: false,

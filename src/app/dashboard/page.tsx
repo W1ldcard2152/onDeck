@@ -152,6 +152,16 @@ const DashboardPage: React.FC = () => {
     }
   };
 
+  const formatReminderTime = (reminderTimeString: string) => {
+    try {
+      const date = new Date(reminderTimeString);
+      return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    } catch (e) {
+      console.error('Error parsing reminder time:', e);
+      return '';
+    }
+  };
+
   // Handle updates
   const handleUpdate = () => {
     refetchTasks();
@@ -503,7 +513,7 @@ const DashboardPage: React.FC = () => {
       </div>
       
       <div className="ml-7 mt-1 flex flex-wrap gap-2 text-xs">
-        <div className="flex flex-wrap gap-2 items-center">
+        <div className="flex flex-wrap gap-3 items-center">
           {contextLabel && (
             <span className={`font-medium ${contextLabel === "OVERDUE" ? "text-red-600" : "text-orange-500"}`}>{contextLabel}</span>
           )}
@@ -511,6 +521,11 @@ const DashboardPage: React.FC = () => {
             <span className={`flex items-center ${isDatePast(task.assigned_date) ? 'text-orange-500' : 'text-gray-500'}`}>
               <Calendar className="mr-1 h-3 w-3" />
               Assigned: {formatDateDisplay(task.assigned_date)}
+            </span>
+          )}
+          {task.reminder_time && (
+            <span className="flex items-center text-blue-600 font-medium">
+              🔔 {formatReminderTime(task.reminder_time)}
             </span>
           )}
           {task.due_date && (
@@ -618,6 +633,11 @@ const DashboardPage: React.FC = () => {
                   <div className="flex items-center text-gray-600">
                     <Calendar className="mr-1 h-4 w-4" />
                     <span>Assigned: {formatDateDisplay(taskToView.assigned_date)}</span>
+                  </div>
+                )}
+                {taskToView.reminder_time && (
+                  <div className="flex items-center text-blue-600 font-medium">
+                    🔔 {formatReminderTime(taskToView.reminder_time)}
                   </div>
                 )}
                 {taskToView.due_date && (

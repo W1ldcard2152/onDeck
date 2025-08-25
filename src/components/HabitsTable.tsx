@@ -31,9 +31,10 @@ import { useSupabaseAuth } from '@/hooks/useSupabaseAuth';
 interface HabitsTableProps {
   habits: Habit[];
   onHabitUpdate: () => void;
+  onEditHabit?: (habit: Habit) => void;
 }
 
-const HabitsTable = ({ habits, onHabitUpdate }: HabitsTableProps) => {
+const HabitsTable = ({ habits, onHabitUpdate, onEditHabit }: HabitsTableProps) => {
   const [loading, setLoading] = useState<Record<string, boolean>>({});
   const [error, setError] = useState<string | null>(null);
   const [habitToDelete, setHabitToDelete] = useState<string | null>(null);
@@ -286,6 +287,14 @@ const HabitsTable = ({ habits, onHabitUpdate }: HabitsTableProps) => {
                               Activate
                             </>
                           )}
+                        </DropdownMenuItem>
+                        
+                        <DropdownMenuItem
+                          onClick={() => onEditHabit?.(habit)}
+                          disabled={isLoading}
+                        >
+                          <Edit className="h-4 w-4 mr-2" />
+                          Edit Habit
                         </DropdownMenuItem>
                         
                         {habit.is_active && (
