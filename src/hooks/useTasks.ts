@@ -72,25 +72,69 @@ export function useTasks(userId: string | undefined, limit: number = 50, include
       
       for (let i = 0; i < itemIds.length; i += batchSize) {
         const batchIds = itemIds.slice(i, i + batchSize);
-        console.log(`Processing batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(itemIds.length / batchSize)} with ${batchIds.length} items`)
+        const batchNumber = Math.floor(i / batchSize) + 1;
+        const totalBatches = Math.ceil(itemIds.length / batchSize);
         
-        let taskQuery = supabase
-          .from('tasks')
-          .select('*')
-          .in('id', batchIds);
+        console.log(`Processing batch ${batchNumber}/${totalBatches} with ${batchIds.length} items`)
         
-        // Conditionally exclude habit tasks (filter by habit_id instead of status)
-        if (!includeHabitTasks) {
-          taskQuery = taskQuery.is('habit_id', null);
+        // Retry logic for rate limiting
+        let retries = 0;
+        const maxRetries = 3;
+        
+        while (retries <= maxRetries) {
+          try {
+            let taskQuery = supabase
+              .from('tasks')
+              .select('*')
+              .in('id', batchIds);
+            
+            // Conditionally exclude habit tasks (filter by habit_id instead of status)
+            if (!includeHabitTasks) {
+              taskQuery = taskQuery.is('habit_id', null);
+            }
+            
+            const { data: batchTaskData, error: batchTaskError } = await taskQuery
+              .order('due_date', { ascending: true })
+              .order('assigned_date', { ascending: true });
+            
+            if (batchTaskError) {
+              // Check if it's a rate limit error
+              if (batchTaskError.message?.includes('429') || batchTaskError.message?.includes('rate limit')) {
+                if (retries < maxRetries) {
+                  const delay = Math.pow(2, retries) * 1000; // Exponential backoff: 1s, 2s, 4s
+                  console.warn(`Rate limit hit in batch ${batchNumber}, retrying in ${delay}ms (attempt ${retries + 1}/${maxRetries + 1})`);
+                  await new Promise(resolve => setTimeout(resolve, delay));
+                  retries++;
+                  continue;
+                }
+              }
+              console.error(`Error in batch ${batchNumber}:`, batchTaskError);
+              throw batchTaskError;
+            }
+            
+            if (batchTaskData) {
+              allTaskData.push(...batchTaskData);
+            }
+            
+            // Success - break out of retry loop
+            break;
+            
+          } catch (error) {
+            if (retries < maxRetries) {
+              const delay = Math.pow(2, retries) * 1000;
+              console.warn(`Error in batch ${batchNumber}, retrying in ${delay}ms (attempt ${retries + 1}/${maxRetries + 1}):`, error);
+              await new Promise(resolve => setTimeout(resolve, delay));
+              retries++;
+              continue;
+            }
+            console.error(`Failed to process batch ${batchNumber} after ${maxRetries + 1} attempts:`, error);
+            throw error;
+          }
         }
         
-        const { data: batchTaskData, error: batchTaskError } = await taskQuery
-          .order('due_date', { ascending: true })
-          .order('assigned_date', { ascending: true });
-        
-        if (batchTaskError) throw batchTaskError;
-        if (batchTaskData) {
-          allTaskData.push(...batchTaskData);
+        // Add delay between batches to avoid rate limiting (except for last batch)
+        if (batchNumber < totalBatches) {
+          await new Promise(resolve => setTimeout(resolve, 150));
         }
       }
       

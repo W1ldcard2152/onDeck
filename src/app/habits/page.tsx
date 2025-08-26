@@ -55,18 +55,36 @@ export default function HabitsPage() {
       
       for (let i = 0; i < itemIds.length; i += batchSize) {
         const batchIds = itemIds.slice(i, i + batchSize);
-        console.log(`Processing habit task batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(itemIds.length / batchSize)} with ${batchIds.length} items`);
+        const batchNumber = Math.floor(i / batchSize) + 1;
+        const totalBatches = Math.ceil(itemIds.length / batchSize);
         
-        const { data: batchTaskData, error: batchTaskError } = await supabase
-          .from('tasks')
-          .select('*')
-          .in('id', batchIds)
-          .not('habit_id', 'is', null)
-          .order('assigned_date', { ascending: true });
+        console.log(`Processing habit task batch ${batchNumber}/${totalBatches} with ${batchIds.length} items`);
         
-        if (batchTaskError) throw batchTaskError;
-        if (batchTaskData) {
-          allTaskData.push(...batchTaskData);
+        try {
+          const { data: batchTaskData, error: batchTaskError } = await supabase
+            .from('tasks')
+            .select('*')
+            .in('id', batchIds)
+            .not('habit_id', 'is', null)
+            .order('assigned_date', { ascending: true });
+          
+          if (batchTaskError) {
+            console.error(`Error in habit task batch ${batchNumber}:`, batchTaskError);
+            throw batchTaskError;
+          }
+          
+          if (batchTaskData) {
+            allTaskData.push(...batchTaskData);
+          }
+          
+          // Add delay between batches to avoid rate limiting (except for last batch)
+          if (batchNumber < totalBatches) {
+            await new Promise(resolve => setTimeout(resolve, 100));
+          }
+          
+        } catch (error) {
+          console.error(`Failed to process habit task batch ${batchNumber}:`, error);
+          throw error;
         }
       }
       
