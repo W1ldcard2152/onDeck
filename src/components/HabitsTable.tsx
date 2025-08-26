@@ -193,7 +193,7 @@ const HabitsTable = ({ habits, onHabitUpdate, onEditHabit }: HabitsTableProps) =
         }
       } else {
         // Clear existing tasks
-        await generator.clearExistingHabitTasks(habitId);
+        await generator.clearAllIncompleteHabitTasks(habitId);
       }
 
       onHabitUpdate();
@@ -218,7 +218,7 @@ const HabitsTable = ({ habits, onHabitUpdate, onEditHabit }: HabitsTableProps) =
     try {
       // First clear any associated tasks
       const generator = new HabitTaskGenerator(supabase, user.id);
-      await generator.clearExistingHabitTasks(habitToDelete);
+      await generator.clearAllIncompleteHabitTasks(habitToDelete);
 
       // Then delete the habit
       const { error } = await supabase
