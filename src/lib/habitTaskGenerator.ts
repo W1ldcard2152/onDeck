@@ -26,15 +26,15 @@ export class HabitTaskGenerator {
       // Add a small delay to ensure deletion completes
       await new Promise(resolve => setTimeout(resolve, 500))
     } else {
-      // For daily cleanup, only clear outdated tasks
-      console.log('Daily cleanup: clearing outdated habit tasks for habit:', habit.id)
-      await this.clearExistingHabitTasks(habit.id)
+      // For regular regeneration, clear all incomplete tasks to avoid duplicates
+      console.log('Regular regeneration: clearing ALL incomplete habit tasks for habit:', habit.id)
+      await this.clearAllIncompleteHabitTasks(habit.id)
     }
 
     // Generate new tasks
-    console.log('Generating dates for habit...')
+    console.log('Generating dates for habit:', habit.title, 'Rule:', habit.recurrence_rule)
     const dates = this.generateDatesForHabit(habit, 30)
-    console.log('Generated dates:', dates.length, dates.slice(0, 5)) // Show first 5 dates
+    console.log('Generated dates for habit:', dates.length, dates.map(d => d.toDateString()).slice(0, 10)) // Show first 10 dates
     
     for (const date of dates) {
       console.log('Creating habit task for date:', date)
@@ -92,34 +92,28 @@ export class HabitTaskGenerator {
   }
 
   /**
-   * Clear old/outdated habit tasks (past assigned dates and outside 30-day window)
+   * Clear only past incomplete habit tasks (for daily cleanup)
    */
-  async clearExistingHabitTasks(habitId: string): Promise<void> {
+  async clearPastIncompleteHabitTasks(habitId: string): Promise<void> {
     const today = new Date()
-    const thirtyDaysFromNow = new Date()
-    thirtyDaysFromNow.setDate(today.getDate() + 30)
-    
     const todayStr = today.toISOString().split('T')[0]
-    const futureStr = thirtyDaysFromNow.toISOString().split('T')[0]
 
-    console.log(`Cleaning habit ${habitId} tasks. Today: ${todayStr}, Future cutoff: ${futureStr}`)
+    console.log(`Cleaning past incomplete tasks for habit ${habitId}. Today: ${todayStr}`)
 
-    // Get incomplete habit tasks that should be deleted:
-    // 1. Tasks with assigned_date before today (past incomplete tasks)
-    // 2. Tasks with assigned_date beyond our 30-day window
+    // Get incomplete habit tasks that are before today
     const { data: tasksToDelete, error } = await this.supabase
       .from('tasks')
       .select('id, assigned_date, status')
       .eq('habit_id', habitId)
       .neq('status', 'completed')
-      .or(`assigned_date.lt.${todayStr},assigned_date.gt.${futureStr}`)
+      .lt('assigned_date', todayStr)
 
     if (error) {
-      console.error('Error finding tasks to delete:', error)
+      console.error('Error finding past tasks to delete:', error)
       return
     }
 
-    console.log('Tasks found for deletion:', tasksToDelete)
+    console.log('Past incomplete tasks found for deletion:', tasksToDelete)
 
     if (tasksToDelete && tasksToDelete.length > 0) {
       const taskIds = tasksToDelete.map(t => t.id)
@@ -131,7 +125,7 @@ export class HabitTaskGenerator {
         .in('id', taskIds)
 
       if (taskDeleteError) {
-        console.error('Error deleting tasks:', taskDeleteError)
+        console.error('Error deleting past tasks:', taskDeleteError)
         return
       }
 
@@ -142,12 +136,12 @@ export class HabitTaskGenerator {
         .in('id', taskIds)
         
       if (itemDeleteError) {
-        console.error('Error deleting items:', itemDeleteError)
+        console.error('Error deleting past items:', itemDeleteError)
       } else {
-        console.log(`Successfully deleted ${taskIds.length} outdated habit tasks`)
+        console.log(`Successfully deleted ${taskIds.length} past incomplete habit tasks`)
       }
     } else {
-      console.log('No outdated habit tasks found to delete')
+      console.log('No past incomplete habit tasks found to delete')
     }
   }
 
@@ -210,7 +204,6 @@ export class HabitTaskGenerator {
 
   private generateWeeklyDates(startDate: Date, dayCount: number, rule: RecurrenceRule): Date[] {
     const dates: Date[] = []
-    const current = new Date(startDate)
     const interval = rule.interval || 1
     const daysOfWeek = rule.days_of_week || ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
     
@@ -221,31 +214,32 @@ export class HabitTaskGenerator {
     }
     
     const targetDays = daysOfWeek.map(day => dayMap[day]).filter(d => d !== undefined)
+    console.log('Weekly habit target days:', daysOfWeek, '-> numbers:', targetDays)
     
-    let weeksChecked = 0
-    const maxWeeks = Math.ceil(dayCount / targetDays.length) * interval + 4 // Buffer for safety
+    // Start checking from startDate and look forward day by day
+    let checkDate = new Date(startDate)
+    let daysChecked = 0
+    const maxDaysToCheck = dayCount * 7 * interval + 30 // Safety buffer
     
-    while (dates.length < dayCount && weeksChecked < maxWeeks) {
-      for (const targetDay of targetDays) {
-        if (dates.length >= dayCount) break
-        
-        // Calculate the date for this day of the current week
-        const dayDiff = targetDay - current.getDay()
-        const targetDate = new Date(current)
-        targetDate.setDate(current.getDate() + dayDiff)
-        
-        // Only include if it's today or in the future
-        if (targetDate >= startDate && this.shouldIncludeDate(targetDate, rule)) {
-          dates.push(new Date(targetDate))
+    while (dates.length < dayCount && daysChecked < maxDaysToCheck) {
+      const dayOfWeek = checkDate.getDay()
+      
+      // Check if this day matches our target days
+      if (targetDays.includes(dayOfWeek)) {
+        // This is a target day - check if it should be included based on interval
+        if (this.shouldIncludeDate(checkDate, rule)) {
+          dates.push(new Date(checkDate))
+          console.log(`Added weekly date: ${checkDate.toDateString()} (day ${dayOfWeek})`)
         }
       }
       
-      // Move to next interval of weeks
-      current.setDate(current.getDate() + (7 * interval))
-      weeksChecked += interval
+      // Move to next day
+      checkDate.setDate(checkDate.getDate() + 1)
+      daysChecked++
     }
 
-    return dates.sort((a, b) => a.getTime() - b.getTime()).slice(0, dayCount)
+    console.log(`Generated ${dates.length} weekly dates:`, dates.map(d => d.toDateString()))
+    return dates
   }
 
   private generateMonthlyDates(startDate: Date, dayCount: number, rule: RecurrenceRule): Date[] {
@@ -305,12 +299,17 @@ export class HabitTaskGenerator {
     const dateStr = date.toISOString().split('T')[0] // YYYY-MM-DD format
     
     // Check if a task already exists for this habit on this date
-    const { data: existingTask } = await this.supabase
+    const { data: existingTask, error: checkError } = await this.supabase
       .from('tasks')
       .select('id')
       .eq('habit_id', habit.id)
       .eq('assigned_date', dateStr)
-      .single()
+      .maybeSingle()
+    
+    if (checkError) {
+      console.error('Error checking for existing task:', checkError)
+      throw checkError
+    }
     
     if (existingTask) {
       console.log(`Task already exists for habit ${habit.id} on ${dateStr}, skipping`)
@@ -365,7 +364,7 @@ export class HabitTaskGenerator {
 
     for (const habit of activeHabits || []) {
       try {
-        await this.clearExistingHabitTasks(habit.id)
+        await this.clearPastIncompleteHabitTasks(habit.id)
       } catch (e) {
         console.error(`Failed to cleanup tasks for habit ${habit.id}:`, e)
       }

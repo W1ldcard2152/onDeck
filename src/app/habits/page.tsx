@@ -45,20 +45,38 @@ export default function HabitsPage() {
         return;
       }
       
-      // Get tasks with habit status
+      // Get tasks with habit status - use batch processing to avoid URL length issues
       const itemIds = itemsData.map(item => item.id);
-      const { data: taskData, error: taskError } = await supabase
-        .from('tasks')
-        .select('*')
-        .in('id', itemIds)
-        .not('habit_id', 'is', null)
-        .order('assigned_date', { ascending: true });
+      console.log('Fetching habit tasks for item IDs in batches:', itemIds.length);
       
-      if (taskError) throw taskError;
-      if (!taskData || taskData.length === 0) {
+      // Process in batches to avoid URL length limitations
+      const batchSize = 50;
+      const allTaskData: any[] = [];
+      
+      for (let i = 0; i < itemIds.length; i += batchSize) {
+        const batchIds = itemIds.slice(i, i + batchSize);
+        console.log(`Processing habit task batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(itemIds.length / batchSize)} with ${batchIds.length} items`);
+        
+        const { data: batchTaskData, error: batchTaskError } = await supabase
+          .from('tasks')
+          .select('*')
+          .in('id', batchIds)
+          .not('habit_id', 'is', null)
+          .order('assigned_date', { ascending: true });
+        
+        if (batchTaskError) throw batchTaskError;
+        if (batchTaskData) {
+          allTaskData.push(...batchTaskData);
+        }
+      }
+      
+      console.log('All habit task batches completed, total tasks found:', allTaskData.length);
+      if (allTaskData.length === 0) {
         setHabitTasks([]);
         return;
       }
+      
+      const taskData = allTaskData;
       
       // Combine items and tasks
       const combinedTasks: TaskWithDetails[] = taskData

@@ -44,6 +44,8 @@ export function useTasks(userId: string | undefined, limit: number = 50, include
       
       const supabase = supabaseRef.current
   
+      console.log('Starting fetchTasks for userId:', userId)
+      
       // Get items first
       const { data: itemsData, error: itemsError } = await supabase
         .from('items')
@@ -53,33 +55,52 @@ export function useTasks(userId: string | undefined, limit: number = 50, include
         .eq('is_archived', false)
         .order('created_at', { ascending: false })
   
+      console.log('Items query completed:', { itemsData, itemsError })
       if (itemsError) throw itemsError
       if (!itemsData || itemsData.length === 0) {
         setTasks([])
         return
       }
       
-      // Get tasks for those items
-      const itemIds = itemsData.map(item => item.id)
-      let taskQuery = supabase
-        .from('tasks')
-        .select('*')
-        .in('id', itemIds);
+      // Get tasks for those items - use batch processing to avoid URL length issues
+      const itemIds = itemsData.map(item => item.id);
+      console.log('About to query tasks for item IDs in batches:', itemIds.length)
       
-      // Conditionally exclude habit tasks (filter by habit_id instead of status)
-      if (!includeHabitTasks) {
-        taskQuery = taskQuery.is('habit_id', null);
+      // Process in batches to avoid URL length limitations
+      const batchSize = 50;
+      const allTaskData: any[] = [];
+      
+      for (let i = 0; i < itemIds.length; i += batchSize) {
+        const batchIds = itemIds.slice(i, i + batchSize);
+        console.log(`Processing batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(itemIds.length / batchSize)} with ${batchIds.length} items`)
+        
+        let taskQuery = supabase
+          .from('tasks')
+          .select('*')
+          .in('id', batchIds);
+        
+        // Conditionally exclude habit tasks (filter by habit_id instead of status)
+        if (!includeHabitTasks) {
+          taskQuery = taskQuery.is('habit_id', null);
+        }
+        
+        const { data: batchTaskData, error: batchTaskError } = await taskQuery
+          .order('due_date', { ascending: true })
+          .order('assigned_date', { ascending: true });
+        
+        if (batchTaskError) throw batchTaskError;
+        if (batchTaskData) {
+          allTaskData.push(...batchTaskData);
+        }
       }
       
-      const { data: taskData, error: taskError } = await taskQuery
-        .order('due_date', { ascending: true })
-        .order('assigned_date', { ascending: true })
-      
-      if (taskError) throw taskError
-      if (!taskData || taskData.length === 0) {
+      console.log('All batches completed, total tasks found:', allTaskData.length)
+      if (allTaskData.length === 0) {
         setTasks([])
         return
       }
+      
+      const taskData = allTaskData;
   
       // Combine items and tasks
       const combinedTasks: TaskWithDetails[] = taskData
@@ -114,6 +135,7 @@ export function useTasks(userId: string | undefined, limit: number = 50, include
       
     } catch (e) {
       console.error('Error in fetchTasks:', e)
+      console.error('Full error details:', JSON.stringify(e, null, 2))
       setError(e instanceof Error ? e : new Error('An error occurred while fetching tasks'))
     } finally {
       setIsLoading(false)

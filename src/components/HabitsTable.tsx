@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState } from 'react';
-import { format } from 'date-fns';
+import { format, addDays, addWeeks, addMonths, startOfDay, isAfter, isSameDay } from 'date-fns';
 import { MoreHorizontal, Play, Pause, Trash2, Edit, RotateCcw } from 'lucide-react';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import {
@@ -82,6 +82,83 @@ const HabitsTable = ({ habits, onHabitUpdate, onEditHabit }: HabitsTableProps) =
       case 'low': return 'bg-gray-100 text-gray-800';
       default: return 'bg-blue-100 text-blue-800';
     }
+  };
+
+  const calculateNextScheduled = (habit: Habit): Date | null => {
+    if (!habit.is_active || !habit.recurrence_rule) return null;
+
+    const rule = habit.recurrence_rule;
+    const now = new Date();
+    const today = startOfDay(now);
+    const startDate = new Date(rule.start_date);
+    
+    // If start date is in the future and matches pattern, use that
+    if (isAfter(startOfDay(startDate), today)) {
+      if (matchesRecurrencePattern(startOfDay(startDate), rule, startDate)) {
+        return startOfDay(startDate);
+      }
+    }
+
+    // For daily habits, simple calculation
+    if (rule.type === 'daily') {
+      const interval = rule.interval || 1;
+      let nextDate = startOfDay(startDate);
+      
+      while (!isAfter(nextDate, today)) {
+        nextDate = addDays(nextDate, interval);
+      }
+      return nextDate;
+    }
+
+    // For weekly and monthly habits, check each day until we find a match
+    let checkDate = isSameDay(today, startOfDay(startDate)) ? today : addDays(today, 1);
+    
+    for (let i = 0; i < 365; i++) {
+      if (matchesRecurrencePattern(checkDate, rule, startDate)) {
+        return startOfDay(checkDate);
+      }
+      checkDate = addDays(checkDate, 1);
+    }
+
+    return null;
+  };
+
+  const matchesRecurrencePattern = (date: Date, rule: any, startDate: Date): boolean => {
+    switch (rule.type) {
+      case 'daily':
+        return true; // Daily habits match every day (interval handled in calculation)
+      
+      case 'weekly':
+        if (rule.days_of_week && rule.days_of_week.length > 0) {
+          const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+          const dayName = dayNames[date.getDay()];
+          return rule.days_of_week.includes(dayName);
+        }
+        return true;
+      
+      case 'monthly':
+        if (rule.days_of_month && rule.days_of_month.length > 0) {
+          return rule.days_of_month.includes(date.getDate());
+        }
+        return date.getDate() === startDate.getDate();
+      
+      default:
+        return false;
+    }
+  };
+
+  const formatNextScheduled = (habit: Habit): string => {
+    if (!habit.is_active) return 'Inactive';
+    
+    const nextDate = calculateNextScheduled(habit);
+    if (!nextDate) return 'No schedule';
+
+    const dateStr = format(nextDate, 'MMM d');
+    const timeStr = habit.recurrence_rule?.time_of_day 
+      ? format(new Date(`2000-01-01T${habit.recurrence_rule.time_of_day}`), 'h:mm a')
+      : null;
+
+    return timeStr ? `${dateStr} at ${timeStr}` : dateStr;
   };
 
   const handleToggleActive = async (habitId: string, isActive: boolean) => {
@@ -208,6 +285,7 @@ const HabitsTable = ({ habits, onHabitUpdate, onEditHabit }: HabitsTableProps) =
               <TableHead>Title</TableHead>
               <TableHead>Frequency</TableHead>
               <TableHead>Priority</TableHead>
+              <TableHead>Next Scheduled</TableHead>
               <TableHead>Created</TableHead>
               <TableHead>Description</TableHead>
               <TableHead className="w-12 text-right">Actions</TableHead>
@@ -248,6 +326,12 @@ const HabitsTable = ({ habits, onHabitUpdate, onEditHabit }: HabitsTableProps) =
                     <Badge className={getPriorityColor(habit.priority)}>
                       {habit.priority}
                     </Badge>
+                  </TableCell>
+                  
+                  <TableCell>
+                    <span className={habit.is_active ? 'text-gray-900' : 'text-gray-500'}>
+                      {formatNextScheduled(habit)}
+                    </span>
                   </TableCell>
                   
                   <TableCell>

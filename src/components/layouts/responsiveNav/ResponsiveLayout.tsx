@@ -1,13 +1,15 @@
 import React, { useState } from 'react';
-import { Search, Bell, Settings } from 'lucide-react';
+import { Search, Bell, Settings, MessageSquare } from 'lucide-react';
 import { cn } from "@/lib/utils";
 import { BottomNav } from './BottomNav';
 import { DesktopNav } from './DesktopNav';
 import { MobileHeader } from './MobileHeader';
+import { FeedbackModal } from '@/components/FeedbackModal';
 import type { SectionType } from './types';
 
 const Layout = () => {
   const [activeSection, setActiveSection] = useState<SectionType>('dashboard');
+  const [isFeedbackModalOpen, setIsFeedbackModalOpen] = useState(false);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -22,7 +24,11 @@ const Layout = () => {
       {/* Main Content Area */}
       <div className="md:ml-64 min-h-screen flex flex-col">
         {/* Mobile Header - visible only on mobile */}
-        <MobileHeader className="md:hidden" />
+        <MobileHeader 
+          className="md:hidden"
+          onSectionChange={setActiveSection}
+          onFeedbackClick={() => setIsFeedbackModalOpen(true)}
+        />
 
         {/* Desktop Header - visible only on desktop */}
         <header className="hidden md:flex h-16 bg-white border-b items-center justify-between px-4 sticky top-0">
@@ -38,6 +44,12 @@ const Layout = () => {
           </div>
           
           <div className="flex items-center space-x-4">
+            <button 
+              className="p-2 hover:bg-gray-100 rounded-lg"
+              onClick={() => setIsFeedbackModalOpen(true)}
+            >
+              <MessageSquare size={20} className="text-red-500" />
+            </button>
             <button className="p-2 hover:bg-gray-100 rounded-lg">
               <Bell size={20} className="text-gray-600" />
             </button>
@@ -69,6 +81,12 @@ const Layout = () => {
           onSectionChange={setActiveSection}
         />
       </div>
+
+      {/* Feedback Modal */}
+      <FeedbackModal
+        isOpen={isFeedbackModalOpen}
+        onOpenChange={setIsFeedbackModalOpen}
+      />
     </div>
   );
 };

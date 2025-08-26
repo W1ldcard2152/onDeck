@@ -19,6 +19,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { TimePicker } from "@/components/ui/time-picker";
 import { Plus } from 'lucide-react';
 import { useHabits, type RecurrenceRule, type Habit } from '@/hooks/useHabits';
 import { useSupabaseAuth } from '@/hooks/useSupabaseAuth';
@@ -40,6 +41,7 @@ const NewHabitForm = ({ onHabitCreated, editingHabit, onHabitUpdated }: NewHabit
   const [interval, setInterval] = useState(1);
   const [selectedDays, setSelectedDays] = useState<string[]>([]);
   const [selectedDaysOfMonth, setSelectedDaysOfMonth] = useState<number[]>([]);
+  const [timeOfDay, setTimeOfDay] = useState('');
   
   const { user } = useSupabaseAuth();
   const { createHabit, updateHabit } = useHabits(user?.id);
@@ -61,6 +63,7 @@ const NewHabitForm = ({ onHabitCreated, editingHabit, onHabitUpdated }: NewHabit
       setInterval(rule.interval || 1);
       setSelectedDays(rule.days_of_week || []);
       setSelectedDaysOfMonth(rule.days_of_month || []);
+      setTimeOfDay(rule.time_of_day || '');
     }
   }, [editingHabit]);
 
@@ -76,6 +79,7 @@ const NewHabitForm = ({ onHabitCreated, editingHabit, onHabitUpdated }: NewHabit
       setInterval(1);
       setSelectedDays([]);
       setSelectedDaysOfMonth([]);
+      setTimeOfDay('');
       if (open) {
         setOpen(false);
       }
@@ -96,6 +100,7 @@ const NewHabitForm = ({ onHabitCreated, editingHabit, onHabitUpdated }: NewHabit
         unit: frequencyType === 'daily' ? 'day' : frequencyType === 'weekly' ? 'week' : 'month',
         ...(frequencyType === 'weekly' && selectedDays.length > 0 && { days_of_week: selectedDays }),
         ...(frequencyType === 'monthly' && selectedDaysOfMonth.length > 0 && { days_of_month: selectedDaysOfMonth }),
+        ...(timeOfDay && { time_of_day: timeOfDay }),
         end_condition: { type: 'none' }
       };
 
@@ -128,6 +133,7 @@ const NewHabitForm = ({ onHabitCreated, editingHabit, onHabitUpdated }: NewHabit
       setInterval(1);
       setSelectedDays([]);
       setSelectedDaysOfMonth([]);
+      setTimeOfDay('');
       setOpen(false);
       
     } catch (error) {
@@ -208,6 +214,17 @@ const NewHabitForm = ({ onHabitCreated, editingHabit, onHabitUpdated }: NewHabit
                   <SelectItem value="high">High</SelectItem>
                 </SelectContent>
               </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Time of Day (optional)</Label>
+              <TimePicker
+                value={timeOfDay}
+                onChange={setTimeOfDay}
+              />
+              <p className="text-sm text-gray-500">
+                Set a preferred time for this habit (e.g., 7:00 AM for morning jog)
+              </p>
             </div>
 
             <div className="space-y-2">

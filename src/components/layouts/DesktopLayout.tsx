@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect } from 'react';
-import { Bell, Settings } from 'lucide-react';
+import { Bell, Settings, MessageSquare } from 'lucide-react';
 import { BottomNav } from './responsiveNav/BottomNav';
 import { DesktopNav } from './responsiveNav/DesktopNav';
 import { MobileHeader } from './responsiveNav/MobileHeader';
@@ -18,13 +18,16 @@ import ClientLayout from './ClientLayout';
 import ProjectsPage from '@/app/projects/page';
 import KnowledgePage from '@/app/knowledge/page';
 import HabitsPage from '@/app/habits/page';
+import FeedbackPage from '@/app/feedback/page';
 import InstallPWA from '../InstallPWA';
 import PWAStatus from '../PWAStatus';
 import OfflineNotification from '../OfflineNotification';
+import { FeedbackModal } from '../FeedbackModal';
 
 const DesktopLayout = () => {
   const { user, loading } = useSupabaseAuth();
   const [activeSection, setActiveSection] = useState<SectionType>('dashboard');
+  const [isFeedbackModalOpen, setIsFeedbackModalOpen] = useState(false);
   
   // Register and monitor the service worker
   const { isActive, isRegistered, error } = useServiceWorker({
@@ -85,6 +88,8 @@ const DesktopLayout = () => {
         return <KnowledgePage />;
       case 'habits':
         return <HabitsPage />;
+      case 'feedback':
+        return <FeedbackPage />;
       case 'journal':
         return <div className="text-center py-12">Journal feature coming soon</div>;
       default:
@@ -109,6 +114,7 @@ const DesktopLayout = () => {
           <MobileHeader 
             className="md:hidden" 
             onSectionChange={setActiveSection}
+            onFeedbackClick={() => setIsFeedbackModalOpen(true)}
           />
           
           {/* Install PWA Prompt - Only visible on mobile */}
@@ -131,6 +137,13 @@ const DesktopLayout = () => {
               <div className="hidden md:block w-auto mr-2">
                 <InstallPWA />
               </div>
+              <button 
+                type="button"
+                className="p-2 hover:bg-gray-100 rounded-lg"
+                onClick={() => setIsFeedbackModalOpen(true)}
+              >
+                <MessageSquare size={20} className="text-red-500" />
+              </button>
               <button 
                 type="button"
                 className="p-2 hover:bg-gray-100 rounded-lg"
@@ -167,6 +180,13 @@ const DesktopLayout = () => {
       
       {/* Offline notification */}
       <OfflineNotification />
+      
+      {/* Feedback Modal */}
+      <FeedbackModal
+        isOpen={isFeedbackModalOpen}
+        onOpenChange={setIsFeedbackModalOpen}
+        onViewAllFeedback={() => setActiveSection('feedback')}
+      />
     </ClientLayout>
   );
 };

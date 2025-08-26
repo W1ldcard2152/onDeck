@@ -191,6 +191,35 @@ export interface Database {
           habit_id?: string | null;
         };
       };
+      feedback: {
+        Row: {
+          id: string;
+          user_id: string;
+          message: string;
+          is_archived: boolean;
+          archived_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          message: string;
+          is_archived?: boolean;
+          archived_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          message?: string;
+          is_archived?: boolean;
+          archived_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
     };
   };
 }

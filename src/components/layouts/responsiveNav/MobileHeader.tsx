@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Search, Bell, Settings, X } from 'lucide-react';
+import { Search, Bell, Settings, X, MessageSquare } from 'lucide-react';
 import { cn } from "@/lib/utils";
 import {
   DropdownMenu,
@@ -15,11 +15,13 @@ import type { SectionType } from './types';
 interface MobileHeaderProps {
   className?: string;
   onSectionChange?: (section: SectionType) => void;
+  onFeedbackClick?: () => void;
 }
 
 export const MobileHeader: React.FC<MobileHeaderProps> = ({ 
   className,
-  onSectionChange 
+  onSectionChange,
+  onFeedbackClick
 }) => {
   const [isSearchExpanded, setIsSearchExpanded] = useState(false);
 
@@ -65,6 +67,15 @@ export const MobileHeader: React.FC<MobileHeaderProps> = ({
           onClick={() => setIsSearchExpanded(true)}
         >
           <Search className="h-5 w-5 text-gray-600" />
+        </Button>
+
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-10 w-10"
+          onClick={onFeedbackClick}
+        >
+          <MessageSquare className="h-5 w-5 text-red-500" />
         </Button>
 
         <Button
