@@ -37,7 +37,7 @@ import { getSupabaseClient } from '@/lib/supabase-client';
 
 const DashboardPage: React.FC = () => {
   const { user } = useSupabaseAuth();
-  const { tasks, isLoading: tasksLoading, refetch: refetchTasks } = useTasks(user?.id, 50, false);
+  const { tasks, isLoading: tasksLoading, refetch: refetchTasks } = useTasks(user?.id, 50, true);
   const { notes, isLoading: notesLoading, refetch: refetchNotes } = useNotes(user?.id);
   const [refreshKey, setRefreshKey] = useState(0);
   const [loadingTasks, setLoadingTasks] = useState<Record<string, boolean>>({});

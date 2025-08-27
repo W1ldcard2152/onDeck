@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { format, addDays, addWeeks, addMonths, startOfDay, isAfter, isSameDay } from 'date-fns';
 import { MoreHorizontal, Play, Pause, Trash2, Edit, RotateCcw } from 'lucide-react';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
@@ -39,9 +39,59 @@ const HabitsTable = ({ habits, onHabitUpdate, onEditHabit }: HabitsTableProps) =
   const [error, setError] = useState<string | null>(null);
   const [habitToDelete, setHabitToDelete] = useState<string | null>(null);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [nextScheduledDates, setNextScheduledDates] = useState<Record<string, Date | null>>({});
   const { user } = useSupabaseAuth();
   
   const supabase = createClientComponentClient<Database>();
+
+  // Fetch actual next scheduled dates from the tasks table
+  const fetchNextScheduledDates = async () => {
+    if (!user?.id || habits.length === 0) return;
+
+    try {
+      const today = new Date().toISOString().split('T')[0];
+      const { data: tasks, error } = await supabase
+        .from('tasks')
+        .select('habit_id, assigned_date')
+        .not('habit_id', 'is', null)
+        .gte('assigned_date', today)
+        .neq('status', 'completed')
+        .order('assigned_date', { ascending: true });
+
+      if (error) throw error;
+
+      // Group tasks by habit_id and find the earliest date for each
+      const nextDates: Record<string, Date | null> = {};
+      
+      // Initialize all habits to null
+      habits.forEach(habit => {
+        nextDates[habit.id] = null;
+      });
+
+      // Find the earliest scheduled date for each habit
+      if (tasks) {
+        tasks.forEach(task => {
+          if (task.habit_id && task.assigned_date) {
+            const currentNext = nextDates[task.habit_id];
+            const taskDate = new Date(task.assigned_date + 'T00:00:00'); // Parse as local date
+            
+            if (!currentNext || taskDate < currentNext) {
+              nextDates[task.habit_id] = taskDate;
+            }
+          }
+        });
+      }
+
+      setNextScheduledDates(nextDates);
+    } catch (err) {
+      console.error('Error fetching next scheduled dates:', err);
+    }
+  };
+
+  // Fetch next scheduled dates when habits change
+  useEffect(() => {
+    fetchNextScheduledDates();
+  }, [habits, user?.id]);
 
   const formatRecurrenceRule = (rule: any): string => {
     if (!rule || typeof rule !== 'object') return 'Unknown';
@@ -90,7 +140,13 @@ const HabitsTable = ({ habits, onHabitUpdate, onEditHabit }: HabitsTableProps) =
     const rule = habit.recurrence_rule;
     const now = new Date();
     const today = startOfDay(now);
-    const startDate = new Date(rule.start_date);
+    // Helper to parse date string as local time (not UTC)
+    const parseLocalDate = (dateStr: string): Date => {
+      const [year, month, day] = dateStr.split('-').map(Number);
+      return new Date(year, month - 1, day); // month is 0-indexed
+    };
+    
+    const startDate = rule.start_date ? parseLocalDate(rule.start_date) : today;
     
     // If start date is in the future and matches pattern, use that
     if (isAfter(startOfDay(startDate), today)) {
@@ -150,8 +206,8 @@ const HabitsTable = ({ habits, onHabitUpdate, onEditHabit }: HabitsTableProps) =
   const formatNextScheduled = (habit: Habit): string => {
     if (!habit.is_active) return 'Inactive';
     
-    const nextDate = calculateNextScheduled(habit);
-    if (!nextDate) return 'No schedule';
+    const nextDate = nextScheduledDates[habit.id];
+    if (!nextDate) return 'No tasks scheduled';
 
     const dateStr = format(nextDate, 'MMM d');
     const timeStr = habit.recurrence_rule?.time_of_day 
@@ -197,6 +253,7 @@ const HabitsTable = ({ habits, onHabitUpdate, onEditHabit }: HabitsTableProps) =
       }
 
       onHabitUpdate();
+      await fetchNextScheduledDates(); // Refresh next scheduled dates
     } catch (err) {
       console.error('Error toggling habit:', err);
       setError(err instanceof Error ? err.message : 'Failed to update habit');
@@ -229,6 +286,7 @@ const HabitsTable = ({ habits, onHabitUpdate, onEditHabit }: HabitsTableProps) =
       if (error) throw error;
 
       onHabitUpdate();
+      await fetchNextScheduledDates(); // Refresh next scheduled dates
     } catch (err) {
       console.error('Error deleting habit:', err);
       setError(err instanceof Error ? err.message : 'Failed to delete habit');
@@ -261,6 +319,7 @@ const HabitsTable = ({ habits, onHabitUpdate, onEditHabit }: HabitsTableProps) =
       await generator.generateTasksForHabit(habit as Habit);
 
       onHabitUpdate();
+      await fetchNextScheduledDates(); // Refresh next scheduled dates
     } catch (err) {
       console.error('Error regenerating tasks:', err);
       setError(err instanceof Error ? err.message : 'Failed to regenerate tasks');

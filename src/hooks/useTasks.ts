@@ -58,28 +58,41 @@ export function useTasks(userId: string | undefined, limit: number = 50, include
       
       console.log(`Filtering tasks to assigned_date between ${lowerDateFilter} and ${upperDateFilter} or no assigned_date`);
       
+      // Build the query with proper date filtering
+      // Use a simpler approach: get tasks with no date OR within date range
       let tasksQuery = supabase
         .from('tasks')
-        .select('*')
-        .or(`assigned_date.is.null,and(assigned_date.gte.${lowerDateFilter},assigned_date.lte.${upperDateFilter})`);
+        .select('*');
       
       // Filter by habit_id based on includeHabitTasks parameter
-      if (includeHabitTasks) {
-        tasksQuery = tasksQuery.not('habit_id', 'is', null);
-      } else {
+      if (includeHabitTasks === false) {
+        // Only exclude habit tasks if explicitly set to false
         tasksQuery = tasksQuery.is('habit_id', null);
       }
+      // If includeHabitTasks is true or not specified, include all tasks (both regular and habit tasks)
       
-      const { data: allTasks, error: tasksError } = await tasksQuery
+      const { data: allTasksRaw, error: tasksError } = await tasksQuery
         .order('due_date', { ascending: true })
         .order('assigned_date', { ascending: true });
       
-      console.log('Tasks query completed:', { taskCount: allTasks?.length, tasksError })
+      console.log('Tasks query completed:', { taskCount: allTasksRaw?.length, tasksError })
       if (tasksError) throw tasksError;
-      if (!allTasks || allTasks.length === 0) {
+      if (!allTasksRaw || allTasksRaw.length === 0) {
         setTasks([]);
         return;
       }
+      
+      // Apply date filtering in JavaScript for more reliable results
+      const allTasks = allTasksRaw.filter(task => {
+        // Include tasks with no assigned_date
+        if (!task.assigned_date) return true;
+        
+        // Check if assigned_date is within our range
+        const taskDate = task.assigned_date; // YYYY-MM-DD format
+        return taskDate >= lowerDateFilter && taskDate <= upperDateFilter;
+      });
+      
+      console.log(`Filtered ${allTasksRaw.length} tasks down to ${allTasks.length} within date range ${lowerDateFilter} to ${upperDateFilter}`);
       
       // Get the task IDs to fetch corresponding items
       const taskIds = allTasks.map(task => task.id);

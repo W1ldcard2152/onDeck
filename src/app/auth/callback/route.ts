@@ -16,7 +16,7 @@ export async function GET(request: NextRequest) {
     await supabase.auth.exchangeCodeForSession(code);
   }
 
-  // Redirect to the dashboard after successful sign-in
-  // You can change this to any page you want users to land on after login
-  return NextResponse.redirect(new URL('/dashboard', request.url));
+  // Redirect to the home page after successful sign-in
+  // The home page (/) includes the proper layout with sidebar and top bar
+  return NextResponse.redirect(new URL('/', request.url));
 }
