@@ -46,36 +46,55 @@ export function useTasks(userId: string | undefined, limit: number = 50, include
   
       console.log('Starting fetchTasks for userId:', userId)
       
-      // Get items first
-      const { data: itemsData, error: itemsError } = await supabase
-        .from('items')
+      // First get tasks with proper filtering for habit tasks and date range
+      // Dashboard shows tasks from 30 days ago to 5 days in future (or no assigned date)
+      const fiveDaysFromNow = new Date();
+      fiveDaysFromNow.setDate(fiveDaysFromNow.getDate() + 5);
+      const upperDateFilter = fiveDaysFromNow.toISOString().split('T')[0]; // YYYY-MM-DD format
+      
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      const lowerDateFilter = thirtyDaysAgo.toISOString().split('T')[0]; // YYYY-MM-DD format
+      
+      console.log(`Filtering tasks to assigned_date between ${lowerDateFilter} and ${upperDateFilter} or no assigned_date`);
+      
+      let tasksQuery = supabase
+        .from('tasks')
         .select('*')
-        .eq('user_id', userId)
-        .eq('item_type', 'task')
-        .eq('is_archived', false)
-        .order('created_at', { ascending: false })
-  
-      console.log('Items query completed:', { itemsData, itemsError })
-      if (itemsError) throw itemsError
-      if (!itemsData || itemsData.length === 0) {
-        setTasks([])
-        return
+        .or(`assigned_date.is.null,and(assigned_date.gte.${lowerDateFilter},assigned_date.lte.${upperDateFilter})`);
+      
+      // Filter by habit_id based on includeHabitTasks parameter
+      if (includeHabitTasks) {
+        tasksQuery = tasksQuery.not('habit_id', 'is', null);
+      } else {
+        tasksQuery = tasksQuery.is('habit_id', null);
       }
       
-      // Get tasks for those items - use batch processing to avoid URL length issues
-      const itemIds = itemsData.map(item => item.id);
-      console.log('About to query tasks for item IDs in batches:', itemIds.length)
+      const { data: allTasks, error: tasksError } = await tasksQuery
+        .order('due_date', { ascending: true })
+        .order('assigned_date', { ascending: true });
+      
+      console.log('Tasks query completed:', { taskCount: allTasks?.length, tasksError })
+      if (tasksError) throw tasksError;
+      if (!allTasks || allTasks.length === 0) {
+        setTasks([]);
+        return;
+      }
+      
+      // Get the task IDs to fetch corresponding items
+      const taskIds = allTasks.map(task => task.id);
+      console.log('About to query items for task IDs in batches:', taskIds.length);
       
       // Process in batches to avoid URL length limitations
       const batchSize = 50;
-      const allTaskData: any[] = [];
+      const allItemData: any[] = [];
       
-      for (let i = 0; i < itemIds.length; i += batchSize) {
-        const batchIds = itemIds.slice(i, i + batchSize);
+      for (let i = 0; i < taskIds.length; i += batchSize) {
+        const batchIds = taskIds.slice(i, i + batchSize);
         const batchNumber = Math.floor(i / batchSize) + 1;
-        const totalBatches = Math.ceil(itemIds.length / batchSize);
+        const totalBatches = Math.ceil(taskIds.length / batchSize);
         
-        console.log(`Processing batch ${batchNumber}/${totalBatches} with ${batchIds.length} items`)
+        console.log(`Processing items batch ${batchNumber}/${totalBatches} with ${batchIds.length} items`)
         
         // Retry logic for rate limiting
         let retries = 0;
@@ -83,37 +102,31 @@ export function useTasks(userId: string | undefined, limit: number = 50, include
         
         while (retries <= maxRetries) {
           try {
-            let taskQuery = supabase
-              .from('tasks')
+            const { data: batchItemData, error: batchItemError } = await supabase
+              .from('items')
               .select('*')
-              .in('id', batchIds);
+              .in('id', batchIds)
+              .eq('user_id', userId)
+              .eq('item_type', 'task')
+              .eq('is_archived', false);
             
-            // Conditionally exclude habit tasks (filter by habit_id instead of status)
-            if (!includeHabitTasks) {
-              taskQuery = taskQuery.is('habit_id', null);
-            }
-            
-            const { data: batchTaskData, error: batchTaskError } = await taskQuery
-              .order('due_date', { ascending: true })
-              .order('assigned_date', { ascending: true });
-            
-            if (batchTaskError) {
+            if (batchItemError) {
               // Check if it's a rate limit error
-              if (batchTaskError.message?.includes('429') || batchTaskError.message?.includes('rate limit')) {
+              if (batchItemError.message?.includes('429') || batchItemError.message?.includes('rate limit')) {
                 if (retries < maxRetries) {
                   const delay = Math.pow(2, retries) * 1000; // Exponential backoff: 1s, 2s, 4s
-                  console.warn(`Rate limit hit in batch ${batchNumber}, retrying in ${delay}ms (attempt ${retries + 1}/${maxRetries + 1})`);
+                  console.warn(`Rate limit hit in items batch ${batchNumber}, retrying in ${delay}ms (attempt ${retries + 1}/${maxRetries + 1})`);
                   await new Promise(resolve => setTimeout(resolve, delay));
                   retries++;
                   continue;
                 }
               }
-              console.error(`Error in batch ${batchNumber}:`, batchTaskError);
-              throw batchTaskError;
+              console.error(`Error in items batch ${batchNumber}:`, batchItemError);
+              throw batchItemError;
             }
             
-            if (batchTaskData) {
-              allTaskData.push(...batchTaskData);
+            if (batchItemData) {
+              allItemData.push(...batchItemData);
             }
             
             // Success - break out of retry loop
@@ -122,12 +135,12 @@ export function useTasks(userId: string | undefined, limit: number = 50, include
           } catch (error) {
             if (retries < maxRetries) {
               const delay = Math.pow(2, retries) * 1000;
-              console.warn(`Error in batch ${batchNumber}, retrying in ${delay}ms (attempt ${retries + 1}/${maxRetries + 1}):`, error);
+              console.warn(`Error in items batch ${batchNumber}, retrying in ${delay}ms (attempt ${retries + 1}/${maxRetries + 1}):`, error);
               await new Promise(resolve => setTimeout(resolve, delay));
               retries++;
               continue;
             }
-            console.error(`Failed to process batch ${batchNumber} after ${maxRetries + 1} attempts:`, error);
+            console.error(`Failed to process items batch ${batchNumber} after ${maxRetries + 1} attempts:`, error);
             throw error;
           }
         }
@@ -138,13 +151,14 @@ export function useTasks(userId: string | undefined, limit: number = 50, include
         }
       }
       
-      console.log('All batches completed, total tasks found:', allTaskData.length)
-      if (allTaskData.length === 0) {
+      console.log('All items batches completed, total items found:', allItemData.length)
+      if (allItemData.length === 0) {
         setTasks([])
         return
       }
       
-      const taskData = allTaskData;
+      const taskData = allTasks;
+      const itemsData = allItemData;
   
       // Combine items and tasks
       const combinedTasks: TaskWithDetails[] = taskData

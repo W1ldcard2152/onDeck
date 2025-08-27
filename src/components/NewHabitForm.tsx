@@ -42,6 +42,7 @@ const NewHabitForm = ({ onHabitCreated, editingHabit, onHabitUpdated }: NewHabit
   const [selectedDays, setSelectedDays] = useState<string[]>([]);
   const [selectedDaysOfMonth, setSelectedDaysOfMonth] = useState<number[]>([]);
   const [timeOfDay, setTimeOfDay] = useState('');
+  const [startDate, setStartDate] = useState('');
   
   const { user } = useSupabaseAuth();
   const { createHabit, updateHabit } = useHabits(user?.id);
@@ -64,6 +65,7 @@ const NewHabitForm = ({ onHabitCreated, editingHabit, onHabitUpdated }: NewHabit
       setSelectedDays(rule.days_of_week || []);
       setSelectedDaysOfMonth(rule.days_of_month || []);
       setTimeOfDay(rule.time_of_day || '');
+      setStartDate(rule.start_date || '');
     }
   }, [editingHabit]);
 
@@ -80,6 +82,7 @@ const NewHabitForm = ({ onHabitCreated, editingHabit, onHabitUpdated }: NewHabit
       setSelectedDays([]);
       setSelectedDaysOfMonth([]);
       setTimeOfDay('');
+      setStartDate('');
       if (open) {
         setOpen(false);
       }
@@ -93,9 +96,17 @@ const NewHabitForm = ({ onHabitCreated, editingHabit, onHabitUpdated }: NewHabit
 
     setLoading(true);
     try {
+      // Helper function to get local date in YYYY-MM-DD format
+      const getLocalDateString = (date: Date = new Date()): string => {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+      };
+
       const recurrenceRule: RecurrenceRule = {
         type: frequencyType,
-        start_date: editingHabit?.recurrence_rule.start_date || new Date().toISOString().split('T')[0], // Use existing start_date when editing
+        start_date: startDate || getLocalDateString(), // Use selected start_date or default to today in local timezone
         interval,
         unit: frequencyType === 'daily' ? 'day' : frequencyType === 'weekly' ? 'week' : 'month',
         ...(frequencyType === 'weekly' && selectedDays.length > 0 && { days_of_week: selectedDays }),
@@ -134,6 +145,7 @@ const NewHabitForm = ({ onHabitCreated, editingHabit, onHabitUpdated }: NewHabit
       setSelectedDays([]);
       setSelectedDaysOfMonth([]);
       setTimeOfDay('');
+      setStartDate('');
       setOpen(false);
       
     } catch (error) {
@@ -224,6 +236,20 @@ const NewHabitForm = ({ onHabitCreated, editingHabit, onHabitUpdated }: NewHabit
               />
               <p className="text-sm text-gray-500">
                 Set a preferred time for this habit (e.g., 7:00 AM for morning jog)
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="startDate">Start Date</Label>
+              <Input
+                id="startDate"
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                min={new Date().toISOString().split('T')[0]} // Can't start in the past
+              />
+              <p className="text-sm text-gray-500">
+                When should this habit start? Leave empty to start today.
               </p>
             </div>
 

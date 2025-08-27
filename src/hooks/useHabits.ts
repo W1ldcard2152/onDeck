@@ -158,6 +158,8 @@ export function useHabits(userId: string | undefined) {
   const updateHabit = useCallback(async (habitId: string, updates: Partial<Habit>) => {
     if (!userId) throw new Error('User ID required')
     
+    console.log('updateHabit called for habit:', habitId, 'with updates:', updates)
+    
     const supabase = supabaseRef.current
     
     const { data, error } = await supabase
@@ -169,8 +171,11 @@ export function useHabits(userId: string | undefined) {
 
     if (error) throw error
 
+    console.log('Habit updated successfully:', data)
+
     // If the habit is active and we're updating the recurrence rule, regenerate tasks
     if (data.is_active && updates.recurrence_rule) {
+      console.log('Regenerating tasks for updated habit - this should clear old tasks first')
       try {
         const taskGenerator = new HabitTaskGenerator(supabase, userId)
         await taskGenerator.generateTasksForHabit(data, true) // true = full regeneration
@@ -179,6 +184,8 @@ export function useHabits(userId: string | undefined) {
         console.error('Error regenerating tasks after habit update:', taskGenError)
         // Don't throw - let the habit update succeed even if task generation fails
       }
+    } else {
+      console.log('Not regenerating tasks - habit is_active:', data.is_active, 'updates.recurrence_rule:', !!updates.recurrence_rule)
     }
 
     // Refresh habits list

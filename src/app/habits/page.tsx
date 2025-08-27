@@ -6,7 +6,7 @@ import { NewHabitForm } from '@/components/NewHabitForm';
 import { useSupabaseAuth } from '@/hooks/useSupabaseAuth';
 import { useHabits, type Habit } from '@/hooks/useHabits';
 import { getSupabaseClient } from '@/lib/supabase-client';
-import { ChevronDown, ChevronUp, RefreshCw } from 'lucide-react';
+import { ChevronDown, ChevronUp, Trash2 } from 'lucide-react';
 import type { TaskWithDetails } from '@/lib/types';
 import { HabitTaskGenerator } from '@/lib/habitTaskGenerator';
 
@@ -18,7 +18,7 @@ export default function HabitsPage() {
   const [habitTasks, setHabitTasks] = useState<TaskWithDetails[]>([]);
   const [showHabitTasks, setShowHabitTasks] = useState(false);
   const [loadingHabitTasks, setLoadingHabitTasks] = useState(false);
-  const [refreshingAllTasks, setRefreshingAllTasks] = useState(false);
+  const [emergencyCleanup, setEmergencyCleanup] = useState(false);
   
   // State for habit editing
   const [editingHabit, setEditingHabit] = useState<Habit | null>(null);
@@ -30,51 +30,60 @@ export default function HabitsPage() {
     try {
       const supabase = getSupabaseClient();
       
-      // Get items for habit tasks
-      const { data: itemsData, error: itemsError } = await supabase
-        .from('items')
-        .select('*')
-        .eq('user_id', user.id)
-        .eq('item_type', 'task')
-        .eq('is_archived', false)
-        .order('created_at', { ascending: false });
+      // Get habit tasks within extended range to support minimum task generation (365 days max)
+      const oneYearFromNow = new Date();
+      oneYearFromNow.setDate(oneYearFromNow.getDate() + 365);
+      const dateFilter = oneYearFromNow.toISOString().split('T')[0]; // YYYY-MM-DD format
       
-      if (itemsError) throw itemsError;
-      if (!itemsData || itemsData.length === 0) {
+      console.log(`Fetching habit tasks with assigned_date <= ${dateFilter} for debugging (extended for minimum task generation)`);
+      
+      // Get habit tasks directly with date filtering to avoid processing too many items
+      const { data: habitTasksData, error: habitTasksError } = await supabase
+        .from('tasks')
+        .select('*')
+        .not('habit_id', 'is', null)
+        .or(`assigned_date.is.null,assigned_date.lte.${dateFilter}`)
+        .order('assigned_date', { ascending: true });
+      
+      if (habitTasksError) throw habitTasksError;
+      if (!habitTasksData || habitTasksData.length === 0) {
         setHabitTasks([]);
         return;
       }
       
-      // Get tasks with habit status - use batch processing to avoid URL length issues
-      const itemIds = itemsData.map(item => item.id);
-      console.log('Fetching habit tasks for item IDs in batches:', itemIds.length);
+      console.log(`Found ${habitTasksData.length} habit tasks within 1 year (for minimum task generation support)`);
       
-      // Process in batches to avoid URL length limitations
+      // Get corresponding items for these tasks
+      const taskIds = habitTasksData.map(task => task.id);
+      console.log('Fetching items for habit task IDs in batches:', taskIds.length);
+      
+      // Process items in batches to avoid URL length limitations
       const batchSize = 50;
-      const allTaskData: any[] = [];
+      const allItemData: any[] = [];
       
-      for (let i = 0; i < itemIds.length; i += batchSize) {
-        const batchIds = itemIds.slice(i, i + batchSize);
+      for (let i = 0; i < taskIds.length; i += batchSize) {
+        const batchIds = taskIds.slice(i, i + batchSize);
         const batchNumber = Math.floor(i / batchSize) + 1;
-        const totalBatches = Math.ceil(itemIds.length / batchSize);
+        const totalBatches = Math.ceil(taskIds.length / batchSize);
         
-        console.log(`Processing habit task batch ${batchNumber}/${totalBatches} with ${batchIds.length} items`);
+        console.log(`Processing habit items batch ${batchNumber}/${totalBatches} with ${batchIds.length} items`);
         
         try {
-          const { data: batchTaskData, error: batchTaskError } = await supabase
-            .from('tasks')
+          const { data: batchItemData, error: batchItemError } = await supabase
+            .from('items')
             .select('*')
             .in('id', batchIds)
-            .not('habit_id', 'is', null)
-            .order('assigned_date', { ascending: true });
+            .eq('user_id', user.id)
+            .eq('item_type', 'task')
+            .eq('is_archived', false);
           
-          if (batchTaskError) {
-            console.error(`Error in habit task batch ${batchNumber}:`, batchTaskError);
-            throw batchTaskError;
+          if (batchItemError) {
+            console.error(`Error in habit items batch ${batchNumber}:`, batchItemError);
+            throw batchItemError;
           }
           
-          if (batchTaskData) {
-            allTaskData.push(...batchTaskData);
+          if (batchItemData) {
+            allItemData.push(...batchItemData);
           }
           
           // Add delay between batches to avoid rate limiting (except for last batch)
@@ -83,18 +92,19 @@ export default function HabitsPage() {
           }
           
         } catch (error) {
-          console.error(`Failed to process habit task batch ${batchNumber}:`, error);
+          console.error(`Failed to process habit items batch ${batchNumber}:`, error);
           throw error;
         }
       }
       
-      console.log('All habit task batches completed, total tasks found:', allTaskData.length);
-      if (allTaskData.length === 0) {
+      console.log('All habit items batches completed, total items found:', allItemData.length);
+      if (allItemData.length === 0) {
         setHabitTasks([]);
         return;
       }
       
-      const taskData = allTaskData;
+      const taskData = habitTasksData;
+      const itemsData = allItemData;
       
       // Combine items and tasks
       const combinedTasks: TaskWithDetails[] = taskData
@@ -137,31 +147,46 @@ export default function HabitsPage() {
       fetchHabitTasks();
     }
   }, [showHabitTasks, fetchHabitTasks]);
+
+  // Load initial count even when debug view is collapsed
+  useEffect(() => {
+    if (user?.id && !showHabitTasks) {
+      fetchHabitTasks();
+    }
+  }, [user?.id, showHabitTasks, fetchHabitTasks]);
   
   
-  const refreshAllHabitTasks = async () => {
+
+  const handleEmergencyCleanup = async () => {
     if (!user?.id) return;
     
-    setRefreshingAllTasks(true);
+    const confirmed = confirm(
+      'EMERGENCY CLEANUP: This will delete ALL habit tasks and recreate them from scratch. ' +
+      'This is useful if you have too many habit tasks. Continue?'
+    );
+    
+    if (!confirmed) return;
+    
+    setEmergencyCleanup(true);
     try {
       const supabase = getSupabaseClient();
       const taskGenerator = new HabitTaskGenerator(supabase, user.id);
       
-      console.log('Starting habit task regeneration...');
-      await taskGenerator.regenerateAllHabitTasks();
-      console.log('Habit task regeneration completed');
+      console.log('Starting emergency habit task cleanup...');
+      await taskGenerator.emergencyHabitTaskCleanup();
+      console.log('Emergency cleanup completed');
       
       // Refresh the habit tasks debug view
       if (showHabitTasks) {
         await fetchHabitTasks();
       }
       
-      alert('All habit tasks have been refreshed successfully!');
+      alert('Emergency cleanup completed! All habit tasks have been reset.');
     } catch (err) {
-      console.error('Failed to refresh habit tasks:', err);
-      alert('Failed to refresh habit tasks. Check console for details.');
+      console.error('Failed to run emergency cleanup:', err);
+      alert('Emergency cleanup failed. Check console for details.');
     } finally {
-      setRefreshingAllTasks(false);
+      setEmergencyCleanup(false);
     }
   };
 
@@ -179,6 +204,15 @@ export default function HabitsPage() {
     }
   };
 
+  const handleHabitCreated = async () => {
+    refetch();
+    
+    // Also refresh the debug view if it's open
+    if (showHabitTasks) {
+      await fetchHabitTasks();
+    }
+  };
+
   return (
     <div className="space-y-6 py-6">
       <div className="mb-6">
@@ -187,15 +221,15 @@ export default function HabitsPage() {
           <h1 className="text-2xl font-bold">Habits</h1>
           <div className="flex gap-2">
             <button
-              onClick={refreshAllHabitTasks}
-              disabled={refreshingAllTasks}
-              className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
+              onClick={handleEmergencyCleanup}
+              disabled={emergencyCleanup}
+              className="inline-flex items-center px-3 py-2 border border-red-300 shadow-sm text-sm leading-4 font-medium rounded-md text-red-700 bg-red-50 hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 disabled:opacity-50"
             >
-              <RefreshCw className={`h-4 w-4 mr-2 ${refreshingAllTasks ? 'animate-spin' : ''}`} />
-              {refreshingAllTasks ? 'Refreshing...' : 'Refresh Tasks'}
+              <Trash2 className={`h-4 w-4 mr-2 ${emergencyCleanup ? 'animate-spin' : ''}`} />
+              {emergencyCleanup ? 'Cleaning...' : 'Emergency Cleanup'}
             </button>
             <NewHabitForm 
-              onHabitCreated={refetch} 
+              onHabitCreated={handleHabitCreated} 
               editingHabit={editingHabit}
               onHabitUpdated={handleHabitUpdated}
             />
@@ -207,15 +241,15 @@ export default function HabitsPage() {
           <h1 className="text-2xl font-bold">Habits</h1>
           <div className="flex flex-wrap gap-2">
             <button
-              onClick={refreshAllHabitTasks}
-              disabled={refreshingAllTasks}
-              className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
+              onClick={handleEmergencyCleanup}
+              disabled={emergencyCleanup}
+              className="inline-flex items-center px-3 py-2 border border-red-300 shadow-sm text-sm leading-4 font-medium rounded-md text-red-700 bg-red-50 hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 disabled:opacity-50"
             >
-              <RefreshCw className={`h-4 w-4 mr-2 ${refreshingAllTasks ? 'animate-spin' : ''}`} />
-              {refreshingAllTasks ? 'Refreshing...' : 'Refresh Tasks'}
+              <Trash2 className={`h-4 w-4 mr-2 ${emergencyCleanup ? 'animate-spin' : ''}`} />
+              {emergencyCleanup ? 'Cleaning...' : 'Emergency Cleanup'}
             </button>
             <NewHabitForm 
-              onHabitCreated={refetch} 
+              onHabitCreated={handleHabitCreated} 
               editingHabit={editingHabit}
               onHabitUpdated={handleHabitUpdated}
             />
@@ -259,14 +293,33 @@ export default function HabitsPage() {
           onClick={() => setShowHabitTasks(!showHabitTasks)}
           className="w-full px-6 py-4 text-left flex items-center justify-between hover:bg-gray-50"
         >
-          <div>
-            <h3 className="text-lg font-semibold text-gray-900">
-              Habit Tasks (Debug View)
-            </h3>
+          <div className="flex-1">
+            <div className="flex items-center gap-3">
+              <h3 className="text-lg font-semibold text-gray-900">
+                Habit Tasks (Debug View)
+              </h3>
+              <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                {loadingHabitTasks ? '...' : `${habitTasks.length} tasks`}
+              </span>
+            </div>
             <p className="text-sm text-gray-500">
-              Shows all tasks linked to habits
+              Shows all tasks linked to habits (within 14 days) • Use Emergency Cleanup if count gets too high
             </p>
           </div>
+          
+          {showHabitTasks && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation(); // Prevent collapse
+                fetchHabitTasks();
+              }}
+              disabled={loadingHabitTasks}
+              className="mr-4 inline-flex items-center px-2 py-1 border border-gray-300 shadow-sm text-xs font-medium rounded text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50"
+            >
+              🔄
+              Refresh
+            </button>
+          )}
           {showHabitTasks ? (
             <ChevronUp className="h-5 w-5 text-gray-400" />
           ) : (
