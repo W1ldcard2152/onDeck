@@ -24,7 +24,21 @@ export const metadata: Metadata = {
     ]
   },
   themeColor: '#2563eb',
-  viewport: 'width=device-width, initial-scale=1'
+  viewport: {
+    width: 'device-width',
+    initialScale: 1,
+    maximumScale: 1,
+    userScalable: false,
+    viewportFit: 'cover'
+  },
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'default',
+    title: 'OnDeck'
+  },
+  formatDetection: {
+    telephone: false
+  }
 };
 
 interface RootLayoutProps {
