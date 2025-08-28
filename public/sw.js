@@ -1,7 +1,7 @@
 // Service Worker for OnDeck PWA
 // Place this file in the public folder
 
-const CACHE_NAME = 'ondeck-v1.2'; // Incremented version number
+const CACHE_NAME = 'ondeck-v1.3'; // Force icon refresh
 
 // Resources to cache on install
 const PRECACHE_RESOURCES = [

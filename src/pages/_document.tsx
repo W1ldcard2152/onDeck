@@ -21,15 +21,15 @@ export default function Document() {
         <link rel="manifest" href="/manifest.json" />
         
         {/* Icons for various platforms */}
-        <link rel="apple-touch-icon" href="/icons/ios/192.png" />
-        <link rel="icon" type="image/png" sizes="32x32" href="/icons/ios/32.png" />
-        <link rel="icon" type="image/png" sizes="16x16" href="/icons/ios/16.png" />
-        <link rel="icon" href="/favicon.ico" />
+        <link rel="apple-touch-icon" href="/icons/ios/192.png?v=2" />
+        <link rel="icon" type="image/png" sizes="32x32" href="/icons/ios/32.png?v=2" />
+        <link rel="icon" type="image/png" sizes="16x16" href="/icons/ios/16.png?v=2" />
+        <link rel="icon" href="/favicon.ico?v=2" />
         
         {/* Apple Icons */}
-        <link rel="apple-touch-icon" sizes="152x152" href="/icons/ios/152.png" />
-        <link rel="apple-touch-icon" sizes="180x180" href="/icons/ios/180.png" />
-        <link rel="apple-touch-icon" sizes="167x167" href="/icons/ios/167.png" />
+        <link rel="apple-touch-icon" sizes="152x152" href="/icons/ios/152.png?v=2" />
+        <link rel="apple-touch-icon" sizes="180x180" href="/icons/ios/180.png?v=2" />
+        <link rel="apple-touch-icon" sizes="167x167" href="/icons/ios/167.png?v=2" />
       </Head>
       <body>
         <Main />

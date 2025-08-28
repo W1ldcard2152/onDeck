@@ -35,22 +35,22 @@ const PWAHead: React.FC<PWAHeadProps> = ({
       <link rel="manifest" href="/manifest.json" />
       
       {/* Basic Favicon */}
-      <link rel="icon" type="image/png" sizes="16x16" href="/icons/ios/16.png" />
-      <link rel="icon" type="image/png" sizes="32x32" href="/icons/ios/32.png" />
-      <link rel="icon" href="/favicon.ico" />
+      <link rel="icon" type="image/png" sizes="16x16" href="/icons/ios/16.png?v=2" />
+      <link rel="icon" type="image/png" sizes="32x32" href="/icons/ios/32.png?v=2" />
+      <link rel="icon" href="/favicon.ico?v=2" />
       
       {/* Apple iOS Icons */}
-      <link rel="apple-touch-icon" href="/icons/ios/180.png" />
-      <link rel="apple-touch-icon" sizes="57x57" href="/icons/ios/57.png" />
-      <link rel="apple-touch-icon" sizes="60x60" href="/icons/ios/60.png" />
-      <link rel="apple-touch-icon" sizes="72x72" href="/icons/ios/72.png" />
-      <link rel="apple-touch-icon" sizes="76x76" href="/icons/ios/76.png" />
-      <link rel="apple-touch-icon" sizes="114x114" href="/icons/ios/114.png" />
-      <link rel="apple-touch-icon" sizes="120x120" href="/icons/ios/120.png" />
-      <link rel="apple-touch-icon" sizes="144x144" href="/icons/ios/144.png" />
-      <link rel="apple-touch-icon" sizes="152x152" href="/icons/ios/152.png" />
-      <link rel="apple-touch-icon" sizes="167x167" href="/icons/ios/167.png" />
-      <link rel="apple-touch-icon" sizes="180x180" href="/icons/ios/180.png" />
+      <link rel="apple-touch-icon" href="/icons/ios/180.png?v=2" />
+      <link rel="apple-touch-icon" sizes="57x57" href="/icons/ios/57.png?v=2" />
+      <link rel="apple-touch-icon" sizes="60x60" href="/icons/ios/60.png?v=2" />
+      <link rel="apple-touch-icon" sizes="72x72" href="/icons/ios/72.png?v=2" />
+      <link rel="apple-touch-icon" sizes="76x76" href="/icons/ios/76.png?v=2" />
+      <link rel="apple-touch-icon" sizes="114x114" href="/icons/ios/114.png?v=2" />
+      <link rel="apple-touch-icon" sizes="120x120" href="/icons/ios/120.png?v=2" />
+      <link rel="apple-touch-icon" sizes="144x144" href="/icons/ios/144.png?v=2" />
+      <link rel="apple-touch-icon" sizes="152x152" href="/icons/ios/152.png?v=2" />
+      <link rel="apple-touch-icon" sizes="167x167" href="/icons/ios/167.png?v=2" />
+      <link rel="apple-touch-icon" sizes="180x180" href="/icons/ios/180.png?v=2" />
       
       {/* Apple Splash Screens */}
       <link rel="apple-touch-startup-image" href="/icons/SplashScreen.scale-100.png" media="(device-width: 320px) and (device-height: 568px) and (-webkit-device-pixel-ratio: 2)" />
