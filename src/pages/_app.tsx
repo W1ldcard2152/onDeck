@@ -3,18 +3,26 @@ import type { AppProps } from 'next/app';
 import PWAHead from '@/components/PWAHead';
 import { useEffect } from 'react';
 
-useEffect(() => {
-  // Debug PWA install prompt
-  window.addEventListener('beforeinstallprompt', (e) => {
-    console.log('💡 beforeinstallprompt fired!', e);
-  });
-  
-  window.addEventListener('appinstalled', () => {
-    console.log('💡 App was installed successfully!');
-  });
-}, []);
-
 export default function App({ Component, pageProps }: AppProps) {
+  useEffect(() => {
+    // Debug PWA install prompt
+    const handleBeforeInstallPrompt = (e: Event) => {
+      console.log('💡 beforeinstallprompt fired!', e);
+    };
+    
+    const handleAppInstalled = () => {
+      console.log('💡 App was installed successfully!');
+    };
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    window.addEventListener('appinstalled', handleAppInstalled);
+    
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+      window.removeEventListener('appinstalled', handleAppInstalled);
+    };
+  }, []);
+
   // Register service worker
   useEffect(() => {
     if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {

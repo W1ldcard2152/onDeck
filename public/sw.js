@@ -1,18 +1,16 @@
 // Service Worker for OnDeck PWA
 // Place this file in the public folder
 
-const CACHE_NAME = 'ondeck-v1.1'; // Incremented version number
+const CACHE_NAME = 'ondeck-v1.2'; // Incremented version number
 
 // Resources to cache on install
 const PRECACHE_RESOURCES = [
   '/',
-  '/index.html',
   '/manifest.json',
   '/offline.html',
-  '/icons/icon-192x192.png',
-  '/icons/icon-512x512.png',
-  '/icons/icon-384x384.png',
-  '/next-pwa-setup.js',
+  '/icons/android/android-launchericon-192-192.png',
+  '/icons/android/android-launchericon-512-512.png',
+  '/icons/ios/192.png',
   '/splash.html',
   '/favicon.ico'
 ];
@@ -56,53 +54,92 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-// Fetch event - network first strategy with offline fallback
+// Fetch event - improved caching strategy for PWA
 self.addEventListener('fetch', (event) => {
-  // Skip cross-origin requests and API calls
+  // Skip cross-origin requests, API calls, and authentication requests
   if (!event.request.url.startsWith(self.location.origin) || 
       event.request.url.includes('/api/') ||
-      event.request.url.includes('supabase.co')) {
+      event.request.url.includes('supabase.co') ||
+      event.request.url.includes('auth/') ||
+      event.request.method !== 'GET') {
     return;
   }
   
-  // For HTML navigation requests - network first
+  const url = new URL(event.request.url);
+  
+  // For HTML navigation requests - network first with offline fallback
   if (event.request.mode === 'navigate' || 
       (event.request.method === 'GET' && 
+       event.request.headers.get('accept') && 
        event.request.headers.get('accept').includes('text/html'))) {
     
     event.respondWith(
       fetch(event.request)
+        .then((response) => {
+          // Cache successful responses for offline use
+          if (response && response.status === 200 && response.type === 'basic') {
+            const responseToCache = response.clone();
+            caches.open(CACHE_NAME)
+              .then((cache) => {
+                cache.put(event.request, responseToCache);
+              });
+          }
+          return response;
+        })
         .catch(() => {
-          // If network fails, serve offline page
-          console.log('[ServiceWorker] Fetch failed; returning offline page instead.');
-          return caches.match('/offline.html');
+          // If network fails, try cache first, then offline page
+          return caches.match(event.request)
+            .then((response) => {
+              if (response) {
+                return response;
+              }
+              console.log('[ServiceWorker] Fetch failed; returning offline page instead.');
+              return caches.match('/offline.html');
+            });
         })
     );
     return;
   }
   
-  // For assets like JS, CSS, images - stale-while-revalidate
-  if (event.request.method === 'GET') {
+  // For static assets (JS, CSS, images) - cache first with network fallback
+  if (url.pathname.match(/\.(js|css|png|jpg|jpeg|gif|svg|ico|woff|woff2|ttf|eot)$/)) {
     event.respondWith(
-      caches.open(CACHE_NAME).then((cache) => {
-        return cache.match(event.request).then((cachedResponse) => {
-          const fetchPromise = fetch(event.request)
+      caches.match(event.request)
+        .then((cachedResponse) => {
+          if (cachedResponse) {
+            // Serve from cache and update in background
+            fetch(event.request)
+              .then((networkResponse) => {
+                if (networkResponse && networkResponse.status === 200) {
+                  caches.open(CACHE_NAME)
+                    .then((cache) => {
+                      cache.put(event.request, networkResponse.clone());
+                    });
+                }
+              })
+              .catch(() => {
+                // Silent fail for background update
+              });
+            return cachedResponse;
+          }
+          
+          // Not in cache, fetch from network
+          return fetch(event.request)
             .then((networkResponse) => {
-              // Update cache with fresh response
               if (networkResponse && networkResponse.status === 200) {
-                cache.put(event.request, networkResponse.clone());
+                const responseToCache = networkResponse.clone();
+                caches.open(CACHE_NAME)
+                  .then((cache) => {
+                    cache.put(event.request, responseToCache);
+                  });
               }
               return networkResponse;
             })
             .catch((error) => {
-              console.log('[ServiceWorker] Fetch failed:', error);
-              return cachedResponse || new Response('Network error', { status: 408 });
+              console.log('[ServiceWorker] Asset fetch failed:', error);
+              return new Response('Asset not available offline', { status: 408 });
             });
-          
-          // Return the cached response if we have one, otherwise wait for the network response
-          return cachedResponse || fetchPromise;
-        });
-      })
+        })
     );
   }
 });
@@ -115,8 +152,8 @@ self.addEventListener('push', (event) => {
   const title = 'OnDeck';
   const options = {
     body: event.data && event.data.text() ? event.data.text() : 'Something new happened!',
-    icon: '/icons/icon-192x192.png',
-    badge: '/icons/icon-72x72.png'
+    icon: '/icons/android/android-launchericon-192-192.png',
+    badge: '/icons/android/android-launchericon-72-72.png'
   };
 
   event.waitUntil(self.registration.showNotification(title, options));
