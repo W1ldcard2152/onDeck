@@ -73,9 +73,13 @@ export class HabitTaskGenerator {
 
   /**
    * Clear ALL incomplete habit tasks (for full regeneration)
+   * Preserves today's active tasks to avoid deleting tasks the user is working on
    */
   async clearAllIncompleteHabitTasks(habitId: string): Promise<void> {
     console.log(`=== CLEARING ALL INCOMPLETE TASKS FOR HABIT ${habitId} ===`)
+
+    const today = new Date()
+    const todayStr = today.toISOString().split('T')[0] // YYYY-MM-DD format
 
     // First, let's see ALL tasks for this habit to debug
     const { data: allTasks, error: allTasksError } = await this.supabase
@@ -92,18 +96,20 @@ export class HabitTaskGenerator {
       })
     }
 
+    // Clear incomplete tasks BUT preserve today's active tasks
     const { data: tasksToDelete, error } = await this.supabase
       .from('tasks')
       .select('id, assigned_date, status')
       .eq('habit_id', habitId)
       .neq('status', 'completed')
+      .not('and', `(assigned_date.eq.${todayStr},status.eq.active)`)
 
     if (error) {
       console.error('Error finding tasks to delete:', error)
       return
     }
 
-    console.log(`Found ${tasksToDelete?.length || 0} incomplete tasks to delete for habit ${habitId}`)
+    console.log(`Found ${tasksToDelete?.length || 0} incomplete tasks to delete for habit ${habitId} (preserving today's active tasks)`)
     if (tasksToDelete && tasksToDelete.length > 0) {
       console.log('Tasks being deleted:', tasksToDelete.map(t => `${t.id} (${t.assigned_date || 'no date'}, status: ${t.status})`))
     }
