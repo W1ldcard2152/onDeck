@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Download, X } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -18,15 +18,20 @@ export const InstallPWA: React.FC<InstallPWAProps> = ({ className }) => {
   // Track if we're showing iOS instructions
   const [showIOSInstructions, setShowIOSInstructions] = useState(false);
   
-  // Use service worker hook to ensure it's active before showing install
-  const { isActive, isRegistered } = useServiceWorker({
-    onSuccess: (registration) => {
-      console.log('[PWA] Service worker registered successfully:', registration);
+  // Memoize service worker options to prevent re-registration
+  const serviceWorkerOptions = useMemo(() => ({
+    onSuccess: (registration: ServiceWorkerRegistration) => {
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[PWA] Service worker registered successfully:', registration);
+      }
     },
-    onError: (error) => {
+    onError: (error: Error) => {
       console.error('[PWA] Service worker registration failed:', error);
     }
-  });
+  }), []);
+
+  // Use service worker hook to ensure it's active before showing install
+  const { isActive, isRegistered } = useServiceWorker(serviceWorkerOptions);
   
   // If service worker is not active (except for iOS which doesn't use it),
   // or if the app is already installed, don't show anything

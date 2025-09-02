@@ -1,10 +1,16 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 
 interface UseServiceWorkerOptions {
   onSuccess?: (registration: ServiceWorkerRegistration) => void;
   onUpdate?: (registration: ServiceWorkerRegistration) => void;
   onError?: (error: Error) => void;
+  silent?: boolean; // Skip success callbacks for status monitoring
 }
+
+// Global flag to prevent multiple registrations
+let isRegistering = false;
+let globalRegistration: ServiceWorkerRegistration | null = null;
+let hasLoggedSuccess = false; // Prevent duplicate success logging
 
 export function useServiceWorker(options: UseServiceWorkerOptions = {}) {
   const [registration, setRegistration] = useState<ServiceWorkerRegistration | null>(null);
@@ -12,30 +18,77 @@ export function useServiceWorker(options: UseServiceWorkerOptions = {}) {
   const [isRegistered, setIsRegistered] = useState(false);
   const [error, setError] = useState<Error | null>(null);
   
+  // Memoize callbacks to prevent re-registration
+  const onSuccess = useCallback(options.onSuccess || (() => {}), [options.onSuccess]);
+  const onUpdate = useCallback(options.onUpdate || (() => {}), [options.onUpdate]);
+  const onError = useCallback(options.onError || (() => {}), [options.onError]);
+  const silent = options.silent || false;
+  
   useEffect(() => {
     // Only run in browser environment and if service workers are supported
     if (typeof window === 'undefined' || !('serviceWorker' in navigator)) {
-      console.log('Service workers are not supported in this browser');
       return;
     }
     
-    // Register the service worker
-    const registerSW = async () => {
+    // Check for existing registration first
+    const checkExisting = async () => {
       try {
+        const existingReg = await navigator.serviceWorker.getRegistration('/sw.js');
+        if (existingReg && !isRegistering) {
+          if (!hasLoggedSuccess && !silent) {
+            console.log('Using existing service worker registration');
+            hasLoggedSuccess = true;
+          }
+          globalRegistration = existingReg;
+          setRegistration(existingReg);
+          setIsRegistered(true);
+          setIsActive(Boolean(existingReg.active));
+          
+          if (process.env.NODE_ENV === 'development') {
+            console.log(`useServiceWorker: Set state - registered: true, active: ${Boolean(existingReg.active)}, silent: ${silent}`);
+          }
+          
+          if (!silent) {
+            onSuccess(existingReg);
+          }
+          return true;
+        }
+        return false;
+      } catch (err) {
+        console.error('Error checking existing service worker:', err);
+        return false;
+      }
+    };
+    
+    // Register the service worker only if not already registering/registered
+    const registerSW = async () => {
+      if (isRegistering || globalRegistration) {
+        // If we already have a global registration, update this hook's state
+        if (globalRegistration) {
+          setRegistration(globalRegistration);
+          setIsRegistered(true);
+          setIsActive(Boolean(globalRegistration.active));
+        }
+        return;
+      }
+      
+      const hasExisting = await checkExisting();
+      if (hasExisting) return;
+      
+      try {
+        isRegistering = true;
         console.log('Registering service worker...');
         
-        // Using the sw.js file in the public directory
         const reg = await navigator.serviceWorker.register('/sw.js');
+        globalRegistration = reg;
         setRegistration(reg);
         setIsRegistered(true);
         setIsActive(Boolean(reg.active));
         
-        // Call onSuccess callback if provided
-        if (options.onSuccess) {
-          options.onSuccess(reg);
+        if (!silent) {
+          onSuccess(reg);
+          console.log('Service worker registered successfully!', reg);
         }
-        
-        console.log('Service worker registered successfully!', reg);
         
         // Check for updates to the service worker
         reg.onupdatefound = () => {
@@ -47,8 +100,8 @@ export function useServiceWorker(options: UseServiceWorkerOptions = {}) {
               if (navigator.serviceWorker.controller) {
                 // New content is available, call onUpdate callback if provided
                 console.log('New content is available; please refresh.');
-                if (options.onUpdate) {
-                  options.onUpdate(reg);
+                if (!silent) {
+                  onUpdate(reg);
                 }
               } else {
                 // Content is cached for offline use
@@ -67,12 +120,13 @@ export function useServiceWorker(options: UseServiceWorkerOptions = {}) {
         
       } catch (err) {
         console.error('Error registering service worker:', err);
-        setError(err instanceof Error ? err : new Error(String(err)));
-        
-        // Call onError callback if provided
-        if (options.onError && err instanceof Error) {
-          options.onError(err);
+        const error = err instanceof Error ? err : new Error(String(err));
+        setError(error);
+        if (!silent) {
+          onError(error);
         }
+      } finally {
+        isRegistering = false;
       }
     };
     
@@ -82,7 +136,7 @@ export function useServiceWorker(options: UseServiceWorkerOptions = {}) {
     return () => {
       // No need to unregister service worker
     };
-  }, [options]);
+  }, [onSuccess, onUpdate, onError, silent]); // Fixed dependencies
   
   // Check if service worker is active on initial load
   useEffect(() => {

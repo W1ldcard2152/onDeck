@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Bell, Settings, MessageSquare } from 'lucide-react';
 import { BottomNav } from './responsiveNav/BottomNav';
 import { DesktopNav } from './responsiveNav/DesktopNav';
@@ -29,16 +29,18 @@ const DesktopLayout = () => {
   const [activeSection, setActiveSection] = useState<SectionType>('dashboard');
   const [isFeedbackModalOpen, setIsFeedbackModalOpen] = useState(false);
   
-  // Register and monitor the service worker
-  const { isActive, isRegistered, error } = useServiceWorker({
-    onSuccess: (registration) => {
-      console.log('Service worker registered successfully in DesktopLayout:', registration);
+  // Memoize service worker options to prevent re-registration
+  const serviceWorkerOptions = useMemo(() => ({
+    onSuccess: (registration: ServiceWorkerRegistration) => {
+      if (process.env.NODE_ENV === 'development') {
+        console.log('Service worker registered successfully in DesktopLayout:', registration);
+      }
     },
-    onUpdate: (registration) => {
-      // When there's an update to the service worker, we can notify the user
+    onUpdate: (registration: ServiceWorkerRegistration) => {
+      // When there's an update to the service worker, notify the user
       console.log('New content is available; please refresh.');
       
-      // Optionally show a toast/notification to the user
+      // Show notification if permissions are granted
       if ('Notification' in window && Notification.permission === 'granted') {
         new Notification('OnDeck Update Available', {
           body: 'New features are available. Refresh to update.',
@@ -46,10 +48,13 @@ const DesktopLayout = () => {
         });
       }
     },
-    onError: (err) => {
+    onError: (err: Error) => {
       console.error('Service worker registration failed in DesktopLayout:', err);
     }
-  });
+  }), []);
+
+  // Register and monitor the service worker
+  const { isActive, isRegistered, error } = useServiceWorker(serviceWorkerOptions);
   
   // Log service worker status in development
   useEffect(() => {

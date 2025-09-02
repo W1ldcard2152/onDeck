@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useServiceWorker } from '@/hooks/useServiceWorker';
 
 interface PWAStatusProps {
@@ -11,9 +11,16 @@ const PWAStatus: React.FC<PWAStatusProps> = ({ showDebug = false }) => {
   const [installable, setInstallable] = useState<boolean | null>(null);
   const [installed, setInstalled] = useState<boolean | null>(null);
   const [online, setOnline] = useState<boolean>(true);
+  const [swRegisteredDirect, setSWRegisteredDirect] = useState<boolean | null>(null);
+  const [swActiveDirect, setSWActiveDirect] = useState<boolean | null>(null);
   
+  // Memoize service worker options to prevent re-registration
+  const serviceWorkerOptions = useMemo(() => ({
+    silent: true // PWAStatus just needs the state, not the callbacks
+  }), []);
+
   // Use the enhanced service worker hook
-  const { isActive, isRegistered, error } = useServiceWorker();
+  const { isActive, isRegistered, error } = useServiceWorker(serviceWorkerOptions);
 
   useEffect(() => {
     // Only run in browser
@@ -33,19 +40,61 @@ const PWAStatus: React.FC<PWAStatusProps> = ({ showDebug = false }) => {
     const handleBeforeInstallPrompt = (e: Event) => {
       e.preventDefault();
       setInstallable(true);
-      console.log('App is installable - beforeinstallprompt event fired');
+      if (process.env.NODE_ENV === 'development') {
+        console.log('App is installable - beforeinstallprompt event fired');
+      }
     };
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+
+    // Check service worker status directly from browser API
+    const checkServiceWorkerStatus = async () => {
+      if ('serviceWorker' in navigator) {
+        try {
+          const registrations = await navigator.serviceWorker.getRegistrations();
+          const swRegistered = registrations.length > 0;
+          const swActive = registrations.some(reg => reg.active !== null);
+          
+          setSWRegisteredDirect(swRegistered);
+          setSWActiveDirect(swActive);
+          
+          // Only log if there's a discrepancy or if it's the first time
+          if (process.env.NODE_ENV === 'development') {
+            console.log('PWAStatus direct SW check:', { 
+              registered: swRegistered, 
+              active: swActive,
+              registrations: registrations.length 
+            });
+          }
+        } catch (error) {
+          console.error('PWAStatus: Error checking service worker directly:', error);
+          setSWRegisteredDirect(false);
+          setSWActiveDirect(false);
+        }
+      } else {
+        setSWRegisteredDirect(false);
+        setSWActiveDirect(false);
+      }
+    };
+
+    checkServiceWorkerStatus();
+    
+    // Check again after a short delay to catch late registrations
+    const timeoutId = setTimeout(checkServiceWorkerStatus, 2000);
 
     return () => {
       window.removeEventListener('online', () => setOnline(true));
       window.removeEventListener('offline', () => setOnline(false));
       window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+      clearTimeout(timeoutId);
     };
   }, []);
 
   // If debugging is disabled or we're not in development mode
   if (!showDebug && process.env.NODE_ENV !== 'development') return null;
+
+  // Use direct browser API results as primary source, fall back to hook results
+  const finalSWRegistered = swRegisteredDirect !== null ? swRegisteredDirect : isRegistered;
+  const finalSWActive = swActiveDirect !== null ? swActiveDirect : isActive;
 
   return (
     <div className="fixed bottom-2 right-2 bg-white border shadow-lg rounded-lg p-3 text-xs font-mono z-50 opacity-70 hover:opacity-100 transition-opacity">
@@ -67,14 +116,26 @@ const PWAStatus: React.FC<PWAStatusProps> = ({ showDebug = false }) => {
         </span>
         
         <span>SW Registered:</span>
-        <span className={isRegistered ? 'text-green-600' : 'text-red-600'}>
-          {isRegistered ? '✅ Yes' : '❌ No'}
+        <span className={finalSWRegistered ? 'text-green-600' : 'text-red-600'}>
+          {finalSWRegistered ? '✅ Yes' : '❌ No'}
         </span>
         
         <span>SW Active:</span>
-        <span className={isActive ? 'text-green-600' : 'text-red-600'}>
-          {isActive ? '✅ Yes' : '❌ No'}
+        <span className={finalSWActive ? 'text-green-600' : 'text-red-600'}>
+          {finalSWActive ? '✅ Yes' : '❌ No'}
         </span>
+        
+        {(swRegisteredDirect !== isRegistered || swActiveDirect !== isActive) && (
+          <>
+            <span className="col-span-2 text-xs text-orange-600 mt-1">
+              Hook vs Direct: R({isRegistered ? '✅' : '❌'}/{finalSWRegistered ? '✅' : '❌'}) 
+              A({isActive ? '✅' : '❌'}/{finalSWActive ? '✅' : '❌'})
+            </span>
+            <span className="col-span-2 text-xs text-gray-500 mt-1">
+              Debug: Hook Reg={String(isRegistered)} Direct={String(swRegisteredDirect)}
+            </span>
+          </>
+        )}
         
         {error && (
           <>

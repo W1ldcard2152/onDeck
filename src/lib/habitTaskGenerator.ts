@@ -96,18 +96,22 @@ export class HabitTaskGenerator {
       })
     }
 
-    // Clear incomplete tasks BUT preserve today's active tasks
-    const { data: tasksToDelete, error } = await this.supabase
+    // Get all incomplete tasks first, then filter out today's active tasks
+    const { data: allIncomplete, error } = await this.supabase
       .from('tasks')
       .select('id, assigned_date, status')
       .eq('habit_id', habitId)
       .neq('status', 'completed')
-      .not('and', `(assigned_date.eq.${todayStr},status.eq.active)`)
-
+    
     if (error) {
-      console.error('Error finding tasks to delete:', error)
+      console.error('Error finding incomplete tasks:', error)
       return
     }
+    
+    // Filter out today's active tasks to preserve them
+    const tasksToDelete = allIncomplete?.filter(task => 
+      !(task.assigned_date === todayStr && task.status === 'active')
+    ) || []
 
     console.log(`Found ${tasksToDelete?.length || 0} incomplete tasks to delete for habit ${habitId} (preserving today's active tasks)`)
     if (tasksToDelete && tasksToDelete.length > 0) {
