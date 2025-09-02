@@ -211,6 +211,11 @@ export class HabitTaskGenerator {
    */
   private generateDatesForHabit(habit: Habit, dayCount: number, minTasks: number = 1): Date[] {
     const rule = habit.recurrence_rule
+    const todayForDebug = new Date().toISOString().split('T')[0]
+    
+    console.log(`=== DATE GENERATION DEBUG FOR HABIT: ${habit.title} ===`)
+    console.log('Recurrence rule:', rule)
+    console.log(`Today is: ${todayForDebug}`)
     
     // Helper to parse date string as local time (not UTC)
     const parseLocalDate = (dateStr: string): Date => {
@@ -225,15 +230,22 @@ export class HabitTaskGenerator {
     startDate.setHours(0, 0, 0, 0)
     today.setHours(0, 0, 0, 0)
     
-    // Start from today or start_date, whichever is later
-    const generateFrom = startDate > today ? startDate : today
+    // Apply offset for daily habits
+    let generateFrom = startDate > today ? startDate : today
+    if (rule.type === 'daily' && rule.offset_days && rule.offset_days > 0) {
+      const offsetStartDate = new Date(today)
+      offsetStartDate.setDate(offsetStartDate.getDate() + rule.offset_days)
+      generateFrom = offsetStartDate > generateFrom ? offsetStartDate : generateFrom
+      console.log(`Daily habit with offset: ${rule.offset_days} days from today = ${offsetStartDate.toISOString().split('T')[0]}`)
+    }
     
     console.log('Date generation details:', {
-      startDate: startDate.toISOString(),
-      today: today.toISOString(),
-      generateFrom: generateFrom.toISOString(),
-      todayDateString: today.toDateString(),
-      generateFromDateString: generateFrom.toDateString()
+      habitTitle: habit.title,
+      startDate: startDate.toISOString().split('T')[0],
+      today: today.toISOString().split('T')[0],
+      generateFrom: generateFrom.toISOString().split('T')[0],
+      ruleType: rule.type,
+      interval: rule.interval
     })
 
     let dates: Date[] = []
@@ -254,6 +266,16 @@ export class HabitTaskGenerator {
         dates = this.generateDailyDatesByPeriod(generateFrom, currentDayCount, rule)
         break
     }
+    
+    console.log(`Generated ${dates.length} dates for ${habit.title}:`)
+    dates.forEach((date, index) => {
+      const dateStr = date.toISOString().split('T')[0]
+      const isToday = dateStr === todayForDebug
+      console.log(`  ${index + 1}. ${dateStr} ${isToday ? '← TODAY!' : ''}`)
+    })
+    
+    const includesTo = dates.some(d => d.toISOString().split('T')[0] === todayForDebug)
+    console.log(`❗ Does this habit include today (${todayForDebug})? ${includesTo ? 'YES' : 'NO'}`)
 
     // If we didn't get enough dates and haven't reached max days, extend the period
     while (dates.length < minTasks && currentDayCount < 365) {
@@ -570,7 +592,31 @@ export class HabitTaskGenerator {
   }
 
   /**
+   * Monthly regeneration (for 1st of month) - Cleans up and regenerates with rhythm preservation
+   */
+  async monthlyRegeneration(): Promise<void> {
+    const today = new Date()
+    const isFirstOfMonth = today.getDate() === 1
+    
+    if (!isFirstOfMonth) {
+      console.log(`Monthly regeneration should only run on the 1st. Today is ${today.getDate()}`)
+      // Optionally, you can remove this check to allow manual triggering
+    }
+    
+    console.log('Starting monthly habit task regeneration...')
+    
+    // First, clean up any past incomplete tasks
+    await this.cleanupPastHabitTasks()
+    
+    // Then regenerate all tasks with rhythm preservation
+    await this.regenerateAllHabitTasks()
+    
+    console.log('Monthly regeneration complete')
+  }
+
+  /**
    * Regenerate tasks for all active habits (monthly maintenance)
+   * Simple approach - always starts fresh from today
    */
   async regenerateAllHabitTasks(): Promise<void> {
     const { data: activeHabits, error } = await this.supabase
@@ -589,6 +635,7 @@ export class HabitTaskGenerator {
       }
     }
   }
+
 
   /**
    * Emergency cleanup: Remove ALL habit tasks and regenerate fresh

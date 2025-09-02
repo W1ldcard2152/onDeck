@@ -43,6 +43,7 @@ const NewHabitForm = ({ onHabitCreated, editingHabit, onHabitUpdated }: NewHabit
   const [selectedDaysOfMonth, setSelectedDaysOfMonth] = useState<number[]>([]);
   const [timeOfDay, setTimeOfDay] = useState('');
   const [startDate, setStartDate] = useState('');
+  const [offsetDays, setOffsetDays] = useState(0);
   
   const { user } = useSupabaseAuth();
   const { createHabit, updateHabit } = useHabits(user?.id);
@@ -66,6 +67,7 @@ const NewHabitForm = ({ onHabitCreated, editingHabit, onHabitUpdated }: NewHabit
       setSelectedDaysOfMonth(rule.days_of_month || []);
       setTimeOfDay(rule.time_of_day || '');
       setStartDate(rule.start_date || '');
+      setOffsetDays(rule.offset_days || 0);
     }
   }, [editingHabit]);
 
@@ -83,6 +85,7 @@ const NewHabitForm = ({ onHabitCreated, editingHabit, onHabitUpdated }: NewHabit
       setSelectedDaysOfMonth([]);
       setTimeOfDay('');
       setStartDate('');
+      setOffsetDays(0);
       if (open) {
         setOpen(false);
       }
@@ -112,6 +115,7 @@ const NewHabitForm = ({ onHabitCreated, editingHabit, onHabitUpdated }: NewHabit
         ...(frequencyType === 'weekly' && selectedDays.length > 0 && { days_of_week: selectedDays }),
         ...(frequencyType === 'monthly' && selectedDaysOfMonth.length > 0 && { days_of_month: selectedDaysOfMonth }),
         ...(timeOfDay && { time_of_day: timeOfDay }),
+        ...(frequencyType === 'daily' && offsetDays > 0 && { offset_days: offsetDays }),
         end_condition: { type: 'none' }
       };
 
@@ -146,6 +150,7 @@ const NewHabitForm = ({ onHabitCreated, editingHabit, onHabitUpdated }: NewHabit
       setSelectedDaysOfMonth([]);
       setTimeOfDay('');
       setStartDate('');
+      setOffsetDays(0);
       setOpen(false);
       
     } catch (error) {
@@ -252,6 +257,24 @@ const NewHabitForm = ({ onHabitCreated, editingHabit, onHabitUpdated }: NewHabit
                 When should this habit start? Leave empty to start today.
               </p>
             </div>
+
+            {frequencyType === 'daily' && (
+              <div className="space-y-2">
+                <Label htmlFor="offsetDays">Offset Days</Label>
+                <Input
+                  id="offsetDays"
+                  type="number"
+                  min="0"
+                  max="30"
+                  value={offsetDays}
+                  onChange={(e) => setOffsetDays(parseInt(e.target.value) || 0)}
+                  className="w-20"
+                />
+                <p className="text-sm text-gray-500">
+                  Start this habit X days from today (0 = start today)
+                </p>
+              </div>
+            )}
 
             <div className="space-y-2">
               <Label htmlFor="frequency">Frequency</Label>

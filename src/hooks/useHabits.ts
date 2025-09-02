@@ -25,6 +25,7 @@ export interface RecurrenceRule {
   time_of_day?: string;
   custom_exclusions?: string[];
   custom_inclusions?: string[];
+  offset_days?: number;
 }
 
 export interface Habit {
@@ -138,15 +139,19 @@ export function useHabits(userId: string | undefined) {
 
     // Generate tasks if the habit is active
     if (habitData.is_active) {
+      console.log('=== TASK GENERATION DEBUG ===')
       console.log('Generating tasks for habit:', data)
       try {
         const taskGenerator = new HabitTaskGenerator(supabase, userId)
         await taskGenerator.generateTasksForHabit(data)
-        console.log('Tasks generated successfully')
+        console.log('✅ Tasks generated successfully for habit:', data.title)
       } catch (taskGenError) {
-        console.error('Error generating tasks:', taskGenError)
+        console.error('❌ Error generating tasks:', taskGenError)
+        console.error('Task generation failed for habit:', data.title, 'Error:', taskGenError)
         // Don't throw - let the habit creation succeed even if task generation fails
       }
+    } else {
+      console.log('Habit is not active, skipping task generation')
     }
 
     // Refresh habits list
@@ -175,13 +180,15 @@ export function useHabits(userId: string | undefined) {
 
     // If the habit is active and we're updating the recurrence rule, regenerate tasks
     if (data.is_active && updates.recurrence_rule) {
+      console.log('=== TASK REGENERATION DEBUG ===')
       console.log('Regenerating tasks for updated habit - this should clear old tasks first')
+      console.log('Habit data:', { id: data.id, title: data.title, is_active: data.is_active })
       try {
         const taskGenerator = new HabitTaskGenerator(supabase, userId)
         await taskGenerator.generateTasksForHabit(data, true) // true = full regeneration
-        console.log('Tasks regenerated after habit update')
+        console.log('✅ Tasks regenerated successfully after habit update')
       } catch (taskGenError) {
-        console.error('Error regenerating tasks after habit update:', taskGenError)
+        console.error('❌ Error regenerating tasks after habit update:', taskGenError)
         // Don't throw - let the habit update succeed even if task generation fails
       }
     } else {

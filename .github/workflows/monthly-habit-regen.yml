@@ -1,0 +1,19 @@
+name: Monthly Habit Regeneration
+
+on:
+  schedule:
+    # Run at 2 AM on the 1st of every month
+    - cron: '0 2 1 * *'
+  workflow_dispatch: # Allow manual triggering
+
+jobs:
+  regenerate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call Supabase Edge Function
+        run: |
+          curl -X POST \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_ANON_KEY }}" \
+            -H "Content-Type: application/json" \
+            -d '{}' \
+            ${{ secrets.SUPABASE_URL }}/functions/v1/monthly-habit-regeneration

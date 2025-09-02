@@ -10,7 +10,10 @@ import { Plus, Calendar, Clock, CheckSquare, FileText, ArrowRight, MoreHorizonta
 import { useTasks } from '@/hooks/useTasks';
 import { useNotes } from '@/hooks/useNotes';
 import { useSupabaseAuth } from '@/hooks/useSupabaseAuth';
+import { useHabits } from '@/hooks/useHabits';
+import { WeeklyCalendar } from '@/components/WeeklyCalendar';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import { HabitTaskActivator } from '@/lib/habitTaskActivator';
 import { format, isToday, isPast, isFuture, addDays, isWithinInterval } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -30,9 +33,30 @@ const DashboardPage: React.FC = () => {
   const { user } = useSupabaseAuth();
   const { tasks, isLoading: tasksLoading, refetch: refetchTasks } = useTasks(user?.id);
   const { notes, isLoading: notesLoading, refetch: refetchNotes } = useNotes(user?.id);
+  const { habits, isLoading: habitsLoading } = useHabits(user?.id);
   const [refreshKey, setRefreshKey] = useState(0);
   const [loadingTasks, setLoadingTasks] = useState<Record<string, boolean>>({});
   const supabase = createClientComponentClient<Database>();
+
+  // Activate today's habit tasks on dashboard load
+  useEffect(() => {
+    const activateTodaysTasks = async () => {
+      if (user?.id) {
+        try {
+          console.log('Dashboard: Starting habit task activation...');
+          const activator = new HabitTaskActivator(supabase, user.id);
+          await activator.ensureTodaysTasksAreActive();
+          console.log('Dashboard: Task activation complete, refreshing tasks...');
+          // Refresh tasks after activation
+          refetchTasks();
+        } catch (error) {
+          console.error('Failed to activate today\'s habit tasks:', error);
+        }
+      }
+    };
+
+    activateTodaysTasks();
+  }, [user?.id, refetchTasks]); // Include refetchTasks in dependencies
 
   // Handle updates
   const handleUpdate = () => {
@@ -83,7 +107,7 @@ const DashboardPage: React.FC = () => {
     }
   };
 
-  if (tasksLoading || notesLoading) {
+  if (tasksLoading || notesLoading || habitsLoading) {
     return (
       <div className="py-6">
         <div className="bg-white rounded-lg shadow p-6">
@@ -105,6 +129,22 @@ const DashboardPage: React.FC = () => {
       
       return aDate - bDate;
     });
+
+  // Debug logging for dashboard
+  const todayStr = new Date().toISOString().split('T')[0];
+  const habitTasks = tasks.filter(task => task.habit_id);
+  const todayHabitTasks = habitTasks.filter(task => task.assigned_date === todayStr);
+  const activeHabitTasks = habitTasks.filter(task => task.status === 'active');
+  const todayActiveHabitTasks = todayHabitTasks.filter(task => task.status === 'active');
+  
+  console.log('=== DASHBOARD TASK DEBUG ===');
+  console.log(`Today: ${todayStr}`);
+  console.log(`Total tasks: ${tasks.length}`);
+  console.log(`Total habit tasks: ${habitTasks.length}`);
+  console.log(`Today's habit tasks: ${todayHabitTasks.length}`, todayHabitTasks.map(t => ({ id: t.id, status: t.status, title: t.item?.title })));
+  console.log(`Active habit tasks: ${activeHabitTasks.length}`);
+  console.log(`Today's active habit tasks: ${todayActiveHabitTasks.length}`);
+  console.log(`Total active tasks (should include today's habits): ${activeTasks.length}`);
     
   // Get tasks with no assigned date that are not completed
   const tasksWithoutDates = tasks
@@ -257,6 +297,9 @@ const DashboardPage: React.FC = () => {
           </div>
         }
       />
+
+      {/* Weekly Calendar */}
+      <WeeklyCalendar tasks={tasks} habits={habits} onTaskUpdate={handleUpdate} />
 
       {/* Upcoming Due Tasks Section (next 3 days) */}
       <DashboardCard 

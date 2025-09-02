@@ -1,9 +1,11 @@
 'use client'
 
 import React, { useState, useEffect, useCallback } from 'react';
+import { isSameDay, parseISO } from 'date-fns';
 import { useTasks } from '@/hooks/useTasks';
 import { useSupabaseAuth } from '@/hooks/useSupabaseAuth';
 import { TaskTable } from '@/components/TaskTable';
+import { MonthlyCalendar } from '@/components/MonthlyCalendar';
 import { NewTaskForm } from '@/components/NewTaskForm';
 import { NewNoteForm } from '@/components/NewNoteForm';
 import { NewEntryForm } from '@/components/NewEntryForm';
@@ -17,6 +19,8 @@ export default function TasksPage() {
   const { tasks, isLoading, error, refetch } = useTasks(user?.id);
   const [refreshKey, setRefreshKey] = useState(0);
   const [localTasks, setLocalTasks] = useState<typeof tasks>([]);
+  const [selectedDate, setSelectedDate] = useState<Date | undefined>();
+  const [filteredTasks, setFilteredTasks] = useState<typeof tasks>([]);
 
   // Update localTasks whenever tasks changes
   useEffect(() => {
@@ -25,6 +29,26 @@ export default function TasksPage() {
     // Increment refreshKey to force table re-render
     setRefreshKey(prev => prev + 1);
   }, [tasks]);
+
+  // Filter tasks based on selected date
+  useEffect(() => {
+    if (!selectedDate) {
+      setFilteredTasks(localTasks);
+      return;
+    }
+
+    const tasksForDate = localTasks.filter(task => {
+      const taskDate = task.due_date ? parseISO(task.due_date) : 
+                      task.assigned_date ? parseISO(task.assigned_date) : null;
+      return taskDate && isSameDay(taskDate, selectedDate);
+    });
+
+    setFilteredTasks(tasksForDate);
+  }, [localTasks, selectedDate]);
+
+  const handleDateSelect = (date: Date) => {
+    setSelectedDate(selectedDate && isSameDay(selectedDate, date) ? undefined : date);
+  };
 
   // Callback for explicit task updates
   const handleTaskUpdate = useCallback(() => {
@@ -81,9 +105,17 @@ export default function TasksPage() {
         </div>
       </div>
 
+      {/* Monthly Calendar */}
+      <MonthlyCalendar 
+        tasks={localTasks.filter(task => !task.habit_id)} // Only show regular tasks, not habit tasks
+        onDateSelect={handleDateSelect}
+        selectedDate={selectedDate}
+        showHabits={false}
+      />
+
       {/* Add key to force re-render on data changes */}
       <TaskTable 
-        tasks={localTasks} 
+        tasks={filteredTasks} 
         onTaskUpdate={handleTaskUpdate} 
         key={`tasks-table-${refreshKey}`} 
       />

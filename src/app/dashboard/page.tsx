@@ -13,6 +13,8 @@ import { Plus, Calendar, Clock, CheckSquare, FileText, ArrowRight, MoreHorizonta
 import { useTasks } from '@/hooks/useTasks';
 import { useNotes } from '@/hooks/useNotes';
 import { useSupabaseAuth } from '@/hooks/useSupabaseAuth';
+import { useHabits } from '@/hooks/useHabits';
+import { WeeklyCalendar } from '@/components/WeeklyCalendar';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import { format, isToday, isTomorrow, isPast, isFuture, addDays, isWithinInterval, isAfter } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
@@ -39,6 +41,7 @@ const DashboardPage: React.FC = () => {
   const { user } = useSupabaseAuth();
   const { tasks, isLoading: tasksLoading, refetch: refetchTasks } = useTasks(user?.id, 50, true);
   const { notes, isLoading: notesLoading, refetch: refetchNotes } = useNotes(user?.id);
+  const { habits, isLoading: habitsLoading } = useHabits(user?.id);
   const [refreshKey, setRefreshKey] = useState(0);
   const [loadingTasks, setLoadingTasks] = useState<Record<string, boolean>>({});
   const [taskToEdit, setTaskToEdit] = useState<TaskWithDetails | null>(null);
@@ -431,7 +434,7 @@ const DashboardPage: React.FC = () => {
       .slice(0, 3); // Only show 3 most recent notes
   }, [notes, today]);
 
-  if (tasksLoading || notesLoading) {
+  if (tasksLoading || notesLoading || habitsLoading) {
     return (
       <div className="py-6">
         <div className="bg-white rounded-lg shadow p-6">
@@ -737,6 +740,9 @@ const DashboardPage: React.FC = () => {
           </div>
         }
       />
+
+      {/* Weekly Calendar */}
+      <WeeklyCalendar tasks={tasks} habits={habits} />
 
       {/* Upcoming Tasks Section */}
       {/* Add debugging output for tomorrow's tasks */}
