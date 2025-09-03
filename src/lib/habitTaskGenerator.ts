@@ -26,9 +26,19 @@ export class HabitTaskGenerator {
       // Add a small delay to ensure deletion completes
       await new Promise(resolve => setTimeout(resolve, 500))
     } else {
-      // For regular regeneration, clear all incomplete tasks to avoid duplicates
-      console.log('Regular regeneration: clearing ALL incomplete habit tasks for habit:', habit.id)
-      await this.clearAllIncompleteHabitTasks(habit.id)
+      // For regular generation, check if tasks already exist
+      const { data: existingTasks } = await this.supabase
+        .from('tasks')
+        .select('id')
+        .eq('habit_id', habit.id)
+        .gte('assigned_date', new Date().toISOString().split('T')[0])
+        .limit(1)
+      
+      if (existingTasks && existingTasks.length > 0) {
+        console.log('Tasks already exist for this habit, skipping generation to avoid duplicates')
+        return
+      }
+      console.log('No existing future tasks found, proceeding with generation')
     }
 
     // Generate new tasks with minimum 5 tasks rule
@@ -73,7 +83,7 @@ export class HabitTaskGenerator {
 
   /**
    * Clear ALL incomplete habit tasks (for full regeneration)
-   * Preserves today's active tasks to avoid deleting tasks the user is working on
+   * Preserves ALL of today's tasks (both active and on_deck) to avoid deleting current tasks
    */
   async clearAllIncompleteHabitTasks(habitId: string): Promise<void> {
     console.log(`=== CLEARING ALL INCOMPLETE TASKS FOR HABIT ${habitId} ===`)
@@ -108,12 +118,12 @@ export class HabitTaskGenerator {
       return
     }
     
-    // Filter out today's active tasks to preserve them
+    // Filter out ALL of today's tasks (both active and on_deck) to preserve them
     const tasksToDelete = allIncomplete?.filter(task => 
-      !(task.assigned_date === todayStr && task.status === 'active')
+      !(task.assigned_date === todayStr)  // Preserve ALL tasks assigned for today
     ) || []
 
-    console.log(`Found ${tasksToDelete?.length || 0} incomplete tasks to delete for habit ${habitId} (preserving today's active tasks)`)
+    console.log(`Found ${tasksToDelete?.length || 0} incomplete tasks to delete for habit ${habitId} (preserving ALL of today's tasks)`)
     if (tasksToDelete && tasksToDelete.length > 0) {
       console.log('Tasks being deleted:', tasksToDelete.map(t => `${t.id} (${t.assigned_date || 'no date'}, status: ${t.status})`))
     }
@@ -163,7 +173,8 @@ export class HabitTaskGenerator {
   }
 
   /**
-   * Clear only past incomplete habit tasks (for daily cleanup)
+   * Clear only past on_deck habit tasks (for daily cleanup)
+   * Preserves past due active tasks so users can still complete them
    */
   async clearPastIncompleteHabitTasks(habitId: string): Promise<void> {
     const today = new Date()
@@ -172,11 +183,12 @@ export class HabitTaskGenerator {
     console.log(`Cleaning past incomplete tasks for habit ${habitId}. Today: ${todayStr}`)
 
     // Get incomplete habit tasks that are before today
+    // BUT preserve active tasks even if past due - only clean up on_deck tasks
     const { data: tasksToDelete, error } = await this.supabase
       .from('tasks')
       .select('id, assigned_date, status')
       .eq('habit_id', habitId)
-      .neq('status', 'completed')
+      .eq('status', 'on_deck')  // Only delete on_deck tasks, preserve active ones
       .lt('assigned_date', todayStr)
 
     if (error) {
@@ -184,7 +196,7 @@ export class HabitTaskGenerator {
       return
     }
 
-    console.log('Past incomplete tasks found for deletion:', tasksToDelete)
+    console.log('Past on_deck tasks found for deletion (preserving past due active tasks):', tasksToDelete)
 
     if (tasksToDelete && tasksToDelete.length > 0) {
       const taskIds = tasksToDelete.map(t => t.id)
@@ -209,10 +221,10 @@ export class HabitTaskGenerator {
       if (itemDeleteError) {
         console.error('Error deleting past items:', itemDeleteError)
       } else {
-        console.log(`Successfully deleted ${taskIds.length} past incomplete habit tasks`)
+        console.log(`Successfully deleted ${taskIds.length} past on_deck habit tasks (active tasks preserved)`)
       }
     } else {
-      console.log('No past incomplete habit tasks found to delete')
+      console.log('No past on_deck habit tasks found to delete')
     }
   }
 
