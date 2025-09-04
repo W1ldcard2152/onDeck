@@ -22,26 +22,12 @@ export default function PWANavigationBar({ onHomeClick }: PWANavigationBarProps)
                           (window.navigator as any).standalone ||
                           document.referrer.includes('android-app://');
       
-      // Debug logging
-      if (typeof window !== 'undefined') {
-        console.log('PWA Detection Debug:', {
-          'display-mode standalone': window.matchMedia('(display-mode: standalone)').matches,
-          'display-mode fullscreen': window.matchMedia('(display-mode: fullscreen)').matches,
-          'display-mode minimal-ui': window.matchMedia('(display-mode: minimal-ui)').matches,
-          'navigator.standalone': (window.navigator as any).standalone,
-          'android-app referrer': document.referrer.includes('android-app://'),
-          'userAgent': navigator.userAgent
-        });
-      }
-      
       setIsInPWA(isStandalone);
       
       // Detect platform
       const userAgent = navigator.userAgent.toLowerCase();
       const isMobile = /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(userAgent);
       setPlatform(isMobile ? 'mobile' : 'desktop');
-      
-      console.log('PWA Navigation State:', { isInPWA: isStandalone, platform: isMobile ? 'mobile' : 'desktop' });
       
       // Check if we can go back
       setCanGoBack(window.history.length > 1);
@@ -61,33 +47,35 @@ export default function PWANavigationBar({ onHomeClick }: PWANavigationBarProps)
     };
   }, []);
 
-  // Temporary debug view for development - shows PWA detection state
-  if (platform === 'mobile' && !isInPWA) {
-    return (
-      <div className="fixed bottom-24 right-4 z-40 bg-red-500 text-white p-2 rounded text-xs max-w-48">
-        PWA Debug: Not detected as PWA
-        <br />Platform: {platform}
-        <br />Check console logs
-      </div>
-    );
-  }
-
   // Don't show navigation bar if not in PWA mode
   if (!isInPWA) {
     return null;
   }
 
-  // On mobile PWA, show a minimal floating button for refresh only
-  // Mobile browsers usually provide back gesture/button
+  // On mobile PWA, show a persistent floating button for refresh
+  // Use higher z-index and more stable positioning
   if (platform === 'mobile') {
     return (
-      <div className="fixed bottom-24 right-4 z-40 flex gap-2">
+      <div 
+        className="fixed bottom-24 right-4 z-[9999] flex gap-2"
+        style={{ 
+          position: 'fixed',
+          bottom: '6rem',
+          right: '1rem',
+          zIndex: 9999
+        }}
+      >
         <button
           onClick={() => window.location.reload()}
-          className="bg-white shadow-lg rounded-full p-3 hover:bg-gray-50 active:scale-95 transition-transform"
+          className="bg-blue-600 text-white shadow-lg rounded-full p-3 hover:bg-blue-700 active:scale-95 transition-all duration-200"
           aria-label="Refresh page"
+          style={{
+            position: 'relative',
+            willChange: 'transform',
+            backfaceVisibility: 'hidden'
+          }}
         >
-          <RotateCw className="w-5 h-5 text-gray-700" />
+          <RotateCw className="w-5 h-5" />
         </button>
       </div>
     );
