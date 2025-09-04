@@ -46,41 +46,8 @@ const DashboardPage: React.FC = () => {
   const [loadingTasks, setLoadingTasks] = useState<Record<string, boolean>>({});
   const [taskToEdit, setTaskToEdit] = useState<TaskWithDetails | null>(null);
   
-  // Automatic daily cleanup on dashboard load
-  useEffect(() => {
-    const performDailyCleanup = async () => {
-      if (!user?.id) return;
-      
-      // Check if cleanup was already done today
-      const lastCleanup = localStorage.getItem('lastHabitCleanup');
-      const today = new Date().toISOString().split('T')[0];
-      
-      if (lastCleanup === today) {
-        return; // Already done today
-      }
-      
-      try {
-        const supabase = getSupabaseClient();
-        const taskGenerator = new HabitTaskGenerator(supabase, user.id);
-        
-        await taskGenerator.cleanupPastHabitTasks();
-        
-        // Mark cleanup as done for today
-        localStorage.setItem('lastHabitCleanup', today);
-        console.log('Daily habit cleanup completed automatically');
-        
-        // Refresh tasks to reflect the cleanup
-        refetchTasks();
-      } catch (err) {
-        console.error('Failed to perform daily habit cleanup:', err);
-      }
-    };
-    
-    // Run cleanup after a short delay to allow the dashboard to load
-    const cleanupTimer = setTimeout(performDailyCleanup, 3000);
-    
-    return () => clearTimeout(cleanupTimer);
-  }, [user?.id, refetchTasks]);
+  // Removed automatic daily cleanup - habit tasks should only be deleted when replaced
+  // by newer tasks or during manual regeneration, not automatically based on date
   const [taskToView, setTaskToView] = useState<TaskWithDetails | null>(null);
   const supabase = createClientComponentClient<Database>();
 

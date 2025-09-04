@@ -173,42 +173,76 @@ export class HabitTaskGenerator {
   }
 
   /**
-   * Clear only past on_deck habit tasks (for daily cleanup)
-   * Preserves past due active tasks so users can still complete them
+   * Clear only past on_deck habit tasks that have been superseded by newer tasks
+   * Preserves past due active tasks and incomplete tasks without replacements
    */
   async clearPastIncompleteHabitTasks(habitId: string): Promise<void> {
     const today = new Date()
     const todayStr = today.toISOString().split('T')[0]
 
-    console.log(`Cleaning past incomplete tasks for habit ${habitId}. Today: ${todayStr}`)
+    console.log(`Checking for superseded tasks for habit ${habitId}. Today: ${todayStr}`)
 
-    // Get incomplete habit tasks that are before today
-    // BUT preserve active tasks even if past due - only clean up on_deck tasks
-    const { data: tasksToDelete, error } = await this.supabase
+    // Get ALL tasks for this habit to check for replacements
+    const { data: allHabitTasks, error: allError } = await this.supabase
       .from('tasks')
       .select('id, assigned_date, status')
       .eq('habit_id', habitId)
-      .eq('status', 'on_deck')  // Only delete on_deck tasks, preserve active ones
-      .lt('assigned_date', todayStr)
+      .order('assigned_date', { ascending: true })
 
-    if (error) {
-      console.error('Error finding past tasks to delete:', error)
+    if (allError) {
+      console.error('Error finding habit tasks:', allError)
       return
     }
 
-    console.log('Past on_deck tasks found for deletion (preserving past due active tasks):', tasksToDelete)
+    if (!allHabitTasks || allHabitTasks.length === 0) {
+      console.log('No tasks found for this habit')
+      return
+    }
 
-    if (tasksToDelete && tasksToDelete.length > 0) {
-      const taskIds = tasksToDelete.map(t => t.id)
-      
+    // Group tasks by date to find superseded ones
+    const tasksByDate = new Map<string, typeof allHabitTasks>()
+    for (const task of allHabitTasks) {
+      const date = task.assigned_date || ''
+      if (!tasksByDate.has(date)) {
+        tasksByDate.set(date, [])
+      }
+      tasksByDate.get(date)!.push(task)
+    }
+
+    const tasksToDelete: string[] = []
+
+    // Only delete past on_deck tasks if there's a newer task for the same habit
+    const pastOnDeckTasks = allHabitTasks.filter(t => 
+      t.status === 'on_deck' && 
+      t.assigned_date && 
+      t.assigned_date < todayStr
+    )
+
+    for (const oldTask of pastOnDeckTasks) {
+      // Check if there's any task (completed or not) that's newer than this one
+      const hasNewerTask = allHabitTasks.some(t => 
+        t.assigned_date && 
+        oldTask.assigned_date &&
+        t.assigned_date > oldTask.assigned_date
+      )
+
+      if (hasNewerTask) {
+        console.log(`Task ${oldTask.id} (${oldTask.assigned_date}) will be deleted because newer tasks exist`)
+        tasksToDelete.push(oldTask.id)
+      } else {
+        console.log(`Task ${oldTask.id} (${oldTask.assigned_date}) will be PRESERVED - no newer replacement exists`)
+      }
+    }
+
+    if (tasksToDelete.length > 0) {
       // Delete from tasks table
       const { error: taskDeleteError } = await this.supabase
         .from('tasks')
         .delete()
-        .in('id', taskIds)
+        .in('id', tasksToDelete)
 
       if (taskDeleteError) {
-        console.error('Error deleting past tasks:', taskDeleteError)
+        console.error('Error deleting superseded tasks:', taskDeleteError)
         return
       }
 
@@ -216,15 +250,15 @@ export class HabitTaskGenerator {
       const { error: itemDeleteError } = await this.supabase
         .from('items')
         .delete()
-        .in('id', taskIds)
+        .in('id', tasksToDelete)
         
       if (itemDeleteError) {
-        console.error('Error deleting past items:', itemDeleteError)
+        console.error('Error deleting superseded items:', itemDeleteError)
       } else {
-        console.log(`Successfully deleted ${taskIds.length} past on_deck habit tasks (active tasks preserved)`)
+        console.log(`Successfully deleted ${tasksToDelete.length} superseded habit tasks`)
       }
     } else {
-      console.log('No past on_deck habit tasks found to delete')
+      console.log('No superseded habit tasks found to delete')
     }
   }
 

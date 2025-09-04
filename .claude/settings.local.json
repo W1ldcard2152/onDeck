@@ -5,7 +5,18 @@
       "Bash(npm run build:*)",
       "Bash(npm run lint)",
       "Bash(npm run dev:*)",
-      "Bash(npx tsc:*)"
+      "Bash(npx tsc:*)",
+      "Read(/C:\\Users\\Wildc\\Documents\\Programming\\ondeck\\src\\lib/**)",
+      "Read(/C:\\Users\\Wildc\\Documents\\Programming\\ondeck\\src\\hooks/**)",
+      "Read(/C:\\Users\\Wildc\\Documents\\Programming\\ondeck\\src/**)",
+      "Read(/C:\\Users\\Wildc\\Documents\\Programming\\ondeck\\src\\app\\dashboard/**)",
+      "Read(/C:\\Users\\Wildc\\Documents\\Programming\\ondeck\\src\\lib/**)",
+      "Read(/C:\\Users\\Wildc\\Documents\\Programming\\ondeck\\src\\lib/**)",
+      "Read(/C:\\Users\\Wildc\\Documents\\Programming\\ondeck\\src\\lib/**)",
+      "Read(/C:\\Users\\Wildc\\Documents\\Programming\\ondeck\\src/**)",
+      "Read(/C:\\Users\\Wildc\\Documents\\Programming\\ondeck\\src\\app/**)",
+      "Read(/C:\\Users\\Wildc\\Documents\\Programming\\ondeck\\src\\components\\layouts/**)",
+      "Read(/C:\\Users\\Wildc\\Documents\\Programming\\ondeck\\src\\components/**)"
     ],
     "deny": []
   }

@@ -22,12 +22,14 @@ import FeedbackPage from '@/app/feedback/page';
 import InstallPWA from '../InstallPWA';
 import PWAStatus from '../PWAStatus';
 import OfflineNotification from '../OfflineNotification';
+import PWANavigationBar from '../PWANavigationBar';
 import { FeedbackModal } from '../FeedbackModal';
 
 const DesktopLayout = () => {
   const { user, loading } = useSupabaseAuth();
   const [activeSection, setActiveSection] = useState<SectionType>('dashboard');
   const [isFeedbackModalOpen, setIsFeedbackModalOpen] = useState(false);
+  const [isInPWA, setIsInPWA] = useState(false);
   
   // Memoize service worker options to prevent re-registration
   const serviceWorkerOptions = useMemo(() => ({
@@ -56,16 +58,43 @@ const DesktopLayout = () => {
   // Register and monitor the service worker
   const { isActive, isRegistered, error } = useServiceWorker(serviceWorkerOptions);
   
+  // Check if running as PWA
+  useEffect(() => {
+    const checkPWAStatus = () => {
+      const isStandalone = window.matchMedia('(display-mode: standalone)').matches ||
+                          (window.navigator as any).standalone ||
+                          document.referrer.includes('android-app://');
+      setIsInPWA(isStandalone);
+    };
+    
+    checkPWAStatus();
+    
+    // Also check when display mode changes
+    const mediaQuery = window.matchMedia('(display-mode: standalone)');
+    const handleChange = () => checkPWAStatus();
+    
+    if (mediaQuery.addEventListener) {
+      mediaQuery.addEventListener('change', handleChange);
+    }
+    
+    return () => {
+      if (mediaQuery.removeEventListener) {
+        mediaQuery.removeEventListener('change', handleChange);
+      }
+    };
+  }, []);
+  
   // Log service worker status in development
   useEffect(() => {
     if (process.env.NODE_ENV !== 'production') {
       console.log('Service worker status in DesktopLayout:', { 
         isActive, 
         isRegistered,
-        error: error?.message
+        error: error?.message,
+        isInPWA
       });
     }
-  }, [isActive, isRegistered, error]);
+  }, [isActive, isRegistered, error, isInPWA]);
 
   if (loading) {
     return (
@@ -105,16 +134,19 @@ const DesktopLayout = () => {
   return (
     <ClientLayout>
       <div className="min-h-screen bg-gray-50">
-        {/* Desktop Navigation - hidden on mobile */}
-        <div className="hidden md:block fixed left-0 top-0 h-full">
+        {/* PWA Navigation Bar - shows only in PWA mode */}
+        <PWANavigationBar onHomeClick={() => setActiveSection('dashboard')} />
+        
+        {/* Desktop Navigation - hidden on mobile, adjust for PWA nav bar */}
+        <div className={`hidden md:block fixed left-0 h-full ${isInPWA ? 'top-12' : 'top-0'}`}>
           <DesktopNav 
             activeSection={activeSection} 
             onSectionChange={setActiveSection}
           />
         </div>
 
-        {/* Main Content Area */}
-        <div className="md:pl-64 flex-1 flex flex-col min-w-0">
+        {/* Main Content Area - adjust padding for PWA nav bar */}
+        <div className={`md:pl-64 flex-1 flex flex-col min-w-0 ${isInPWA ? 'pt-12' : ''}`}>
           {/* Mobile Header */}
           <MobileHeader 
             className="md:hidden" 
