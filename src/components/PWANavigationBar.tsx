@@ -15,9 +15,24 @@ export default function PWANavigationBar({ onHomeClick }: PWANavigationBarProps)
   useEffect(() => {
     // Check if running as PWA
     const checkPWAStatus = () => {
+      // More comprehensive PWA detection
       const isStandalone = window.matchMedia('(display-mode: standalone)').matches ||
+                          window.matchMedia('(display-mode: fullscreen)').matches ||
+                          window.matchMedia('(display-mode: minimal-ui)').matches ||
                           (window.navigator as any).standalone ||
                           document.referrer.includes('android-app://');
+      
+      // Debug logging
+      if (typeof window !== 'undefined') {
+        console.log('PWA Detection Debug:', {
+          'display-mode standalone': window.matchMedia('(display-mode: standalone)').matches,
+          'display-mode fullscreen': window.matchMedia('(display-mode: fullscreen)').matches,
+          'display-mode minimal-ui': window.matchMedia('(display-mode: minimal-ui)').matches,
+          'navigator.standalone': (window.navigator as any).standalone,
+          'android-app referrer': document.referrer.includes('android-app://'),
+          'userAgent': navigator.userAgent
+        });
+      }
       
       setIsInPWA(isStandalone);
       
@@ -25,6 +40,8 @@ export default function PWANavigationBar({ onHomeClick }: PWANavigationBarProps)
       const userAgent = navigator.userAgent.toLowerCase();
       const isMobile = /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(userAgent);
       setPlatform(isMobile ? 'mobile' : 'desktop');
+      
+      console.log('PWA Navigation State:', { isInPWA: isStandalone, platform: isMobile ? 'mobile' : 'desktop' });
       
       // Check if we can go back
       setCanGoBack(window.history.length > 1);
@@ -44,7 +61,18 @@ export default function PWANavigationBar({ onHomeClick }: PWANavigationBarProps)
     };
   }, []);
 
-  // Don't show navigation bar if not in PWA mode or on mobile (mobile has browser controls)
+  // Temporary debug view for development - shows PWA detection state
+  if (platform === 'mobile' && !isInPWA) {
+    return (
+      <div className="fixed bottom-24 right-4 z-40 bg-red-500 text-white p-2 rounded text-xs max-w-48">
+        PWA Debug: Not detected as PWA
+        <br />Platform: {platform}
+        <br />Check console logs
+      </div>
+    );
+  }
+
+  // Don't show navigation bar if not in PWA mode
   if (!isInPWA) {
     return null;
   }
