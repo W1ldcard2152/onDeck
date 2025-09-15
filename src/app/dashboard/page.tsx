@@ -279,6 +279,17 @@ const DashboardPage: React.FC = () => {
         return false;
       }
       
+      // Debug habit tasks specifically
+      if (task.habit_id) {
+        console.log('Checking habit task for todayAssignedTasks:', {
+          title: task.item?.title,
+          status: task.status,
+          assigned_date: task.assigned_date,
+          isToday: task.assigned_date ? isDateToday(task.assigned_date) : false,
+          isPast: task.assigned_date ? isDatePast(task.assigned_date) : false,
+        });
+      }
+      
       // Include if assigned today or in the past
       return task.assigned_date && (isDateToday(task.assigned_date) || isDatePast(task.assigned_date));
     }).sort((a, b) => {
@@ -372,6 +383,19 @@ const DashboardPage: React.FC = () => {
         return priorityOrder[aPriority] - priorityOrder[bPriority];
       })
       .slice(0, 5);
+
+    // Debug the final results
+    console.log('Dashboard task filtering results:', {
+      todayDueTasks: todayDueTasks.length,
+      todayAssignedTasks: todayAssignedTasks.length,
+      todayAssignedHabitTasks: todayAssignedTasks.filter(t => t.habit_id).length,
+      todayAssignedTaskDetails: todayAssignedTasks.filter(t => t.habit_id).map(t => ({
+        title: t.item?.title,
+        status: t.status,
+        assigned_date: t.assigned_date,
+        habit_id: t.habit_id
+      }))
+    });
 
     return {
       todayDueTasks,

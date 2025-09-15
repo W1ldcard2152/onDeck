@@ -181,12 +181,14 @@ export function useHabits(userId: string | undefined) {
     // If the habit is active and we're updating the recurrence rule, regenerate tasks
     if (data.is_active && updates.recurrence_rule) {
       console.log('=== TASK REGENERATION DEBUG ===')
-      console.log('Regenerating tasks for updated habit - this should clear old tasks first')
+      console.log('Recurrence rule changed - need to regenerate tasks')
       console.log('Habit data:', { id: data.id, title: data.title, is_active: data.is_active })
       try {
         const taskGenerator = new HabitTaskGenerator(supabase, userId)
-        await taskGenerator.generateTasksForHabit(data, true) // true = full regeneration
-        console.log('✅ Tasks regenerated successfully after habit update')
+        // Only do full regeneration when recurrence rule changes
+        // This is necessary because the schedule has fundamentally changed
+        await taskGenerator.generateTasksForHabit(data, true) // true = full regeneration ONLY for recurrence changes
+        console.log('✅ Tasks regenerated successfully after recurrence rule change')
       } catch (taskGenError) {
         console.error('❌ Error regenerating tasks after habit update:', taskGenError)
         // Don't throw - let the habit update succeed even if task generation fails

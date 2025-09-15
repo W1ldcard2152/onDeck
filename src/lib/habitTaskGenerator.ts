@@ -9,6 +9,45 @@ export class HabitTaskGenerator {
   ) {}
 
   /**
+   * Quick regeneration - only creates missing tasks for today and the future
+   * Preserves all existing tasks
+   */
+  async quickRegenerateHabitTasks(habit: Habit): Promise<void> {
+    console.log('Quick regeneration for habit:', habit.title)
+    
+    if (!habit.is_active) {
+      console.log('Habit is inactive, skipping')
+      return
+    }
+
+    // Check what tasks already exist
+    const today = new Date().toISOString().split('T')[0]
+    const { data: existingTasks } = await this.supabase
+      .from('tasks')
+      .select('id, assigned_date')
+      .eq('habit_id', habit.id)
+      .gte('assigned_date', today)
+    
+    const existingDates = new Set(existingTasks?.map(t => t.assigned_date) || [])
+    console.log(`Found ${existingDates.size} existing future tasks for habit`)
+    
+    // Generate dates for the next 30 days
+    const dates = this.generateDatesForHabit(habit, 30, 5)
+    
+    // Only create tasks for dates that don't exist yet
+    let created = 0
+    for (const date of dates) {
+      const dateStr = date.toISOString().split('T')[0]
+      if (!existingDates.has(dateStr)) {
+        await this.createHabitTask(habit, date)
+        created++
+      }
+    }
+    
+    console.log(`Created ${created} new tasks for habit ${habit.title}`)
+  }
+
+  /**
    * Generate tasks for a habit over the next 30 days
    */
   async generateTasksForHabit(habit: Habit, fullRegeneration: boolean = false): Promise<void> {
@@ -118,12 +157,14 @@ export class HabitTaskGenerator {
       return
     }
     
-    // Filter out ALL of today's tasks (both active and on_deck) to preserve them
-    const tasksToDelete = allIncomplete?.filter(task => 
-      !(task.assigned_date === todayStr)  // Preserve ALL tasks assigned for today
-    ) || []
+    // Filter out today's and future tasks to preserve them
+    // Only delete past incomplete tasks when doing full regeneration
+    const tasksToDelete = allIncomplete?.filter(task => {
+      if (!task.assigned_date) return true; // Delete tasks with no date
+      return task.assigned_date < todayStr; // Only delete past tasks
+    }) || []
 
-    console.log(`Found ${tasksToDelete?.length || 0} incomplete tasks to delete for habit ${habitId} (preserving ALL of today's tasks)`)
+    console.log(`Found ${tasksToDelete?.length || 0} past incomplete tasks to delete for habit ${habitId} (preserving today's and future tasks)`)
     if (tasksToDelete && tasksToDelete.length > 0) {
       console.log('Tasks being deleted:', tasksToDelete.map(t => `${t.id} (${t.assigned_date || 'no date'}, status: ${t.status})`))
     }
@@ -211,14 +252,14 @@ export class HabitTaskGenerator {
 
     const tasksToDelete: string[] = []
 
-    // Only delete past on_deck tasks if there's a newer task for the same habit
-    const pastOnDeckTasks = allHabitTasks.filter(t => 
-      t.status === 'on_deck' && 
+    // Only delete past habit status tasks if there's a newer task for the same habit
+    const pastHabitTasks = allHabitTasks.filter(t => 
+      t.status === 'habit' && 
       t.assigned_date && 
       t.assigned_date < todayStr
     )
 
-    for (const oldTask of pastOnDeckTasks) {
+    for (const oldTask of pastHabitTasks) {
       // Check if there's any task (completed or not) that's newer than this one
       const hasNewerTask = allHabitTasks.some(t => 
         t.assigned_date && 
@@ -613,7 +654,7 @@ export class HabitTaskGenerator {
         id: item.id,
         assigned_date: dateStr,
         due_date: null,
-        status: 'on_deck',
+        status: 'habit',
         description: habit.description,
         priority: habit.priority,
         habit_id: habit.id

@@ -41,6 +41,8 @@ interface SortState {
 interface TaskTableProps {
   tasks: TaskWithDetails[];
   onTaskUpdate: () => void;
+  onCompletedToggle?: (shouldFetch: boolean) => void;
+  completedLoading?: boolean;
 }
 
 interface TaskTableBaseProps {
@@ -860,7 +862,12 @@ const TaskTableBase: React.FC<TaskTableBaseProps> = ({
 };
 
 // Main TaskTable component
-const TaskTable: React.FC<TaskTableProps> = ({ tasks, onTaskUpdate }) => {
+const TaskTable: React.FC<TaskTableProps> = ({ 
+  tasks, 
+  onTaskUpdate, 
+  onCompletedToggle,
+  completedLoading = false 
+}) => {
   const [showCompleted, setShowCompleted] = useState(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('taskTable_showCompleted');
@@ -869,8 +876,19 @@ const TaskTable: React.FC<TaskTableProps> = ({ tasks, onTaskUpdate }) => {
     return false;
   });
   
+  // Track if we've fetched completed tasks
+  const [hasTriggeredFetch, setHasTriggeredFetch] = useState(false);
+  
   const [completedTasksPage, setCompletedTasksPage] = useState(1);
   const completedTasksPerPage = 100;
+  
+  // Trigger fetching completed tasks when toggle is clicked
+  useEffect(() => {
+    if (showCompleted && !hasTriggeredFetch && onCompletedToggle) {
+      onCompletedToggle(true);
+      setHasTriggeredFetch(true);
+    }
+  }, [showCompleted, hasTriggeredFetch, onCompletedToggle]);
   
   // Initialize sorts from localStorage
   const [activeSorts, setActiveSorts] = useState<SortState[]>(() => {
@@ -1053,7 +1071,9 @@ const TaskTable: React.FC<TaskTableProps> = ({ tasks, onTaskUpdate }) => {
         
         {showCompleted && (
           <div className="p-6">
-            {paginatedCompletedTasks.length === 0 ? (
+            {completedLoading ? (
+              <div className="text-gray-500 text-center py-4">Loading completed tasks...</div>
+            ) : paginatedCompletedTasks.length === 0 ? (
               <div className="text-gray-500 text-center py-4">No completed tasks</div>
             ) : (
               <>

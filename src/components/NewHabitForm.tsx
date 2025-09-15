@@ -44,9 +44,19 @@ const NewHabitForm = ({ onHabitCreated, editingHabit, onHabitUpdated }: NewHabit
   const [timeOfDay, setTimeOfDay] = useState('');
   const [startDate, setStartDate] = useState('');
   const [offsetDays, setOffsetDays] = useState(0);
+  const [showCustomTimePicker, setShowCustomTimePicker] = useState(false);
   
   const { user } = useSupabaseAuth();
   const { createHabit, updateHabit } = useHabits(user?.id);
+
+  // Preset time options
+  const presetTimes = [
+    { label: '8:00am', value: '08:00' },
+    { label: '9:45am', value: '09:45' },
+    { label: '1:00pm', value: '13:00' },
+    { label: '6:15pm', value: '18:15' },
+    { label: '8:20pm', value: '20:20' },
+  ];
 
   const dayOptions = [
     'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'
@@ -68,6 +78,12 @@ const NewHabitForm = ({ onHabitCreated, editingHabit, onHabitUpdated }: NewHabit
       setTimeOfDay(rule.time_of_day || '');
       setStartDate(rule.start_date || '');
       setOffsetDays(rule.offset_days || 0);
+      // Show custom time picker if the time is not one of the presets
+      if (rule.time_of_day && !presetTimes.some(p => p.value === rule.time_of_day)) {
+        setShowCustomTimePicker(true);
+      } else {
+        setShowCustomTimePicker(false);
+      }
     }
   }, [editingHabit]);
 
@@ -86,6 +102,7 @@ const NewHabitForm = ({ onHabitCreated, editingHabit, onHabitUpdated }: NewHabit
       setTimeOfDay('');
       setStartDate('');
       setOffsetDays(0);
+      setShowCustomTimePicker(false);
       if (open) {
         setOpen(false);
       }
@@ -151,6 +168,7 @@ const NewHabitForm = ({ onHabitCreated, editingHabit, onHabitUpdated }: NewHabit
       setTimeOfDay('');
       setStartDate('');
       setOffsetDays(0);
+      setShowCustomTimePicker(false);
       setOpen(false);
       
     } catch (error) {
@@ -235,12 +253,51 @@ const NewHabitForm = ({ onHabitCreated, editingHabit, onHabitUpdated }: NewHabit
 
             <div className="space-y-2">
               <Label>Time of Day (optional)</Label>
-              <TimePicker
-                value={timeOfDay}
-                onChange={setTimeOfDay}
-              />
+              <div className="grid grid-cols-3 gap-2">
+                {presetTimes.map((preset) => (
+                  <Button
+                    key={preset.value}
+                    type="button"
+                    variant={timeOfDay === preset.value ? "default" : "outline"}
+                    className="w-full"
+                    onClick={() => {
+                      setTimeOfDay(preset.value);
+                      setShowCustomTimePicker(false);
+                    }}
+                  >
+                    {preset.label}
+                  </Button>
+                ))}
+                <Button
+                  type="button"
+                  variant={showCustomTimePicker || (timeOfDay && !presetTimes.some(p => p.value === timeOfDay)) ? "default" : "outline"}
+                  className="w-full"
+                  onClick={() => setShowCustomTimePicker(!showCustomTimePicker)}
+                >
+                  {showCustomTimePicker || (timeOfDay && !presetTimes.some(p => p.value === timeOfDay)) 
+                    ? (() => {
+                        if (timeOfDay) {
+                          const [hour, minute] = timeOfDay.split(':');
+                          const hourNum = parseInt(hour, 10);
+                          const period = hourNum >= 12 ? 'pm' : 'am';
+                          const hour12 = hourNum === 0 ? 12 : hourNum > 12 ? hourNum - 12 : hourNum;
+                          return `${hour12}:${minute}${period}`;
+                        }
+                        return 'Custom';
+                      })()
+                    : 'Custom'}
+                </Button>
+              </div>
+              {showCustomTimePicker && (
+                <TimePicker
+                  value={timeOfDay}
+                  onChange={(value) => {
+                    setTimeOfDay(value);
+                  }}
+                />
+              )}
               <p className="text-sm text-gray-500">
-                Set a preferred time for this habit (e.g., 7:00 AM for morning jog)
+                Set a preferred time for this habit
               </p>
             </div>
 

@@ -31,7 +31,13 @@ const DashboardPage: React.FC = () => {
   // Service workers should be registered in _document.tsx or through next-pwa-setup.js
 
   const { user } = useSupabaseAuth();
-  const { tasks, isLoading: tasksLoading, refetch: refetchTasks } = useTasks(user?.id);
+  // Only load on_deck, active, and habit tasks for dashboard
+  const { tasks, isLoading: tasksLoading, refetch: refetchTasks } = useTasks(
+    user?.id, 
+    50, 
+    true,  // Include habit tasks for dashboard
+    ['on_deck', 'active', 'habit']  // Status filters
+  );
   const { notes, isLoading: notesLoading, refetch: refetchNotes } = useNotes(user?.id);
   const { habits, isLoading: habitsLoading } = useHabits(user?.id);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -119,9 +125,9 @@ const DashboardPage: React.FC = () => {
     );
   }
 
-  // Get all active tasks sorted by assigned date (soonest first)
-  const activeTasks = tasks
-    .filter(task => task.status === 'active')
+  // Get all active, on_deck, and habit tasks sorted by assigned date (soonest first)
+  const onDeckTasks = tasks
+    .filter(task => task.status === 'active' || task.status === 'on_deck' || task.status === 'habit' || task.habit_id)
     .sort((a, b) => {
       // First sort by assigned date
       const aDate = a.assigned_date ? new Date(a.assigned_date).getTime() : Number.MAX_SAFE_INTEGER;
@@ -137,14 +143,25 @@ const DashboardPage: React.FC = () => {
   const activeHabitTasks = habitTasks.filter(task => task.status === 'active');
   const todayActiveHabitTasks = todayHabitTasks.filter(task => task.status === 'active');
   
-  console.log('=== DASHBOARD TASK DEBUG ===');
-  console.log(`Today: ${todayStr}`);
-  console.log(`Total tasks: ${tasks.length}`);
-  console.log(`Total habit tasks: ${habitTasks.length}`);
-  console.log(`Today's habit tasks: ${todayHabitTasks.length}`, todayHabitTasks.map(t => ({ id: t.id, status: t.status, title: t.item?.title })));
-  console.log(`Active habit tasks: ${activeHabitTasks.length}`);
-  console.log(`Today's active habit tasks: ${todayActiveHabitTasks.length}`);
-  console.log(`Total active tasks (should include today's habits): ${activeTasks.length}`);
+  console.log('=== DASHBOARD DEBUG ===');
+  console.log(`Dashboard received ${tasks.length} tasks total`);
+  console.log(`Habit tasks: ${habitTasks.length}`);
+  console.log('Habit tasks details:', habitTasks.map(t => ({ 
+    id: t.id, 
+    status: t.status, 
+    habit_id: t.habit_id, 
+    title: t.item?.title,
+    assigned_date: t.assigned_date 
+  })));
+  console.log(`On deck tasks after filtering: ${onDeckTasks.length}`);
+  console.log('On deck tasks details:', onDeckTasks.map(t => ({ 
+    id: t.id, 
+    status: t.status, 
+    habit_id: t.habit_id, 
+    title: t.item?.title,
+    assigned_date: t.assigned_date,
+    isHabit: !!t.habit_id 
+  })));
     
   // Get tasks with no assigned date that are not completed
   const tasksWithoutDates = tasks
@@ -232,13 +249,13 @@ const DashboardPage: React.FC = () => {
 
       {/* Active Tasks Section (sorted by assigned date) */}
       <DashboardCard 
-        title="Active Tasks"
+        title="On Deck"
         content={
           <div className="space-y-3">
-            {activeTasks.length === 0 ? (
-              <div className="text-gray-500 text-center py-4">No active tasks</div>
+            {onDeckTasks.length === 0 ? (
+              <div className="text-gray-500 text-center py-4">No tasks on deck</div>
             ) : (
-              activeTasks.map(task => (
+              onDeckTasks.map(task => (
                 <div key={task.id} className="p-3 bg-white rounded-lg border hover:shadow-sm transition-shadow">
                   <div className="flex justify-between items-start mb-2">
                     <div className="flex items-center">

@@ -5,7 +5,12 @@ import type { TaskWithDetails } from '@/lib/types'
 import type { Database } from '@/types/database.types'
 import { getSupabaseClient } from '@/lib/supabase-client'
 
-export function useTasks(userId: string | undefined, limit: number = 50, includeHabitTasks: boolean = false) {
+export function useTasks(
+  userId: string | undefined, 
+  limit: number = 50, 
+  includeHabitTasks: boolean = false,
+  statusFilter?: ('on_deck' | 'active' | 'completed' | 'habit')[]
+) {
   const [tasks, setTasks] = useState<TaskWithDetails[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<Error | null>(null)
@@ -64,12 +69,26 @@ export function useTasks(userId: string | undefined, limit: number = 50, include
         .from('tasks')
         .select('*');
       
-      // Filter by habit_id based on includeHabitTasks parameter
-      if (includeHabitTasks === false) {
-        // Only exclude habit tasks if explicitly set to false
-        tasksQuery = tasksQuery.is('habit_id', null);
+      // Apply status filter if provided, combined with habit task filtering
+      if (statusFilter && statusFilter.length > 0) {
+        if (includeHabitTasks === true) {
+          // Include tasks that match status OR are habit tasks
+          tasksQuery = tasksQuery.or(`status.in.(${statusFilter.join(',')}),habit_id.not.is.null`);
+        } else if (includeHabitTasks === false) {
+          // Only include tasks that match status AND are not habit tasks
+          tasksQuery = tasksQuery.in('status', statusFilter).is('habit_id', null);
+        } else {
+          // Default behavior - just filter by status
+          tasksQuery = tasksQuery.in('status', statusFilter);
+        }
+      } else {
+        // No status filter - use original behavior for habit filtering
+        if (includeHabitTasks === false) {
+          // Only exclude habit tasks if explicitly set to false
+          tasksQuery = tasksQuery.is('habit_id', null);
+        }
+        // If includeHabitTasks is true or not specified, include all tasks (both regular and habit tasks)
       }
-      // If includeHabitTasks is true or not specified, include all tasks (both regular and habit tasks)
       
       const { data: allTasksRaw, error: tasksError } = await tasksQuery
         .order('due_date', { ascending: true })
@@ -212,7 +231,7 @@ export function useTasks(userId: string | undefined, limit: number = 50, include
       setIsLoading(false)
       isFetchingRef.current = false
     }
-  }, [userId, includeHabitTasks])
+  }, [userId, includeHabitTasks, statusFilter?.join(',')]) // Use stable string representation
 
   // Initial data fetch when userId changes
   useEffect(() => {
@@ -222,7 +241,7 @@ export function useTasks(userId: string | undefined, limit: number = 50, include
       setTasks([])
       setIsLoading(false)
     }
-  }, [userId, fetchTasks, includeHabitTasks])
+  }, [userId, fetchTasks])
   
   // Set up real-time subscriptions with debouncing
   useEffect(() => {
@@ -255,7 +274,7 @@ export function useTasks(userId: string | undefined, limit: number = 50, include
       clearTimeout(refreshTimeout)
       channel.unsubscribe()
     }
-  }, [userId, fetchTasks, includeHabitTasks])
+  }, [userId, fetchTasks])
 
   return { 
     tasks, 

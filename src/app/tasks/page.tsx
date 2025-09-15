@@ -16,19 +16,40 @@ import TasksDebugger from '@/components/TasksDebugger';
 
 export default function TasksPage() {
   const { user } = useSupabaseAuth();
-  const { tasks, isLoading, error, refetch } = useTasks(user?.id);
+  const [shouldFetchCompleted, setShouldFetchCompleted] = useState(false);
+  
+  // Initially only load on_deck and active tasks
+  const { tasks: activeTasks, isLoading, error, refetch } = useTasks(
+    user?.id,
+    50,
+    false,
+    ['on_deck', 'active']
+  );
+  
+  // Separate hook for completed tasks - always defined but only fetches when userId is provided
+  const { tasks: completedTasks, isLoading: completedLoading } = useTasks(
+    shouldFetchCompleted ? user?.id : undefined,
+    50,
+    false,
+    shouldFetchCompleted ? ['completed'] : undefined
+  );
+  
   const [refreshKey, setRefreshKey] = useState(0);
-  const [localTasks, setLocalTasks] = useState<typeof tasks>([]);
+  const [localTasks, setLocalTasks] = useState<typeof activeTasks>([]);
   const [selectedDate, setSelectedDate] = useState<Date | undefined>();
-  const [filteredTasks, setFilteredTasks] = useState<typeof tasks>([]);
+  const [filteredTasks, setFilteredTasks] = useState<typeof activeTasks>([]);
 
   // Update localTasks whenever tasks changes
   useEffect(() => {
     console.log('Tasks changed, updating local state...');
-    setLocalTasks(tasks);
+    // Combine active and completed tasks (completed only if loaded)
+    const allTasks = shouldFetchCompleted 
+      ? [...activeTasks, ...completedTasks] 
+      : activeTasks;
+    setLocalTasks(allTasks);
     // Increment refreshKey to force table re-render
     setRefreshKey(prev => prev + 1);
-  }, [tasks]);
+  }, [activeTasks, completedTasks, shouldFetchCompleted]);
 
   // Filter tasks based on selected date
   useEffect(() => {
@@ -116,7 +137,9 @@ export default function TasksPage() {
       {/* Add key to force re-render on data changes */}
       <TaskTable 
         tasks={filteredTasks} 
-        onTaskUpdate={handleTaskUpdate} 
+        onTaskUpdate={handleTaskUpdate}
+        onCompletedToggle={setShouldFetchCompleted}
+        completedLoading={completedLoading}
         key={`tasks-table-${refreshKey}`} 
       />
       

@@ -29,11 +29,11 @@ export class HabitTaskActivator {
       console.log(`Total habit tasks in database: ${allHabitTasks?.length || 0}`)
       
       const todayTasks = allHabitTasks?.filter(t => t.assigned_date === todayStr) || []
-      const onDeckTodayTasks = todayTasks.filter(t => t.status === 'on_deck')
+      const habitTodayTasks = todayTasks.filter(t => t.status === 'habit')
       const activeTodayTasks = todayTasks.filter(t => t.status === 'active')
       
       console.log(`Tasks for today (${todayStr}): ${todayTasks.length}`)
-      console.log(`- On deck: ${onDeckTodayTasks.length}`)
+      console.log(`- Habit status: ${habitTodayTasks.length}`)
       console.log(`- Active: ${activeTodayTasks.length}`)
       console.log('Today task details:', todayTasks.map(t => ({ id: t.id, status: t.status, assigned_date: t.assigned_date })))
 
@@ -42,12 +42,12 @@ export class HabitTaskActivator {
         console.log('Sample of upcoming tasks:', allHabitTasks?.filter(t => t.assigned_date && t.assigned_date > todayStr).slice(0, 5).map(t => ({ assigned_date: t.assigned_date, status: t.status })))
         return
       }
-      // Find all on_deck habit tasks assigned for today
+      // Find all habit status habit tasks assigned for today
       const { data: tasksToActivate, error: findError } = await this.supabase
         .from('tasks')
         .select('id, habit_id, status, assigned_date')
         .eq('assigned_date', todayStr)
-        .eq('status', 'on_deck')
+        .eq('status', 'habit')
         .not('habit_id', 'is', null)
 
       if (findError) {
@@ -56,7 +56,7 @@ export class HabitTaskActivator {
       }
 
       if (!tasksToActivate || tasksToActivate.length === 0) {
-        console.log('No on_deck habit tasks found for today')
+        console.log('No habit status habit tasks found for today')
         return
       }
 

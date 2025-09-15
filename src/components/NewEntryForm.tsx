@@ -125,6 +125,7 @@ export const NewEntryForm: React.FC<NewEntryFormProps> = ({
   const [dueDate, setDueDate] = useState<Date | undefined>();
   const [assignedDate, setAssignedDate] = useState<Date | undefined>();
   const [reminderTime, setReminderTime] = useState('');
+  const [showCustomTimePicker, setShowCustomTimePicker] = useState(false);
   const [priority, setPriority] = useState<Priority>('normal');
   const [status, setStatus] = useState<TaskStatus>('active');
   const [description, setDescription] = useState('');
@@ -134,6 +135,15 @@ export const NewEntryForm: React.FC<NewEntryFormProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [viewportHeight, setViewportHeight] = useState<number>(0);
+
+  // Preset time options - same as in habits
+  const presetTimes = [
+    { label: '8:00am', value: '08:00' },
+    { label: '9:45am', value: '09:45' },
+    { label: '1:00pm', value: '13:00' },
+    { label: '6:15pm', value: '18:15' },
+    { label: '8:20pm', value: '20:20' },
+  ];
 
   // Add refs for the text areas
   const contentRef = useRef<HTMLTextAreaElement>(null);
@@ -177,7 +187,12 @@ export const NewEntryForm: React.FC<NewEntryFormProps> = ({
         
         if (taskData.reminder_time) {
           const reminderDate = new Date(taskData.reminder_time);
-          setReminderTime(reminderDate.toTimeString().slice(0, 5)); // HH:MM format
+          const time = reminderDate.toTimeString().slice(0, 5); // HH:MM format
+          setReminderTime(time);
+          // Show custom time picker if the time is not one of the presets
+          if (time && !presetTimes.some(p => p.value === time)) {
+            setShowCustomTimePicker(true);
+          }
         }
       } else if (isEditingNote) {
         // It's a note
@@ -225,6 +240,7 @@ export const NewEntryForm: React.FC<NewEntryFormProps> = ({
     setDueDate(undefined);
     setAssignedDate(undefined);
     setReminderTime('');
+    setShowCustomTimePicker(false);
     setPriority('normal');
     setStatus('active');
     setDescription('');
@@ -435,23 +451,60 @@ export const NewEntryForm: React.FC<NewEntryFormProps> = ({
                 <div className="grid grid-cols-1 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="reminder-time">Reminder Time</Label>
-                    <TimePicker
-                      value={reminderTime}
-                      onChange={(time) => {
-                        console.log('Reminder time changed:', time);
-                        setReminderTime(time);
-                      }}
-                      disabled={!assignedDate}
-                      placeholder="Select reminder time"
-                    />
-                    {assignedDate && reminderTime && (
-                      <div className="text-xs text-gray-500">
-                        You'll be reminded at this time on {format(assignedDate, 'MMM d, yyyy')}
-                      </div>
-                    )}
+                    <div className="grid grid-cols-3 gap-2">
+                      {presetTimes.map((preset) => (
+                        <Button
+                          key={preset.value}
+                          type="button"
+                          variant={reminderTime === preset.value ? "default" : "outline"}
+                          className="w-full text-sm"
+                          disabled={!assignedDate}
+                          onClick={() => {
+                            setReminderTime(preset.value);
+                            setShowCustomTimePicker(false);
+                          }}
+                        >
+                          {preset.label}
+                        </Button>
+                      ))}
+                      <Button
+                        type="button"
+                        variant={showCustomTimePicker || (reminderTime && !presetTimes.some(p => p.value === reminderTime)) ? "default" : "outline"}
+                        className="w-full text-sm"
+                        disabled={!assignedDate}
+                        onClick={() => setShowCustomTimePicker(!showCustomTimePicker)}
+                      >
+                        {showCustomTimePicker || (reminderTime && !presetTimes.some(p => p.value === reminderTime)) 
+                          ? (() => {
+                              if (reminderTime) {
+                                const [hour, minute] = reminderTime.split(':');
+                                const hourNum = parseInt(hour, 10);
+                                const period = hourNum >= 12 ? 'pm' : 'am';
+                                const hour12 = hourNum === 0 ? 12 : hourNum > 12 ? hourNum - 12 : hourNum;
+                                return `${hour12}:${minute}${period}`;
+                              }
+                              return 'Custom';
+                            })()
+                          : 'Custom'}
+                      </Button>
+                    </div>
                     {!assignedDate && (
                       <div className="text-xs text-gray-600 italic">
                         Set an "Assigned Date" above to enable reminders
+                      </div>
+                    )}
+                    {showCustomTimePicker && assignedDate && (
+                      <TimePicker
+                        value={reminderTime}
+                        onChange={(time) => {
+                          setReminderTime(time);
+                        }}
+                        placeholder="Select reminder time"
+                      />
+                    )}
+                    {reminderTime && assignedDate && (
+                      <div className="text-xs text-gray-500">
+                        You'll be reminded at this time on {format(assignedDate, 'MMM d, yyyy')}
                       </div>
                     )}
                   </div>

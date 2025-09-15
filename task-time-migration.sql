@@ -12,5 +12,12 @@ CREATE INDEX IF NOT EXISTS tasks_assigned_date_idx ON tasks(assigned_date) WHERE
 -- Add comment to document the new field
 COMMENT ON COLUMN tasks.reminder_time IS 'When to send a reminder notification for this task';
 
+-- Fix habit task status: Change all habit tasks from 'on_deck' to 'habit' status
+UPDATE tasks 
+SET status = 'habit' 
+WHERE habit_id IS NOT NULL 
+  AND status = 'on_deck';
+
 -- Migration complete!
 -- This adds a simple reminder_time field for notification scheduling
+-- and fixes habit task status to use correct 'habit' status instead of 'on_deck'
