@@ -127,7 +127,7 @@ const DashboardPage: React.FC = () => {
 
   // Get all active, on_deck, and habit tasks sorted by assigned date (soonest first)
   const onDeckTasks = tasks
-    .filter(task => task.status === 'active' || task.status === 'on_deck' || task.status === 'habit' || task.habit_id)
+    .filter(task => task.status === 'active' || task.status === 'on_deck' || task.habit_id)
     .sort((a, b) => {
       // First sort by assigned date
       const aDate = a.assigned_date ? new Date(a.assigned_date).getTime() : Number.MAX_SAFE_INTEGER;
