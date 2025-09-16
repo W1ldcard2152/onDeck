@@ -63,7 +63,7 @@ export const FeedbackModal: React.FC<FeedbackModalProps> = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md max-h-[85vh] md:max-h-[90vh] overflow-y-auto pb-20 md:pb-6 relative">
+      <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Share Your Feedback</DialogTitle>
           <DialogDescription>

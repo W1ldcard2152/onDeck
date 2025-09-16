@@ -393,7 +393,7 @@ export const NewEntryForm: React.FC<NewEntryFormProps> = ({
           </Button>
         ) : null}
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[500px] max-h-[85vh] md:max-h-[90vh] overflow-y-auto pb-20 md:pb-6 relative">
+      <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
             {isEditing ? 
@@ -671,7 +671,7 @@ export const NewEntryForm: React.FC<NewEntryFormProps> = ({
             </>
           )}
 
-          <DialogFooter className="sticky bottom-0 pt-4 pb-2 bg-white border-t mt-4 -mx-6 px-6">
+          <DialogFooter>
             <Button 
               type="submit" 
               className="w-full bg-blue-600 hover:bg-blue-700"
