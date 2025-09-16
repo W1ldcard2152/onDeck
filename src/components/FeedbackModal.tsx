@@ -63,7 +63,7 @@ export const FeedbackModal: React.FC<FeedbackModalProps> = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-md max-h-[85vh] md:max-h-[90vh] overflow-y-auto pb-20 md:pb-6 relative">
         <DialogHeader>
           <DialogTitle>Share Your Feedback</DialogTitle>
           <DialogDescription>
@@ -76,7 +76,7 @@ export const FeedbackModal: React.FC<FeedbackModalProps> = ({
             placeholder="What's on your mind? Share your feedback, suggestions, or report any issues..."
             value={feedback}
             onChange={(e) => setFeedback(e.target.value)}
-            className="min-h-[120px]"
+            className="min-h-[120px] resize-none"
             disabled={isSubmitting}
           />
 

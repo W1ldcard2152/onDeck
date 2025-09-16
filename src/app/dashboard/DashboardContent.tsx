@@ -244,7 +244,7 @@ const DashboardPage: React.FC = () => {
     <div className="space-y-6 py-6">
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold">Dashboard</h1>
-        <NewEntryForm onEntryCreated={handleUpdate} />
+        <NewEntryForm onEntryCreated={handleUpdate} defaultType="task" />
       </div>
 
       {/* Active Tasks Section (sorted by assigned date) */}

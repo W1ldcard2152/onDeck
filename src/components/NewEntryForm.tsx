@@ -66,23 +66,31 @@ const DatePickerField: React.FC<{
   onDateChange: (date: Date | undefined) => void;
 }> = ({ label, selectedDate, onDateChange }) => {
   const [open, setOpen] = useState(false);
-  
+
   const handleSelect = (date: Date | undefined) => {
     onDateChange(date);
     setOpen(false);
   };
-  
+
+  const handleButtonClick = (e: React.MouseEvent<HTMLButtonElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setOpen(!open);
+  };
+
   return (
     <div className="space-y-2">
       <Label>{label}</Label>
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
           <Button
+            type="button"
             variant="outline"
             className={cn(
               "w-full justify-start text-left font-normal",
               !selectedDate && "text-muted-foreground"
             )}
+            onClick={handleButtonClick}
           >
             <CalendarIcon className="mr-2 h-4 w-4" />
             {selectedDate ? format(selectedDate, "PPP") : `Pick ${label.toLowerCase()}`}
@@ -228,10 +236,23 @@ export const NewEntryForm: React.FC<NewEntryFormProps> = ({
     // Wait a bit for the keyboard to appear
     setTimeout(() => {
       if (ref.current) {
-        // Scroll the element into view
+        // Scroll the element into view with better mobile handling
         ref.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+        // Additional scroll for mobile to ensure visibility above keyboard
+        const scrollContainer = ref.current.closest('[role="dialog"]');
+        if (scrollContainer) {
+          const rect = ref.current.getBoundingClientRect();
+          const containerRect = scrollContainer.getBoundingClientRect();
+          const relativeTop = rect.top - containerRect.top;
+
+          // Scroll the dialog content if needed
+          if (relativeTop > scrollContainer.clientHeight * 0.5) {
+            scrollContainer.scrollTop += relativeTop - (scrollContainer.clientHeight * 0.3);
+          }
+        }
       }
-    }, 300);
+    }, 350);
   };
 
   const resetForm = () => {
@@ -372,7 +393,7 @@ export const NewEntryForm: React.FC<NewEntryFormProps> = ({
           </Button>
         ) : null}
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto pb-20 md:pb-6">
+      <DialogContent className="sm:max-w-[500px] max-h-[85vh] md:max-h-[90vh] overflow-y-auto pb-20 md:pb-6 relative">
         <DialogHeader>
           <DialogTitle>
             {isEditing ? 
@@ -563,7 +584,7 @@ export const NewEntryForm: React.FC<NewEntryFormProps> = ({
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                   placeholder="Enter description"
-                  className="h-24 min-h-[6rem]"
+                  className="h-24 min-h-[6rem] resize-none"
                   onFocus={() => handleTextAreaFocus(descriptionRef)}
                 />
               </div>
@@ -643,14 +664,14 @@ export const NewEntryForm: React.FC<NewEntryFormProps> = ({
                   value={content}
                   onChange={(e) => setContent(e.target.value)}
                   placeholder="Enter content"
-                  className="h-24 min-h-[6rem]"
+                  className="h-24 min-h-[6rem] resize-none"
                   onFocus={() => handleTextAreaFocus(contentRef)}
                 />
               </div>
             </>
           )}
 
-          <DialogFooter className="sticky bottom-0 pt-4 pb-2 bg-white border-t mt-4">
+          <DialogFooter className="sticky bottom-0 pt-4 pb-2 bg-white border-t mt-4 -mx-6 px-6">
             <Button 
               type="submit" 
               className="w-full bg-blue-600 hover:bg-blue-700"

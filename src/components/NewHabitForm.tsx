@@ -209,7 +209,7 @@ const NewHabitForm = ({ onHabitCreated, editingHabit, onHabitUpdated }: NewHabit
           onHabitUpdated?.();
         }
       }}>
-        <DialogContent className="sm:max-w-[500px]">
+        <DialogContent className="sm:max-w-[500px] max-h-[85vh] md:max-h-[90vh] overflow-y-auto pb-20 md:pb-6 relative">
           <DialogHeader>
             <DialogTitle>{editingHabit ? 'Edit Habit' : 'Create New Habit'}</DialogTitle>
           </DialogHeader>
@@ -234,6 +234,7 @@ const NewHabitForm = ({ onHabitCreated, editingHabit, onHabitUpdated }: NewHabit
                 onChange={(e) => setDescription(e.target.value)}
                 placeholder="Any additional details about this habit..."
                 rows={3}
+                className="resize-none"
               />
             </div>
 
