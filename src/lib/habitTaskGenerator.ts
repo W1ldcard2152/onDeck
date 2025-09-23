@@ -259,10 +259,10 @@ export class HabitTaskGenerator {
 
     const tasksToDelete: string[] = []
 
-    // Only delete past habit status tasks if there's a newer task for the same habit
-    const pastHabitTasks = allHabitTasks.filter(t => 
-      t.status === 'habit' && 
-      t.assigned_date && 
+    // Only delete past on_deck tasks for this habit if there's a newer task
+    const pastHabitTasks = allHabitTasks.filter(t =>
+      t.status === 'on_deck' &&
+      t.assigned_date &&
       t.assigned_date < todayStr
     )
 
@@ -847,7 +847,7 @@ export class HabitTaskGenerator {
         assigned_date: dateStr,
         due_date: null,
         reminder_time: reminder_time,
-        status: 'habit',
+        status: 'on_deck',
         description: habit.description,
         priority: habit.priority,
         habit_id: habit.id

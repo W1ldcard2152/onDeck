@@ -481,7 +481,11 @@ export const NewEntryForm: React.FC<NewEntryFormProps> = ({
                           className="w-full text-sm"
                           disabled={!assignedDate}
                           onClick={() => {
-                            setReminderTime(preset.value);
+                            if (reminderTime === preset.value) {
+                              setReminderTime('');
+                            } else {
+                              setReminderTime(preset.value);
+                            }
                             setShowCustomTimePicker(false);
                           }}
                         >

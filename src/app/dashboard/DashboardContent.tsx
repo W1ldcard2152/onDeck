@@ -132,16 +132,70 @@ const DashboardPage: React.FC = () => {
     );
   }
 
-  // Get all active, on_deck, and habit tasks sorted by assigned date (soonest first)
+  // Get all active, on_deck, and habit tasks sorted by time
   const onDeckTasks = tasks
     .filter(task => task.status === 'active' || task.status === 'on_deck' || task.habit_id)
     .sort((a, b) => {
-      // First sort by assigned date
-      const aDate = a.assigned_date ? new Date(a.assigned_date).getTime() : Number.MAX_SAFE_INTEGER;
-      const bDate = b.assigned_date ? new Date(b.assigned_date).getTime() : Number.MAX_SAFE_INTEGER;
+      // Helper to get time for a task (either from reminder_time or habit's time_of_day)
+      const getTaskTime = (task: TaskWithDetails): string | null => {
+        // For habit tasks, get time from habit
+        if (task.habit_id) {
+          const habit = habits.find(h => h.id === task.habit_id);
+          if (habit) {
+            const rule = typeof habit.recurrence_rule === 'string'
+              ? JSON.parse(habit.recurrence_rule)
+              : habit.recurrence_rule;
+            return rule?.time_of_day || null;
+          }
+        }
+        // For regular tasks with reminder_time
+        if (task.reminder_time) {
+          const date = new Date(task.reminder_time);
+          return `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
+        }
+        return null;
+      };
 
-      return aDate - bDate;
+      const aTime = getTaskTime(a);
+      const bTime = getTaskTime(b);
+
+      // Debug logging
+      console.log(`Sorting: "${a.item?.title}" (time: ${aTime || 'none'}) vs "${b.item?.title}" (time: ${bTime || 'none'})`);
+
+      // Tasks without times come first (all day tasks)
+      if (!aTime && !bTime) {
+        // Both have no time, sort by assigned date
+        const aDate = a.assigned_date ? new Date(a.assigned_date).getTime() : Number.MAX_SAFE_INTEGER;
+        const bDate = b.assigned_date ? new Date(b.assigned_date).getTime() : Number.MAX_SAFE_INTEGER;
+        return aDate - bDate;
+      }
+      if (!aTime) return -1; // a has no time, comes first
+      if (!bTime) return 1;  // b has no time, comes first
+
+      // Both have times, sort chronologically
+      return aTime.localeCompare(bTime);
     });
+
+  console.log('=== FINAL ONDECK TASK ORDER ===');
+  onDeckTasks.forEach((task, index) => {
+    const getTime = (t: TaskWithDetails): string | null => {
+      if (t.habit_id) {
+        const h = habits.find(hab => hab.id === t.habit_id);
+        if (h) {
+          const r = typeof h.recurrence_rule === 'string' ? JSON.parse(h.recurrence_rule) : h.recurrence_rule;
+          return r?.time_of_day || null;
+        }
+      }
+      if (t.reminder_time) {
+        const d = new Date(t.reminder_time);
+        return `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
+      }
+      return null;
+    };
+
+    const time = getTime(task);
+    console.log(`${index + 1}. "${task.item?.title}" - Time: ${time || 'ALL DAY'}`);
+  });
 
   // Debug: Check habit tasks for reminder_time
   const habitTasksWithTime = tasks.filter(task => task.habit_id);
@@ -300,8 +354,70 @@ const DashboardPage: React.FC = () => {
             {onDeckTasks.length === 0 ? (
               <div className="text-gray-500 text-center py-4">No tasks on deck</div>
             ) : (
-              onDeckTasks.map(task => (
-                <div key={task.id} className="p-3 bg-white rounded-lg border hover:shadow-sm transition-shadow">
+              onDeckTasks.map((task, index) => {
+                // Check if this task has a time
+                const hasTime = (() => {
+                  if (task.habit_id) {
+                    const habit = habits.find(h => h.id === task.habit_id);
+                    if (habit) {
+                      const rule = typeof habit.recurrence_rule === 'string'
+                        ? JSON.parse(habit.recurrence_rule)
+                        : habit.recurrence_rule;
+                      return !!rule?.time_of_day;
+                    }
+                  }
+                  return !!task.reminder_time;
+                })();
+
+                // Check if previous task had a time (to show separator)
+                const prevTask = index > 0 ? onDeckTasks[index - 1] : null;
+                const prevHasTime = prevTask ? (() => {
+                  if (prevTask.habit_id) {
+                    const habit = habits.find(h => h.id === prevTask.habit_id);
+                    if (habit) {
+                      const rule = typeof habit.recurrence_rule === 'string'
+                        ? JSON.parse(habit.recurrence_rule)
+                        : habit.recurrence_rule;
+                      return !!rule?.time_of_day;
+                    }
+                  }
+                  return !!prevTask.reminder_time;
+                })() : false;
+
+                // Show separator when transitioning from no-time to time tasks
+                const showSeparator = hasTime && !prevHasTime && index > 0;
+
+                // Show "All Day" label before first task if it has no time
+                const showAllDayLabel = index === 0 && !hasTime && onDeckTasks.some((t, i) => {
+                  if (t.habit_id) {
+                    const h = habits.find(hab => hab.id === t.habit_id);
+                    if (h) {
+                      const r = typeof h.recurrence_rule === 'string'
+                        ? JSON.parse(h.recurrence_rule)
+                        : h.recurrence_rule;
+                      return !!r?.time_of_day;
+                    }
+                  }
+                  return !!t.reminder_time;
+                });
+
+                return (
+                  <React.Fragment key={task.id}>
+                    {showAllDayLabel && (
+                      <div className="flex items-center gap-2 mb-2">
+                        <div className="flex-1 h-px bg-gray-200"></div>
+                        <span className="text-xs text-gray-500 font-medium px-2">All Day</span>
+                        <div className="flex-1 h-px bg-gray-200"></div>
+                      </div>
+                    )}
+                    {showSeparator && (
+                      <div className="flex items-center gap-2 my-2">
+                        <div className="flex-1 h-px bg-gray-200"></div>
+                        <span className="text-xs text-gray-500 font-medium px-2">Scheduled</span>
+                        <div className="flex-1 h-px bg-gray-200"></div>
+                      </div>
+                    )}
+                    <div className="p-3 bg-white rounded-lg border hover:shadow-sm transition-shadow">
                   <div className="flex justify-between items-start mb-2">
                     <div className="flex items-center">
                       <DropdownMenu>
@@ -386,7 +502,9 @@ const DashboardPage: React.FC = () => {
                     })()}
                   </div>
                 </div>
-              ))
+                  </React.Fragment>
+                );
+              })
             )}
           </div>
         }

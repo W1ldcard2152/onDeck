@@ -273,40 +273,52 @@ const DashboardPage: React.FC = () => {
       return priorityOrder[aPriority] - priorityOrder[bPriority];
     });
     
+
     const todayAssignedTasks = activeTasks.filter(task => {
-      // Skip if already in due today/past list
+      // Skip if already in due today/past list (only for tasks that actually have due dates)
       if (task.due_date && (isDateToday(task.due_date) || isDatePast(task.due_date))) {
         return false;
       }
-      
-      // Debug habit tasks specifically
-      if (task.habit_id) {
-        console.log('Checking habit task for todayAssignedTasks:', {
-          title: task.item?.title,
-          status: task.status,
-          assigned_date: task.assigned_date,
-          reminder_time: task.reminder_time,
-          habit_id: task.habit_id,
-          isToday: task.assigned_date ? isDateToday(task.assigned_date) : false,
-          isPast: task.assigned_date ? isDatePast(task.assigned_date) : false,
-        });
-      }
-      
+
       // Include if assigned today or in the past
       return task.assigned_date && (isDateToday(task.assigned_date) || isDatePast(task.assigned_date));
     }).sort((a, b) => {
-      // First sort by past assigned date (oldest first)
-      if (isDatePast(a.assigned_date) && isDatePast(b.assigned_date)) {
-        const aDate = parseDateForDisplay(a.assigned_date!)?.getTime() || 0;
-        const bDate = parseDateForDisplay(b.assigned_date!)?.getTime() || 0;
-        return aDate - bDate; // Oldest first
+      // Helper to get time for a task
+      const getTaskTime = (task: typeof a): string | null => {
+        // Always prioritize reminder_time if it exists (for both habit and regular tasks)
+        if (task.reminder_time) {
+          const date = new Date(task.reminder_time);
+          return `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
+        }
+        // If no reminder_time, treat as all-day task (even for habits with time_of_day)
+        return null;
+      };
+
+      const aTime = getTaskTime(a);
+      const bTime = getTaskTime(b);
+
+      // Tasks without times come first (all day tasks)
+      if (!aTime && !bTime) {
+        // Both have no time, sort by past assigned date (oldest first)
+        if (isDatePast(a.assigned_date) && isDatePast(b.assigned_date)) {
+          const aDate = parseDateForDisplay(a.assigned_date!)?.getTime() || 0;
+          const bDate = parseDateForDisplay(b.assigned_date!)?.getTime() || 0;
+          return aDate - bDate; // Oldest first
+        }
+
+        // Then sort by priority (high to low)
+        const aPriority = a.priority || 'normal';
+        const bPriority = b.priority || 'normal';
+        return priorityOrder[aPriority] - priorityOrder[bPriority];
       }
-      
-      // Then sort by priority (high to low)
-      const aPriority = a.priority || 'normal';
-      const bPriority = b.priority || 'normal';
-      return priorityOrder[aPriority] - priorityOrder[bPriority];
+
+      if (!aTime) return -1; // a has no time, comes first
+      if (!bTime) return 1;  // b has no time, comes first
+
+      // Both have times, sort chronologically
+      return aTime.localeCompare(bTime);
     });
+
     
     // Tasks for Upcoming (due or assigned in next 3 days, excluding today)
     const upcomingDueTasks = activeTasks.filter(task => {
@@ -451,6 +463,56 @@ const DashboardPage: React.FC = () => {
     }
   };
 
+  // Helper function to get background color based on task time
+  const getTimeColor = (task: TaskWithDetails): string => {
+    // Get the actual time for this task
+    let timeString: string | null = null;
+
+    if (task.reminder_time) {
+      const date = new Date(task.reminder_time);
+      timeString = `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
+    } else if (task.habit_id) {
+      const habit = habits.find(h => h.id === task.habit_id);
+      if (habit) {
+        const rule = typeof habit.recurrence_rule === 'string'
+          ? JSON.parse(habit.recurrence_rule)
+          : habit.recurrence_rule;
+        timeString = rule?.time_of_day || null;
+      }
+    }
+
+    // If no time, return white background (all-day)
+    if (!timeString) {
+      return 'bg-white border-gray-200';
+    }
+
+    // Convert time to minutes for comparison
+    const [hours, minutes] = timeString.split(':').map(Number);
+    const totalMinutes = hours * 60 + minutes;
+
+    // Define time slots in minutes
+    const timeSlots = [
+      { time: 8 * 60, color: 'bg-yellow-50 border-yellow-200' },      // 8:00am - yellow
+      { time: 9 * 60 + 45, color: 'bg-orange-50 border-orange-200' }, // 9:45am - orange
+      { time: 13 * 60, color: 'bg-red-50 border-red-200' },           // 1:00pm - red
+      { time: 18 * 60 + 15, color: 'bg-green-50 border-green-200' },  // 6:15pm - green
+      { time: 20 * 60 + 20, color: 'bg-blue-50 border-blue-200' },    // 8:20pm - blue
+    ];
+
+    // Find the appropriate color based on time
+    let selectedColor = 'bg-yellow-50 border-yellow-200'; // Default to yellow for early times
+
+    for (const slot of timeSlots) {
+      if (totalMinutes <= slot.time) {
+        selectedColor = slot.color;
+        break;
+      }
+      selectedColor = slot.color; // Use this color for times after this slot
+    }
+
+    return selectedColor;
+  };
+
   // Get status badge color
   const getStatusColor = (status: TaskStatus): string => {
     switch (status) {
@@ -467,7 +529,7 @@ const DashboardPage: React.FC = () => {
 
   // Render a task item with simpler design
   const renderTask = (task: TaskWithDetails, contextLabel?: string) => (
-    <div key={task.id} className="p-3 bg-white rounded-lg border hover:shadow-sm transition-shadow">
+    <div key={task.id} className={`p-3 rounded-lg border hover:shadow-sm transition-shadow ${getTimeColor(task)}`}>
       <div className="flex items-start gap-2 mb-0.5">
         <DropdownMenu>
           <DropdownMenuTrigger asChild disabled={loadingTasks[task.id]}>
@@ -524,6 +586,22 @@ const DashboardPage: React.FC = () => {
               🔔 {formatReminderTime(task.reminder_time)}
             </span>
           )}
+          {!task.reminder_time && task.habit_id && (() => {
+            const habit = habits.find(h => h.id === task.habit_id);
+            if (habit) {
+              const rule = typeof habit.recurrence_rule === 'string'
+                ? JSON.parse(habit.recurrence_rule)
+                : habit.recurrence_rule;
+              if (rule?.time_of_day) {
+                return (
+                  <span className="flex items-center text-blue-600 font-medium">
+                    🔔 {format(new Date(`2000-01-01T${rule.time_of_day}`), 'h:mm a')}
+                  </span>
+                );
+              }
+            }
+            return null;
+          })()}
           {task.due_date && (
             <span className={`flex items-center ${isDatePast(task.due_date) ? 'text-red-600 font-medium' : 'text-gray-500'}`}>
               <Clock className="mr-1 h-3 w-3" />
@@ -636,6 +714,22 @@ const DashboardPage: React.FC = () => {
                     🔔 {formatReminderTime(taskToView.reminder_time)}
                   </div>
                 )}
+                {!taskToView.reminder_time && taskToView.habit_id && (() => {
+                  const habit = habits.find(h => h.id === taskToView.habit_id);
+                  if (habit) {
+                    const rule = typeof habit.recurrence_rule === 'string'
+                      ? JSON.parse(habit.recurrence_rule)
+                      : habit.recurrence_rule;
+                    if (rule?.time_of_day) {
+                      return (
+                        <div className="flex items-center text-blue-600 font-medium">
+                          🔔 {format(new Date(`2000-01-01T${rule.time_of_day}`), 'h:mm a')}
+                        </div>
+                      );
+                    }
+                  }
+                  return null;
+                })()}
                 {taskToView.due_date && (
                   <div className="flex items-center text-gray-600">
                     <Clock className="mr-1 h-4 w-4" />
