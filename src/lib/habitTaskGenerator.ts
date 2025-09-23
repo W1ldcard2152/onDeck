@@ -51,7 +51,14 @@ export class HabitTaskGenerator {
    * Generate tasks for a habit over the next 30 days
    */
   async generateTasksForHabit(habit: Habit, fullRegeneration: boolean = false): Promise<void> {
-    console.log('generateTasksForHabit called with habit:', habit, 'fullRegeneration:', fullRegeneration)
+    console.log('generateTasksForHabit called with habit:', {
+      id: habit.id,
+      title: habit.title,
+      recurrence_rule: habit.recurrence_rule,
+      recurrence_rule_type: typeof habit.recurrence_rule,
+      has_time_of_day: habit.recurrence_rule?.time_of_day,
+      fullRegeneration
+    })
     
     if (!habit.is_active) {
       throw new Error('Cannot generate tasks for inactive habit')
@@ -304,10 +311,173 @@ export class HabitTaskGenerator {
   }
 
   /**
+   * Force update ALL habit tasks with times - more aggressive approach
+   */
+  async forceUpdateAllHabitTaskTimes(): Promise<void> {
+    console.log('=== FORCE UPDATING ALL HABIT TASK TIMES ===');
+
+    // First get ALL habit tasks for this user
+    const { data: habitTasks, error: tasksError } = await this.supabase
+      .from('tasks')
+      .select('id, habit_id, assigned_date')
+      .not('habit_id', 'is', null);
+
+    if (tasksError || !habitTasks) {
+      console.error('Error fetching habit tasks:', tasksError);
+      return;
+    }
+
+    console.log(`Found ${habitTasks.length} total habit tasks to check`);
+
+    // Get all habits
+    const { data: habits, error: habitsError } = await this.supabase
+      .from('habits')
+      .select('id, title, recurrence_rule')
+      .eq('user_id', this.userId);
+
+    if (habitsError || !habits) {
+      console.error('Error fetching habits:', habitsError);
+      return;
+    }
+
+    // Create a map of habit_id to parsed habit data
+    const habitMap = new Map();
+    for (const habit of habits) {
+      const rule = typeof habit.recurrence_rule === 'string'
+        ? JSON.parse(habit.recurrence_rule)
+        : habit.recurrence_rule;
+
+      habitMap.set(habit.id, {
+        title: habit.title,
+        time_of_day: rule?.time_of_day
+      });
+    }
+
+    console.log('Habit time mapping:', Array.from(habitMap.entries()));
+
+    // Update each habit task
+    let updatedCount = 0;
+    for (const task of habitTasks) {
+      const habitData = habitMap.get(task.habit_id);
+      if (habitData?.time_of_day && task.assigned_date) {
+        const [year, month, day] = task.assigned_date.split('-').map(Number);
+        const [hours, minutes] = habitData.time_of_day.split(':').map(Number);
+        const reminderDate = new Date(year, month - 1, day, hours, minutes, 0, 0);
+        const reminder_time = reminderDate.toISOString();
+
+        const { error: updateError } = await this.supabase
+          .from('tasks')
+          .update({ reminder_time })
+          .eq('id', task.id);
+
+        if (!updateError) {
+          updatedCount++;
+          console.log(`Updated task ${task.id} for habit "${habitData.title}" with time ${habitData.time_of_day}`);
+        }
+      }
+    }
+
+    console.log(`Force updated ${updatedCount} habit tasks with times`);
+  }
+
+  /**
+   * Update existing habit tasks with reminder_time from their habit's time_of_day
+   */
+  async updateExistingHabitTaskTimes(): Promise<void> {
+    console.log('=== UPDATING EXISTING HABIT TASK TIMES ===');
+    console.log(`Running for user: ${this.userId}`);
+
+    // Get all habits with time_of_day
+    const { data: habits, error: habitsError } = await this.supabase
+      .from('habits')
+      .select('id, title, recurrence_rule')
+      .eq('user_id', this.userId)
+      .eq('is_active', true);
+
+    if (habitsError) {
+      console.error('Error fetching habits:', habitsError);
+      return;
+    }
+
+    if (!habits || habits.length === 0) {
+      console.log('No active habits found');
+      return;
+    }
+
+    // Parse recurrence_rule if it's stored as JSON string
+    const habitsWithParsedRules = habits.map(h => ({
+      ...h,
+      recurrence_rule: typeof h.recurrence_rule === 'string'
+        ? JSON.parse(h.recurrence_rule)
+        : h.recurrence_rule
+    }));
+
+    // Filter habits that have time_of_day
+    const habitsWithTime = habitsWithParsedRules.filter(h => h.recurrence_rule?.time_of_day);
+    console.log(`Found ${habitsWithTime.length} habits with time_of_day`);
+    console.log('Habits with time:', habitsWithTime.map(h => ({
+      id: h.id,
+      title: h.title,
+      time_of_day: h.recurrence_rule?.time_of_day,
+      recurrence_rule_type: typeof h.recurrence_rule
+    })));
+
+    for (const habit of habitsWithTime) {
+      const time = habit.recurrence_rule.time_of_day;
+
+      // Get all tasks for this habit that don't have reminder_time set
+      const { data: tasks, error: tasksError } = await this.supabase
+        .from('tasks')
+        .select('id, assigned_date')
+        .eq('habit_id', habit.id)
+        .is('reminder_time', null)
+        .not('assigned_date', 'is', null);
+
+      if (tasksError) {
+        console.error(`Error fetching tasks for habit ${habit.id}:`, tasksError);
+        continue;
+      }
+
+      if (!tasks || tasks.length === 0) {
+        console.log(`No tasks without reminder_time for habit ${habit.id}`);
+        continue;
+      }
+
+      console.log(`Updating ${tasks.length} tasks for habit ${habit.id} with time ${time}`);
+
+      // Update each task with the reminder_time
+      for (const task of tasks) {
+        const [year, month, day] = task.assigned_date.split('-').map(Number);
+        const [hours, minutes] = time.split(':').map(Number);
+        const reminderDate = new Date(year, month - 1, day, hours, minutes, 0, 0);
+        const reminder_time = reminderDate.toISOString();
+
+        console.log(`  Updating task ${task.id} (${task.assigned_date}) with reminder_time: ${reminder_time}`);
+
+        const { error: updateError } = await this.supabase
+          .from('tasks')
+          .update({ reminder_time })
+          .eq('id', task.id);
+
+        if (updateError) {
+          console.error(`Error updating task ${task.id}:`, updateError);
+        } else {
+          console.log(`  Successfully updated task ${task.id}`);
+        }
+      }
+    }
+
+    console.log('Finished updating existing habit task times');
+  }
+
+  /**
    * Generate dates based on recurrence rule
    */
   private generateDatesForHabit(habit: Habit, dayCount: number, minTasks: number = 1): Date[] {
-    const rule = habit.recurrence_rule
+    // Parse recurrence_rule if it's a string
+    const rule = typeof habit.recurrence_rule === 'string'
+      ? JSON.parse(habit.recurrence_rule)
+      : habit.recurrence_rule
     const todayForDebug = new Date().toISOString().split('T')[0]
     
     console.log(`=== DATE GENERATION DEBUG FOR HABIT: ${habit.title} ===`)
@@ -614,6 +784,9 @@ export class HabitTaskGenerator {
    */
   private async createHabitTask(habit: Habit, date: Date): Promise<void> {
     const dateStr = date.toISOString().split('T')[0] // YYYY-MM-DD format
+    console.log(`createHabitTask called for "${habit.title}" on ${dateStr}`);
+    console.log(`  recurrence_rule exists: ${!!habit.recurrence_rule}`);
+    console.log(`  time_of_day: ${habit.recurrence_rule?.time_of_day || 'NOT SET'}`)
     
     // Check if a task already exists for this habit on this date
     const { data: existingTask, error: checkError } = await this.supabase
@@ -647,6 +820,25 @@ export class HabitTaskGenerator {
 
     if (itemError) throw itemError
 
+    // Combine assigned date with time of day for reminder_time
+    let reminder_time = null;
+
+    // Parse recurrence_rule if it's a string
+    const recurrenceRule = typeof habit.recurrence_rule === 'string'
+      ? JSON.parse(habit.recurrence_rule)
+      : habit.recurrence_rule;
+
+    if (recurrenceRule?.time_of_day && dateStr) {
+      // Parse the date string and add the time
+      const [year, month, day] = dateStr.split('-').map(Number);
+      const [hours, minutes] = recurrenceRule.time_of_day.split(':').map(Number);
+      const reminderDate = new Date(year, month - 1, day, hours, minutes, 0, 0);
+      reminder_time = reminderDate.toISOString();
+      console.log(`Setting reminder_time for habit task: ${habit.title} on ${dateStr} at ${recurrenceRule.time_of_day} => ${reminder_time}`);
+    } else {
+      console.log(`No time_of_day for habit: ${habit.title}, time_of_day: ${recurrenceRule?.time_of_day}, dateStr: ${dateStr}, recurrence_rule type: ${typeof habit.recurrence_rule}`);
+    }
+
     // Create task
     const { error: taskError } = await this.supabase
       .from('tasks')
@@ -654,6 +846,7 @@ export class HabitTaskGenerator {
         id: item.id,
         assigned_date: dateStr,
         due_date: null,
+        reminder_time: reminder_time,
         status: 'habit',
         description: habit.description,
         priority: habit.priority,

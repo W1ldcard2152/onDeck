@@ -14,6 +14,7 @@ import { useHabits } from '@/hooks/useHabits';
 import { WeeklyCalendar } from '@/components/WeeklyCalendar';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import { HabitTaskActivator } from '@/lib/habitTaskActivator';
+import { HabitTaskGenerator } from '@/lib/habitTaskGenerator';
 import { format, isToday, isPast, isFuture, addDays, isWithinInterval } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -52,7 +53,13 @@ const DashboardPage: React.FC = () => {
           console.log('Dashboard: Starting habit task activation...');
           const activator = new HabitTaskActivator(supabase, user.id);
           await activator.ensureTodaysTasksAreActive();
-          console.log('Dashboard: Task activation complete, refreshing tasks...');
+
+          // Force update ALL habit task times - more aggressive approach
+          console.log('Dashboard: Force updating ALL habit task times...');
+          const generator = new HabitTaskGenerator(supabase, user.id);
+          await generator.forceUpdateAllHabitTaskTimes();
+
+          console.log('Dashboard: Task activation and time update complete, refreshing tasks...');
           // Refresh tasks after activation
           refetchTasks();
         } catch (error) {
@@ -132,9 +139,47 @@ const DashboardPage: React.FC = () => {
       // First sort by assigned date
       const aDate = a.assigned_date ? new Date(a.assigned_date).getTime() : Number.MAX_SAFE_INTEGER;
       const bDate = b.assigned_date ? new Date(b.assigned_date).getTime() : Number.MAX_SAFE_INTEGER;
-      
+
       return aDate - bDate;
     });
+
+  // Debug: Check habit tasks for reminder_time
+  const habitTasksWithTime = tasks.filter(task => task.habit_id);
+  console.log('=== HABIT TASKS DEBUG (DashboardContent) ===');
+  console.log('Total habit tasks found:', habitTasksWithTime.length);
+  habitTasksWithTime.forEach(t => {
+    console.log(`Task: "${t.item?.title}"`);
+    console.log(`  - habit_id: ${t.habit_id}`);
+    console.log(`  - reminder_time: ${t.reminder_time}`);
+    console.log(`  - assigned_date: ${t.assigned_date}`);
+    console.log(`  - status: ${t.status}`);
+
+    // Also check if we can find the habit and its time
+    const habit = habits.find(h => h.id === t.habit_id);
+    if (habit) {
+      console.log(`  - Found habit: ${habit.title}`);
+      // Parse recurrence_rule if needed
+      const rule = typeof habit.recurrence_rule === 'string'
+        ? JSON.parse(habit.recurrence_rule)
+        : habit.recurrence_rule;
+      console.log(`  - Habit time_of_day: ${rule?.time_of_day || 'NOT SET'}`);
+    } else {
+      console.log(`  - Habit NOT FOUND in habits list!`);
+    }
+  });
+
+  // Also debug what habits we have
+  console.log('=== HABITS DEBUG ===');
+  console.log('Total habits loaded:', habits.length);
+  habits.forEach(h => {
+    console.log(`Habit: "${h.title}" (id: ${h.id})`);
+    // Parse recurrence_rule if needed
+    const rule = typeof h.recurrence_rule === 'string'
+      ? JSON.parse(h.recurrence_rule)
+      : h.recurrence_rule;
+    console.log(`  - time_of_day: ${rule?.time_of_day || 'NOT SET'}`);
+    console.log(`  - recurrence_rule type: ${typeof h.recurrence_rule}`);
+  });
 
   // Debug logging for dashboard
   const todayStr = new Date().toISOString().split('T')[0];
@@ -307,6 +352,38 @@ const DashboardPage: React.FC = () => {
                         Assigned: {format(new Date(task.assigned_date), 'MMM d')}
                       </span>
                     )}
+                    {(() => {
+                      // For habit tasks, show time from the habit's time_of_day
+                      if (task.habit_id) {
+                        const habit = habits.find(h => h.id === task.habit_id);
+                        if (habit) {
+                          // Parse recurrence_rule if it's a string
+                          const rule = typeof habit.recurrence_rule === 'string'
+                            ? JSON.parse(habit.recurrence_rule)
+                            : habit.recurrence_rule;
+
+                          if (rule?.time_of_day) {
+                            return (
+                              <span className="flex items-center text-gray-500">
+                                <Clock className="mr-1 h-3 w-3" />
+                                {format(new Date(`2000-01-01T${rule.time_of_day}`), 'h:mm a')}
+                              </span>
+                            );
+                          }
+                        }
+                        return null;
+                      }
+                      // For regular tasks, show reminder_time if it exists
+                      if (task.reminder_time) {
+                        return (
+                          <span className="flex items-center text-gray-500">
+                            <Clock className="mr-1 h-3 w-3" />
+                            {format(new Date(task.reminder_time), 'h:mm a')}
+                          </span>
+                        );
+                      }
+                      return null;
+                    })()}
                   </div>
                 </div>
               ))

@@ -285,6 +285,8 @@ const DashboardPage: React.FC = () => {
           title: task.item?.title,
           status: task.status,
           assigned_date: task.assigned_date,
+          reminder_time: task.reminder_time,
+          habit_id: task.habit_id,
           isToday: task.assigned_date ? isDateToday(task.assigned_date) : false,
           isPast: task.assigned_date ? isDatePast(task.assigned_date) : false,
         });
