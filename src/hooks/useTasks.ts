@@ -193,7 +193,7 @@ export function useTasks(
       const itemsData = allItemData;
   
       // Combine items and tasks
-      const combinedTasks: TaskWithDetails[] = taskData
+      const combinedTasks = taskData
         .map(task => {
           const item = itemsData.find(item => item.id === task.id)
           if (!item) return null
@@ -220,7 +220,7 @@ export function useTasks(
             item: item
           }
         })
-        .filter((task): task is TaskWithDetails => task !== null)
+        .filter((task): task is TaskWithDetails => task !== null) as TaskWithDetails[]
   
       setTasks(combinedTasks)
       
