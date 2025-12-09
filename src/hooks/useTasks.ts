@@ -220,7 +220,7 @@ export function useTasks(
             item: item
           }
         })
-        .filter((task): task is TaskWithDetails => task !== null) as TaskWithDetails[]
+        .filter(task => task !== null) as TaskWithDetails[]
   
       setTasks(combinedTasks)
       
