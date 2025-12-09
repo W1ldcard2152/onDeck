@@ -163,6 +163,7 @@ export interface Database {
           priority: Priority;
           project_id: string | null;
           habit_id: string | null;
+          daily_context: string | null;
         };
         Insert: {
           id: string;  // Must match items.id
@@ -176,6 +177,7 @@ export interface Database {
           priority?: Priority;
           project_id?: string | null;
           habit_id?: string | null;
+          daily_context?: string | null;
         };
         Update: {
           id?: string;
@@ -189,6 +191,7 @@ export interface Database {
           priority?: Priority;
           project_id?: string | null;
           habit_id?: string | null;
+          daily_context?: string | null;
         };
       };
       feedback: {
@@ -216,6 +219,32 @@ export interface Database {
           message?: string;
           is_archived?: boolean;
           archived_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
+      quotes: {
+        Row: {
+          id: string;
+          content: string;
+          author: string | null;
+          source: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id: string;  // Must match items.id
+          content: string;
+          author?: string | null;
+          source?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          content?: string;
+          author?: string | null;
+          source?: string | null;
           created_at?: string;
           updated_at?: string;
         };

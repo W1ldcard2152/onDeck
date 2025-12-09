@@ -1,9 +1,9 @@
 'use client'
 
 import React from 'react';
-import { TaskWithDetails } from '@/lib/types';
+import { TaskWithDetails, DailyContext } from '@/lib/types';
 import { format } from 'date-fns';
-import { Calendar, Clock, Bell } from 'lucide-react';
+import { Calendar, Clock } from 'lucide-react';
 
 interface TaskCardProps {
   task: TaskWithDetails;
@@ -12,11 +12,20 @@ interface TaskCardProps {
 export const TaskCard: React.FC<TaskCardProps> = ({ task }) => {
   const hasAssignedDate = Boolean(task.assigned_date);
   const hasDueDate = Boolean(task.due_date);
-  const hasReminderTime = Boolean(task.reminder_time);
 
-  const formatReminderTime = (reminderTime: string): string => {
-    const date = new Date(reminderTime);
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const dailyContexts: DailyContext[] = task.daily_context
+    ? (() => {
+        try {
+          return JSON.parse(task.daily_context);
+        } catch {
+          return [];
+        }
+      })()
+    : [];
+
+  const formatContexts = (contexts: DailyContext[]): string => {
+    if (contexts.length === 0) return '';
+    return contexts.map(c => c.charAt(0).toUpperCase() + c.slice(1)).join(', ');
   };
 
   return (
@@ -34,13 +43,13 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task }) => {
             <span>Assigned: {format(new Date(task.assigned_date), 'MMM d, yyyy')}</span>
           </div>
         )}
-        
-        {hasReminderTime && task.reminder_time && (
+
+        {dailyContexts.length > 0 && (
           <div className="flex items-center text-sm text-blue-600 font-medium">
-            <span>Reminder: {formatReminderTime(task.reminder_time)}</span>
+            <span>📅 {formatContexts(dailyContexts)}</span>
           </div>
         )}
-        
+
         {hasDueDate && task.due_date && (
           <div className="flex items-center text-sm text-gray-600">
             <Clock className="w-4 h-4 mr-1" />

@@ -1,7 +1,7 @@
 'use client'
 
 import React from 'react';
-import { Home, CheckSquare, BookOpen, FolderOpen, Calendar, Star, Menu, Brain } from 'lucide-react';
+import { Home, CheckSquare, BookOpen, FolderOpen, ListChecks, Quote, Film, Star, Menu } from 'lucide-react';
 import { cn } from "@/lib/utils";
 import {
   Sheet,
@@ -21,8 +21,9 @@ export const navItems: Array<{
   { icon: BookOpen, label: 'Notes', id: 'notes' },
   { icon: FolderOpen, label: 'Projects', id: 'projects' },
   { icon: Star, label: 'Habits', id: 'habits' },
-  { icon: Brain, label: 'Knowledge', id: 'knowledge' },
-  { icon: Calendar, label: 'Journal', id: 'journal' },
+  { icon: ListChecks, label: 'Checklists', id: 'checklists' },
+  { icon: Quote, label: 'Quotes', id: 'quotes' },
+  { icon: Film, label: 'Media Vault', id: 'media-vault' },
 ];
 
 export const BottomNav = ({ activeSection, onSectionChange }: NavProps) => {

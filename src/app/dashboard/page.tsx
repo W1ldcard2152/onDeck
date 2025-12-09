@@ -9,7 +9,7 @@ import { NewNoteForm } from '@/components/NewNoteForm';
 import { NewEntryForm } from '@/components/NewEntryForm';
 import { DoneEntryForm } from '@/components/DoneEntryForm';
 import { Button } from '@/components/ui/button';
-import { Plus, Calendar, Clock, CheckSquare, FileText, ArrowRight, MoreHorizontal, Link } from 'lucide-react';
+import { Plus, Calendar, Clock, CheckSquare, FileText, ArrowRight, MoreHorizontal, MoreVertical, Link, CheckCircle2 } from 'lucide-react';
 import { useTasks } from '@/hooks/useTasks';
 import { useNotes } from '@/hooks/useNotes';
 import { useSupabaseAuth } from '@/hooks/useSupabaseAuth';
@@ -31,21 +31,34 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import type { TaskWithDetails, NoteWithDetails } from '@/lib/types';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import type { TaskWithDetails, NoteWithDetails, DailyContext } from '@/lib/types';
 import type { TaskStatus, Priority } from '@/types/database.types';
 import type { Database } from '@/types/database.types';
 import { HabitTaskGenerator } from '@/lib/habitTaskGenerator';
 import { getSupabaseClient } from '@/lib/supabase-client';
+import { startOfDay, parseISO, isBefore } from 'date-fns';
 
 const DashboardPage: React.FC = () => {
   const { user } = useSupabaseAuth();
-  const { tasks, isLoading: tasksLoading, refetch: refetchTasks } = useTasks(user?.id, 50, true);
+  const { tasks: fetchedTasks, isLoading: tasksLoading, refetch: refetchTasks } = useTasks(user?.id, 50, true);
   const { notes, isLoading: notesLoading, refetch: refetchNotes } = useNotes(user?.id);
   const { habits, isLoading: habitsLoading } = useHabits(user?.id);
   const [refreshKey, setRefreshKey] = useState(0);
   const [loadingTasks, setLoadingTasks] = useState<Record<string, boolean>>({});
   const [taskToEdit, setTaskToEdit] = useState<TaskWithDetails | null>(null);
-  
+
+  // Local state for optimistic updates
+  const [localTasks, setLocalTasks] = useState<TaskWithDetails[]>([]);
+
+  // Sync fetched tasks to local state
+  useEffect(() => {
+    setLocalTasks(fetchedTasks);
+  }, [fetchedTasks]);
+
+  // Use local tasks for rendering
+  const tasks = localTasks;
+
   // Removed automatic daily cleanup - habit tasks should only be deleted when replaced
   // by newer tasks or during manual regeneration, not automatically based on date
   const [taskToView, setTaskToView] = useState<TaskWithDetails | null>(null);
@@ -132,6 +145,62 @@ const DashboardPage: React.FC = () => {
     }
   };
 
+  // Helper function to check if task matches context
+  const taskMatchesContext = (task: TaskWithDetails, context: DailyContext | 'all' | 'past'): boolean => {
+    // Parse daily_context (JSON array or null)
+    let taskContexts: DailyContext[] = [];
+    if (task.daily_context) {
+      try {
+        taskContexts = JSON.parse(task.daily_context);
+      } catch (e) {
+        // If parsing fails, treat as empty array
+        taskContexts = [];
+      }
+    }
+
+    // If task has no contexts (null or empty array), it's "all day" and appears in all tabs
+    const isAllDay = !task.daily_context || taskContexts.length === 0;
+
+    if (context === 'all' || context === 'past') {
+      return true; // All tasks appear in "All" and "Past" tabs
+    }
+
+    // For specific contexts, check if task has that context or is all-day
+    return isAllDay || taskContexts.includes(context);
+  };
+
+  // Filter tasks by context and date
+  const getFilteredTasks = (context: DailyContext | 'all' | 'past') => {
+    const today = startOfDay(new Date());
+    console.log(`\n=== Filtering tasks for context: ${context} ===`);
+    console.log(`Total tasks: ${tasks.length}`);
+
+    const filtered = tasks.filter(task => {
+      // Only show non-completed tasks
+      if (task.status === 'completed') return false;
+
+      // Parse dates
+      const assignedDate = task.assigned_date ? startOfDay(parseISO(task.assigned_date)) : null;
+      const dueDate = task.due_date ? startOfDay(parseISO(task.due_date)) : null;
+
+      // For "Past" tab: show only tasks from before today
+      if (context === 'past') {
+        const hasRelevantAssignedDate = assignedDate && isBefore(assignedDate, today);
+        const hasRelevantDueDate = dueDate && isBefore(dueDate, today);
+        return (hasRelevantAssignedDate || hasRelevantDueDate) && taskMatchesContext(task, context);
+      }
+
+      // For "All" and context tabs: show tasks today or earlier
+      const hasRelevantAssignedDate = assignedDate && (isToday(assignedDate) || isBefore(assignedDate, today));
+      const hasRelevantDueDate = dueDate && (isToday(dueDate) || isBefore(dueDate, today));
+
+      return (hasRelevantAssignedDate || hasRelevantDueDate) && taskMatchesContext(task, context);
+    });
+
+    console.log(`Filtered tasks count: ${filtered.length}`);
+    return filtered;
+  };
+
   // Handle updates
   const handleUpdate = () => {
     refetchTasks();
@@ -139,81 +208,75 @@ const DashboardPage: React.FC = () => {
     setRefreshKey(prev => prev + 1);
   };
   
-  // Update task status
+  // Update task status with optimistic UI update
   const updateTaskStatus = async (taskId: string, newStatus: TaskStatus): Promise<void> => {
-    setLoadingTasks(prev => ({ ...prev, [taskId]: true }));
-    
+    // Optimistic update - immediately update the local UI
+    const previousTasks = [...localTasks];
+    setLocalTasks(prev => prev.map(task =>
+      task.id === taskId ? { ...task, status: newStatus } : task
+    ));
+
     try {
-      // Get the current task data first
-      const { data: currentTask, error: fetchError } = await supabase
-        .from('tasks')
-        .select('*')
-        .eq('id', taskId)
-        .single();
-        
-      if (fetchError) throw fetchError;
-      
-      // Update the task status
+      // Update the task status in the database
       const { error: taskError } = await supabase
         .from('tasks')
-        .update({ 
+        .update({
           status: newStatus,
           updated_at: new Date().toISOString()
         })
         .eq('id', taskId);
-  
+
       if (taskError) throw taskError;
-  
+
       // Update item timestamps
       const { error: itemError } = await supabase
         .from('items')
         .update({ updated_at: new Date().toISOString() })
         .eq('id', taskId);
-  
+
       if (itemError) throw itemError;
-      
-      // Refresh the data
-      handleUpdate();
+
+      // Success - the realtime subscription will eventually sync, but we already have the right state
     } catch (err) {
       console.error('Error updating task status:', err);
-    } finally {
-      setLoadingTasks(prev => ({ ...prev, [taskId]: false }));
+      // On error, rollback to previous state
+      setLocalTasks(previousTasks);
     }
   };
 
-  // Function to delete a task
+  // Function to delete a task with optimistic UI update
   const deleteTask = async (taskId: string): Promise<void> => {
-    setLoadingTasks(prev => ({ ...prev, [taskId]: true }));
-    
+    // Ask for confirmation
+    if (!window.confirm("Are you sure you want to delete this task? This cannot be undone.")) {
+      return;
+    }
+
+    // Optimistic update - immediately remove from local UI
+    const previousTasks = [...localTasks];
+    setLocalTasks(prev => prev.filter(task => task.id !== taskId));
+
     try {
-      // Ask for confirmation
-      if (!window.confirm("Are you sure you want to delete this task? This cannot be undone.")) {
-        setLoadingTasks(prev => ({ ...prev, [taskId]: false }));
-        return;
-      }
-      
       // Delete the task
       const { error: taskError } = await supabase
         .from('tasks')
         .delete()
         .eq('id', taskId);
-  
+
       if (taskError) throw taskError;
-  
+
       // Delete the item
       const { error: itemError } = await supabase
         .from('items')
         .delete()
         .eq('id', taskId);
-  
+
       if (itemError) throw itemError;
-  
-      // Refresh the data
-      handleUpdate();
+
+      // Success - the realtime subscription will eventually sync, but we already have the right state
     } catch (err) {
       console.error('Error deleting task:', err);
-    } finally {
-      setLoadingTasks(prev => ({ ...prev, [taskId]: false }));
+      // On error, rollback to previous state
+      setLocalTasks(previousTasks);
     }
   };
 
@@ -527,132 +590,122 @@ const DashboardPage: React.FC = () => {
     }
   };
 
+  // Render task list for a given context
+  const renderTaskList = (context: DailyContext | 'all' | 'past') => {
+    const filteredTasks = getFilteredTasks(context);
+
+    return (
+      <DashboardCard
+        title={`${context === 'all' ? 'All' : context === 'past' ? 'Past' : context.charAt(0).toUpperCase() + context.slice(1)} Tasks (${filteredTasks.length})`}
+        content={
+          <div className="space-y-3">
+            {filteredTasks.length === 0 ? (
+              <div className="text-gray-500 text-center py-4">No tasks</div>
+            ) : (
+              filteredTasks.map(task => {
+                const isPastDue = task.due_date && isDatePast(task.due_date);
+                const isPastAssigned = task.assigned_date && isDatePast(task.assigned_date);
+                const contextLabel = isPastDue ? "OVERDUE" : isPastAssigned ? "PAST ASSIGNED" : undefined;
+
+                return renderTask(task, contextLabel);
+              })
+            )}
+          </div>
+        }
+      />
+    );
+  };
+
   // Render a task item with simpler design
   const renderTask = (task: TaskWithDetails, contextLabel?: string) => (
-    <div key={task.id} className={`p-3 rounded-lg border hover:shadow-sm transition-shadow ${getTimeColor(task)}`}>
-      <div className="flex items-start gap-2 mb-0.5">
+    <div key={task.id} className={`p-3 md:p-4 rounded-lg border hover:shadow-sm transition-shadow ${getTimeColor(task)}`}>
+      <div className="flex items-start gap-2 md:gap-3">
         <DropdownMenu>
-          <DropdownMenuTrigger asChild disabled={loadingTasks[task.id]}>
-            <button
-              className="flex-shrink-0 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 rounded-sm disabled:opacity-50 mt-0.5"
-              aria-label="Change task status"
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-9 w-9 md:h-8 md:w-8 flex-shrink-0"
             >
-              {loadingTasks[task.id] ? (
-                <div className="h-5 w-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
-              ) : (
-                <CheckSquare className="h-5 w-5 text-blue-500" />
-              )}
-            </button>
+              <MoreVertical className="h-5 w-5 md:h-4 md:w-4" />
+              <span className="sr-only">Open menu</span>
+            </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="start">
-            <DropdownMenuItem onClick={() => updateTaskStatus(task.id, 'on_deck')}>
-              Mark as On Deck
+          <DropdownMenuContent align="start" className="w-48">
+            <DropdownMenuItem
+              onClick={() => setTaskToEdit(task)}
+              className="text-base md:text-sm py-3 md:py-2"
+            >
+              Edit Task
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => updateTaskStatus(task.id, 'active')}>
-              Mark as Active
+            <DropdownMenuItem
+              onClick={() => updateTaskStatus(task.id, 'completed')}
+              className="text-base md:text-sm py-3 md:py-2"
+            >
+              Mark Completed
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => updateTaskStatus(task.id, 'completed')}>
-              Mark as Completed
+            <DropdownMenuItem
+              onClick={() => updateTaskStatus(task.id, task.status === 'active' ? 'on_deck' : 'active')}
+              className="text-base md:text-sm py-3 md:py-2"
+            >
+              Edit Status: {task.status === 'active' ? 'Set On Deck' : 'Set Active'}
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={() => deleteTask(task.id)}
+              className="text-red-600 hover:text-red-700 text-base md:text-sm py-3 md:py-2"
+            >
+              Delete Task
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
-        <div className="min-w-0 flex-1">
-          <h3 
-            className="font-medium text-gray-900 truncate cursor-pointer hover:text-blue-600 transition-colors"
-            onClick={() => {
-              if (task.description || task.item.title.length > 50) {
-                setTaskToView(task);
+        <button
+          onClick={() => updateTaskStatus(task.id, 'completed')}
+          className="flex-shrink-0 mt-0.5 p-1 md:p-0"
+        >
+          <CheckCircle2 className="h-6 w-6 md:h-5 md:w-5 text-blue-500" />
+        </button>
+        <div className="flex-1 min-w-0">
+          <h3 className="font-medium text-gray-900 text-base md:text-sm break-words">{task.item.title}</h3>
+          <div className="flex flex-col sm:flex-row gap-1 sm:gap-2 mt-1 text-xs text-gray-600">
+            {contextLabel && (
+              <span className={`font-medium whitespace-nowrap ${contextLabel === "OVERDUE" ? "text-red-600" : "text-orange-500"}`}>{contextLabel}</span>
+            )}
+            {task.assigned_date && (
+              <span className="whitespace-nowrap">Assigned: {format(parseISO(task.assigned_date), 'MMM d, yyyy')}</span>
+            )}
+            {task.due_date && (
+              <span className="text-orange-600 font-medium whitespace-nowrap">Due: {format(parseISO(task.due_date), 'MMM d, yyyy')}</span>
+            )}
+            {task.reminder_time && (
+              <span className="flex items-center text-blue-600 font-medium whitespace-nowrap">
+                🔔 {formatReminderTime(task.reminder_time)}
+              </span>
+            )}
+            {!task.reminder_time && task.habit_id && (() => {
+              const habit = habits.find(h => h.id === task.habit_id);
+              if (habit) {
+                const rule = typeof habit.recurrence_rule === 'string'
+                  ? JSON.parse(habit.recurrence_rule)
+                  : habit.recurrence_rule;
+                if (rule?.time_of_day) {
+                  return (
+                    <span className="flex items-center text-blue-600 font-medium whitespace-nowrap">
+                      🔔 {format(new Date(`2000-01-01T${rule.time_of_day}`), 'h:mm a')}
+                    </span>
+                  );
+                }
               }
-            }}
-          >
-            {task.item.title}
-          </h3>
+              return null;
+            })()}
+            {task.project_id && (
+              <span className="flex items-center text-blue-500 whitespace-nowrap">
+                <Link className="mr-1 h-3 w-3" />
+                Project
+              </span>
+            )}
+          </div>
         </div>
-      </div>
-      
-      <div className="ml-7 mt-1 flex flex-wrap gap-2 text-xs">
-        <div className="flex flex-wrap gap-3 items-center">
-          {contextLabel && (
-            <span className={`font-medium ${contextLabel === "OVERDUE" ? "text-red-600" : "text-orange-500"}`}>{contextLabel}</span>
-          )}
-          {task.assigned_date && (
-            <span className={`flex items-center ${isDatePast(task.assigned_date) ? 'text-orange-500' : 'text-gray-500'}`}>
-              <Calendar className="mr-1 h-3 w-3" />
-              Assigned: {formatDateDisplay(task.assigned_date)}
-            </span>
-          )}
-          {task.reminder_time && (
-            <span className="flex items-center text-blue-600 font-medium">
-              🔔 {formatReminderTime(task.reminder_time)}
-            </span>
-          )}
-          {!task.reminder_time && task.habit_id && (() => {
-            const habit = habits.find(h => h.id === task.habit_id);
-            if (habit) {
-              const rule = typeof habit.recurrence_rule === 'string'
-                ? JSON.parse(habit.recurrence_rule)
-                : habit.recurrence_rule;
-              if (rule?.time_of_day) {
-                return (
-                  <span className="flex items-center text-blue-600 font-medium">
-                    🔔 {format(new Date(`2000-01-01T${rule.time_of_day}`), 'h:mm a')}
-                  </span>
-                );
-              }
-            }
-            return null;
-          })()}
-          {task.due_date && (
-            <span className={`flex items-center ${isDatePast(task.due_date) ? 'text-red-600 font-medium' : 'text-gray-500'}`}>
-              <Clock className="mr-1 h-3 w-3" />
-              Due: {formatDateDisplay(task.due_date)}
-            </span>
-          )}
-        </div>
-      </div>
-
-      <div className="ml-7 mt-1 flex justify-between items-center">
-        <div className="text-xs">
-          {task.project_id && (
-            <span className="flex items-center text-blue-500">
-              <Link className="mr-1 h-3 w-3" />
-              Project
-            </span>
-          )}
-        </div>
-        <div className="flex items-center gap-2">
-          <Badge className={getPriorityColor(task.priority)}>
-            {task.priority || 'normal'}
-          </Badge>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button 
-                variant="ghost"
-                size="icon"
-                className="h-6 w-6"
-                disabled={loadingTasks[task.id]}
-              >
-                <MoreHorizontal className="h-4 w-4" />
-                <span className="sr-only">Open menu</span>
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem
-                onClick={() => setTaskToEdit(task)}
-                disabled={loadingTasks[task.id]}
-              >
-                Edit Task
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => deleteTask(task.id)}
-                disabled={loadingTasks[task.id]}
-                className="text-red-600 hover:text-red-700"
-              >
-                Delete Task
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
+        <Badge className="bg-blue-100 text-blue-800 flex-shrink-0 text-xs">{task.priority || 'normal'}</Badge>
       </div>
     </div>
   );
@@ -782,51 +835,41 @@ const DashboardPage: React.FC = () => {
         </Dialog>
       )}
 
-      {/* Today's Tasks Section */}
-      <DashboardCard 
-        title={`OnDeck (${todayDueTasks.length + todayAssignedTasks.length})`}
-        content={
-          <div className="space-y-3">
-            {todayDueTasks.length === 0 && todayAssignedTasks.length === 0 ? (
-              <div className="text-gray-500 text-center py-4">No tasks for today or overdue</div>
-            ) : (
-              <>
-                {todayDueTasks.length > 0 && (
-                  <div className="mb-2">
-                    <h3 className="text-sm font-medium text-gray-700 mb-2">Due Today or Overdue</h3>
-                    <div className="space-y-2">
-                      {todayDueTasks.map(task => {
-                        const isPastDue = isDatePast(task.due_date);
-                        
-                        return renderTask(
-                          task, 
-                          isPastDue ? "OVERDUE" : undefined
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-                
-                {todayAssignedTasks.length > 0 && (
-                  <div className="mb-2">
-                    <h3 className="text-sm font-medium text-gray-700 mb-2">Assigned Today or Earlier</h3>
-                    <div className="space-y-2">
-                      {todayAssignedTasks.map(task => {
-                        const isPastAssigned = isDatePast(task.assigned_date);
-                        
-                        return renderTask(
-                          task, 
-                          isPastAssigned ? "PAST ASSIGNED" : undefined
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-              </>
-            )}
-          </div>
-        }
-      />
+      {/* Tabs for Context-based Tasks */}
+      <Tabs defaultValue="all" className="w-full">
+        <TabsList className="grid w-full grid-cols-3 md:grid-cols-6 gap-1">
+          <TabsTrigger value="all" className="text-xs md:text-sm">All</TabsTrigger>
+          <TabsTrigger value="past" className="text-xs md:text-sm">Past</TabsTrigger>
+          <TabsTrigger value="morning" className="text-xs md:text-sm">Morning</TabsTrigger>
+          <TabsTrigger value="work" className="text-xs md:text-sm">Work</TabsTrigger>
+          <TabsTrigger value="family" className="text-xs md:text-sm">Family</TabsTrigger>
+          <TabsTrigger value="evening" className="text-xs md:text-sm">Evening</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="all">
+          {renderTaskList('all')}
+        </TabsContent>
+
+        <TabsContent value="past">
+          {renderTaskList('past')}
+        </TabsContent>
+
+        <TabsContent value="morning">
+          {renderTaskList('morning')}
+        </TabsContent>
+
+        <TabsContent value="work">
+          {renderTaskList('work')}
+        </TabsContent>
+
+        <TabsContent value="family">
+          {renderTaskList('family')}
+        </TabsContent>
+
+        <TabsContent value="evening">
+          {renderTaskList('evening')}
+        </TabsContent>
+      </Tabs>
 
       {/* Weekly Calendar */}
       <WeeklyCalendar tasks={tasks} habits={habits} />

@@ -16,9 +16,10 @@ import UserMenu from '../UserMenu';
 import IntegratedSearch from '../IntegratedSearch';
 import ClientLayout from './ClientLayout';
 import ProjectsPage from '@/app/projects/page';
-import KnowledgePage from '@/app/knowledge/page';
 import HabitsPage from '@/app/habits/page';
+import ChecklistsPage from '@/app/checklists/page';
 import FeedbackPage from '@/app/feedback/page';
+import QuotesPage from '@/app/quotes/page';
 import InstallPWA from '../InstallPWA';
 import PWAStatus from '../PWAStatus';
 import OfflineNotification from '../OfflineNotification';
@@ -118,14 +119,16 @@ const DesktopLayout = () => {
         return <NotesPage />;
       case 'projects':
         return <ProjectsPage />;
-      case 'knowledge':
-        return <KnowledgePage />;
       case 'habits':
         return <HabitsPage />;
+      case 'checklists':
+        return <ChecklistsPage />;
+      case 'quotes':
+        return <QuotesPage />;
+      case 'media-vault':
+        return <div className="text-center py-12">Media Vault feature coming soon</div>;
       case 'feedback':
         return <FeedbackPage />;
-      case 'journal':
-        return <div className="text-center py-12">Journal feature coming soon</div>;
       default:
         return <DashboardPage />;
     }

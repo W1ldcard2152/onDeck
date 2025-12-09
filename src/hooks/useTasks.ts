@@ -197,7 +197,7 @@ export function useTasks(
         .map(task => {
           const item = itemsData.find(item => item.id === task.id)
           if (!item) return null
-          
+
           return {
             id: task.id,
             assigned_date: task.assigned_date,
@@ -210,6 +210,7 @@ export function useTasks(
             priority: task.priority || 'normal',
             project_id: task.project_id,
             habit_id: task.habit_id,
+            daily_context: task.daily_context,
             created_at: item.created_at,
             updated_at: item.updated_at,
             title: item.title,

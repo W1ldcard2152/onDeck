@@ -30,7 +30,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 
 // Define types
 type SortDirection = 'asc' | 'desc' | null;
-type SortField = 'status' | 'title' | 'priority' | 'assigned_date' | 'description' | 'due_date' | 'project' | 'reminder_time' | null;
+type SortField = 'status' | 'title' | 'priority' | 'assigned_date' | 'description' | 'due_date' | 'project' | 'daily_context' | null;
 
 interface SortState {
   field: SortField;
@@ -77,30 +77,17 @@ function parseDateForDisplay(dateString: string | null): Date | null {
   }
 }
 
-function formatTimeForDisplay(dateTimeString: string | null): string {
-  if (!dateTimeString) return '';
-  
+function formatContextsForDisplay(dailyContext: string | null): string {
+  if (!dailyContext) return '';
+
   try {
-    const date = new Date(dateTimeString);
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const contexts = JSON.parse(dailyContext);
+    if (!Array.isArray(contexts) || contexts.length === 0) return '';
+    return contexts.map((c: string) => c.charAt(0).toUpperCase() + c.slice(1)).join(', ');
   } catch (e) {
-    console.error('Error parsing time:', e);
+    console.error('Error parsing contexts:', e);
     return '';
   }
-}
-
-// Helper function for future notification system
-function canSendNotification(task: TaskWithDetails): boolean {
-  return Boolean(task.reminder_time && task.assigned_date);
-}
-
-function getUpcomingReminders(tasks: TaskWithDetails[]): TaskWithDetails[] {
-  const now = new Date();
-  return tasks.filter(task => {
-    if (!task.reminder_time) return false;
-    const reminderTime = new Date(task.reminder_time);
-    return reminderTime > now;
-  });
 }
 
 // TaskTableBase Component
@@ -596,12 +583,12 @@ const TaskTableBase: React.FC<TaskTableBaseProps> = ({
                   </Button>
                 </TableHead>
                 <TableHead className="bg-blue-50">
-                  <Button 
-                    variant="ghost" 
-                    onClick={() => onSort('reminder_time')}
+                  <Button
+                    variant="ghost"
+                    onClick={() => onSort('daily_context')}
                     className="hover:bg-gray-100 font-semibold text-blue-800"
                   >
-                    🔔 Reminder {getSortIcon('reminder_time')}
+                    📅 Context {getSortIcon('daily_context')}
                   </Button>
                 </TableHead>
                 <TableHead>
@@ -752,18 +739,12 @@ const TaskTableBase: React.FC<TaskTableBaseProps> = ({
                     
                     <TableCell className="bg-blue-50">
                       <div className="space-y-1">
-                        {task.reminder_time && (
+                        {task.daily_context && formatContextsForDisplay(task.daily_context) ? (
                           <div className="text-sm font-medium text-blue-700">
-                            🔔 {formatTimeForDisplay(task.reminder_time)}
+                            📅 {formatContextsForDisplay(task.daily_context)}
                           </div>
-                        )}
-                        {task.assigned_date && task.reminder_time && (
-                          <div className="text-xs text-gray-600">
-                            on {format(parseDateForDisplay(task.assigned_date)!, 'MMM d')}
-                          </div>
-                        )}
-                        {!task.reminder_time && (
-                          <div className="text-gray-400 text-sm">No reminder</div>
+                        ) : (
+                          <div className="text-gray-400 text-sm">All day</div>
                         )}
                       </div>
                     </TableCell>
@@ -994,10 +975,10 @@ const TaskTable: React.FC<TaskTableProps> = ({
             comparison = aDue - bDue;
             break;
           }
-          case 'reminder_time': {
-            const aReminder = a.reminder_time ? new Date(a.reminder_time).getTime() : 0;
-            const bReminder = b.reminder_time ? new Date(b.reminder_time).getTime() : 0;
-            comparison = aReminder - bReminder;
+          case 'daily_context': {
+            const aContext = a.daily_context || '';
+            const bContext = b.daily_context || '';
+            comparison = aContext.localeCompare(bContext);
             break;
           }
           case 'project': {

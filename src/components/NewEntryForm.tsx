@@ -7,16 +7,16 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { CalendarIcon, Plus } from 'lucide-react';
-import { TimePicker } from '@/components/TimePicker';
 import { useSupabaseAuth } from '@/hooks/useSupabaseAuth';
 import { useKnowledgeBases } from '@/hooks/useKnowledgeBases';
 import { EntryService } from '@/lib/entryService';
 import type { TaskStatus, Priority, EntryType as KnowledgeEntryType } from '@/types/database.types';
-import type { TaskWithDetails, NoteWithDetails } from '@/lib/types';
+import type { TaskWithDetails, NoteWithDetails, DailyContext } from '@/lib/types';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import { DayPicker } from "react-day-picker";
 import "react-day-picker/dist/style.css";
@@ -46,17 +46,6 @@ function preserveLocalDate(date: Date | undefined): string | null {
   // Create a new ISO date string in format YYYY-MM-DD
   // This completely ignores time and timezone
   return `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-}
-
-// Function to combine date and time into ISO timestamp
-function combineDateAndTime(date: Date | undefined, time: string): string | null {
-  if (!date || !time) return null;
-  
-  const [hours, minutes] = time.split(':').map(Number);
-  const combined = new Date(date);
-  combined.setHours(hours, minutes, 0, 0);
-  
-  return combined.toISOString();
 }
 
 // Custom DatePicker component to avoid hooks issues
@@ -132,8 +121,7 @@ export const NewEntryForm: React.FC<NewEntryFormProps> = ({
   const [content, setContent] = useState('');
   const [dueDate, setDueDate] = useState<Date | undefined>();
   const [assignedDate, setAssignedDate] = useState<Date | undefined>();
-  const [reminderTime, setReminderTime] = useState('');
-  const [showCustomTimePicker, setShowCustomTimePicker] = useState(false);
+  const [dailyContexts, setDailyContexts] = useState<DailyContext[]>([]);
   const [priority, setPriority] = useState<Priority>('normal');
   const [status, setStatus] = useState<TaskStatus>('active');
   const [description, setDescription] = useState('');
@@ -143,15 +131,6 @@ export const NewEntryForm: React.FC<NewEntryFormProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [viewportHeight, setViewportHeight] = useState<number>(0);
-
-  // Preset time options - same as in habits
-  const presetTimes = [
-    { label: '8:00am', value: '08:00' },
-    { label: '9:45am', value: '09:45' },
-    { label: '1:00pm', value: '13:00' },
-    { label: '6:15pm', value: '18:15' },
-    { label: '8:20pm', value: '20:20' },
-  ];
 
   // Add refs for the text areas
   const contentRef = useRef<HTMLTextAreaElement>(null);
@@ -184,23 +163,26 @@ export const NewEntryForm: React.FC<NewEntryFormProps> = ({
         setDescription(taskData.description || '');
         setPriority(taskData.priority || 'normal');
         setStatus(taskData.status || 'active');
-        
+
         if (taskData.due_date) {
           setDueDate(parseStoredDate(taskData.due_date));
         }
-        
+
         if (taskData.assigned_date) {
           setAssignedDate(parseStoredDate(taskData.assigned_date));
         }
-        
-        if (taskData.reminder_time) {
-          const reminderDate = new Date(taskData.reminder_time);
-          const time = reminderDate.toTimeString().slice(0, 5); // HH:MM format
-          setReminderTime(time);
-          // Show custom time picker if the time is not one of the presets
-          if (time && !presetTimes.some(p => p.value === time)) {
-            setShowCustomTimePicker(true);
+
+        // Parse daily_context from JSON
+        if (taskData.daily_context) {
+          try {
+            const contexts = JSON.parse(taskData.daily_context);
+            setDailyContexts(contexts);
+          } catch (e) {
+            setDailyContexts([]);
           }
+        } else {
+          // Clear contexts if task has no daily_context
+          setDailyContexts([]);
         }
       } else if (isEditingNote) {
         // It's a note
@@ -260,8 +242,7 @@ export const NewEntryForm: React.FC<NewEntryFormProps> = ({
     setContent('');
     setDueDate(undefined);
     setAssignedDate(undefined);
-    setReminderTime('');
-    setShowCustomTimePicker(false);
+    setDailyContexts([]);
     setPriority('normal');
     setStatus('active');
     setDescription('');
@@ -292,7 +273,7 @@ export const NewEntryForm: React.FC<NewEntryFormProps> = ({
             .update({
               due_date: preserveLocalDate(dueDate),
               assigned_date: preserveLocalDate(assignedDate),
-              reminder_time: combineDateAndTime(assignedDate, reminderTime),
+              daily_context: dailyContexts.length > 0 ? JSON.stringify(dailyContexts) : null,
               status: status,
               description: description.trim() || null,
               priority: priority
@@ -350,7 +331,7 @@ export const NewEntryForm: React.FC<NewEntryFormProps> = ({
           entry_type: type === 'note' ? entryType : undefined,
           due_date: preserveLocalDate(dueDate),
           assigned_date: preserveLocalDate(assignedDate),
-          reminder_time: combineDateAndTime(assignedDate, reminderTime),
+          daily_context: dailyContexts.length > 0 ? JSON.stringify(dailyContexts) : null,
           status: type === 'task' ? status : undefined,
           priority: type === 'task' ? priority : undefined,
           description: type === 'task' ? description.trim() : null,
@@ -466,74 +447,37 @@ export const NewEntryForm: React.FC<NewEntryFormProps> = ({
               </div>
               
               <div className="space-y-4 border-t pt-4 bg-blue-50 p-4 rounded-lg">
-                <div className="text-sm font-semibold text-blue-800">🔔 Reminder (Optional)</div>
-                <div className="text-xs text-blue-600">Get notified when it's time to work on this task</div>
-                
-                <div className="grid grid-cols-1 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="reminder-time">Reminder Time</Label>
-                    <div className="grid grid-cols-3 gap-2">
-                      {presetTimes.map((preset) => (
-                        <Button
-                          key={preset.value}
-                          type="button"
-                          variant={reminderTime === preset.value ? "default" : "outline"}
-                          className="w-full text-sm"
-                          disabled={!assignedDate}
-                          onClick={() => {
-                            if (reminderTime === preset.value) {
-                              setReminderTime('');
-                            } else {
-                              setReminderTime(preset.value);
-                            }
-                            setShowCustomTimePicker(false);
-                          }}
-                        >
-                          {preset.label}
-                        </Button>
-                      ))}
-                      <Button
-                        type="button"
-                        variant={showCustomTimePicker || (reminderTime && !presetTimes.some(p => p.value === reminderTime)) ? "default" : "outline"}
-                        className="w-full text-sm"
-                        disabled={!assignedDate}
-                        onClick={() => setShowCustomTimePicker(!showCustomTimePicker)}
-                      >
-                        {showCustomTimePicker || (reminderTime && !presetTimes.some(p => p.value === reminderTime)) 
-                          ? (() => {
-                              if (reminderTime) {
-                                const [hour, minute] = reminderTime.split(':');
-                                const hourNum = parseInt(hour, 10);
-                                const period = hourNum >= 12 ? 'pm' : 'am';
-                                const hour12 = hourNum === 0 ? 12 : hourNum > 12 ? hourNum - 12 : hourNum;
-                                return `${hour12}:${minute}${period}`;
-                              }
-                              return 'Custom';
-                            })()
-                          : 'Custom'}
-                      </Button>
-                    </div>
-                    {!assignedDate && (
-                      <div className="text-xs text-gray-600 italic">
-                        Set an "Assigned Date" above to enable reminders
-                      </div>
-                    )}
-                    {showCustomTimePicker && assignedDate && (
-                      <TimePicker
-                        value={reminderTime}
-                        onChange={(time) => {
-                          setReminderTime(time);
+                <div className="text-sm font-semibold text-blue-800">📅 Daily Context (Optional)</div>
+                <div className="text-xs text-blue-600">Choose when you'd like to work on this task</div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  {(['morning', 'work', 'family', 'evening'] as const).map((context) => (
+                    <div key={context} className="flex items-center space-x-2">
+                      <Checkbox
+                        id={`context-${context}`}
+                        checked={dailyContexts.includes(context)}
+                        onCheckedChange={(checked) => {
+                          if (checked) {
+                            setDailyContexts([...dailyContexts, context]);
+                          } else {
+                            setDailyContexts(dailyContexts.filter(c => c !== context));
+                          }
                         }}
-                        placeholder="Select reminder time"
                       />
-                    )}
-                    {reminderTime && assignedDate && (
-                      <div className="text-xs text-gray-500">
-                        You'll be reminded at this time on {format(assignedDate, 'MMM d, yyyy')}
-                      </div>
-                    )}
-                  </div>
+                      <Label
+                        htmlFor={`context-${context}`}
+                        className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+                      >
+                        {context.charAt(0).toUpperCase() + context.slice(1)}
+                      </Label>
+                    </div>
+                  ))}
                 </div>
+                {dailyContexts.length === 0 && (
+                  <div className="text-xs text-gray-500 italic">
+                    No contexts selected - task will be shown all day
+                  </div>
+                )}
               </div>
               
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

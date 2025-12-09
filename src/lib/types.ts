@@ -1,9 +1,10 @@
 export type TaskStatus = 'on_deck' | 'active' | 'completed';
 export type Priority = 'low' | 'normal' | 'high' | null;
-export type EntryType = 'task' | 'note' | 'project';
+export type EntryType = 'task' | 'note' | 'project' | 'quote';
 export type KnowledgeEntryType = 'article' | 'video' | 'document' | 'resource' | 'note' | 'link';
 export type ProjectStatus = 'active' | 'completed' | 'on_hold';
 export type StepStatus = 'pending' | 'in_progress' | 'completed';
+export type DailyContext = 'morning' | 'work' | 'family' | 'evening';
 
 export interface Item {
   id: string;
@@ -29,6 +30,7 @@ export interface Task {
   habit_id: string | null;
   is_project_converted: boolean;
   converted_project_id: string | null;
+  daily_context?: string | null; // JSON array of DailyContext values, or null for all-day
 }
 
 export interface TaskWithDetails {
@@ -49,6 +51,7 @@ export interface TaskWithDetails {
   habit_id: string | null;
   is_project_converted: boolean;
   converted_project_id: string | null;
+  daily_context?: string | null; // JSON array of DailyContext values, or null for all-day
   item: Item;
 }
 
@@ -79,6 +82,7 @@ export interface ProjectStep {
   assigned_date: string | null;
   is_converted: boolean;
   converted_task_id: string | null;
+  daily_context?: string | null; // JSON array of DailyContext values, or null for all-day
 }
 
 export interface StepData {
@@ -138,4 +142,23 @@ export interface KnowledgeBase {
 
 export interface KnowledgeBaseWithDetails extends KnowledgeBase {
   entries: NoteWithDetails[];
+}
+
+export interface Quote {
+  id: string;
+  content: string;
+  author: string | null;
+  source: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface QuoteWithDetails {
+  id: string;
+  content: string;
+  author: string | null;
+  source: string | null;
+  created_at: string;
+  updated_at: string;
+  item: Item;
 }

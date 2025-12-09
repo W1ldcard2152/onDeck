@@ -4,7 +4,7 @@ import type { TaskStatus, Priority, EntryType } from '@/types/database.types'
 
 interface CreateEntryParams {
   title: string;
-  type: 'task' | 'note';
+  type: 'task' | 'note' | 'quote';
   user_id: string;
   content?: string | null;
   url?: string | null;
@@ -13,9 +13,12 @@ interface CreateEntryParams {
   due_date?: string | null;
   assigned_date?: string | null;
   reminder_time?: string | null;
+  daily_context?: string | null;
   status?: TaskStatus;
   priority?: Priority | null;
   description?: string | null;
+  author?: string | null;
+  source?: string | null;
 }
 
 export class EntryService {
@@ -53,6 +56,7 @@ export class EntryService {
           due_date: entry.due_date || null,
           assigned_date: entry.assigned_date || null,
           reminder_time: entry.reminder_time || null,
+          daily_context: entry.daily_context || null,
           status: entry.status || 'on_deck',
           description: entry.description || null,
           is_project_converted: false,
@@ -85,6 +89,24 @@ export class EntryService {
           .single();
 
         if (noteError) throw noteError;
+      }
+
+      // Handle quote-specific data
+      if (entry.type === 'quote') {
+        const quoteData = {
+          id: itemData.id,
+          content: entry.content?.trim() || '',
+          author: entry.author?.trim() || null,
+          source: entry.source?.trim() || null
+        };
+
+        const { error: quoteError } = await supabase
+          .from('quotes')
+          .insert([quoteData])
+          .select()
+          .single();
+
+        if (quoteError) throw quoteError;
       }
 
       return itemData;
