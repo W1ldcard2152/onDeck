@@ -69,9 +69,11 @@ const Layout = () => {
             {activeSection === 'tasks' && <div>Tasks Content</div>}
             {activeSection === 'notes' && <div>Notes Content</div>}
             {activeSection === 'projects' && <div>Projects Content</div>}
-            {activeSection === 'knowledge' && <div>Knowledge Content</div>}
             {activeSection === 'habits' && <div>Habits Content</div>}
-            {activeSection === 'journal' && <div>Journal Content</div>}
+            {activeSection === 'checklists' && <div>Checklists Content</div>}
+            {activeSection === 'quotes' && <div>Quotes Content</div>}
+            {activeSection === 'media-vault' && <div>Media Vault Content</div>}
+            {activeSection === 'feedback' && <div>Feedback Content</div>}
           </div>
         </main>
 

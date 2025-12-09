@@ -67,7 +67,7 @@ export class HabitTaskGenerator {
     if (fullRegeneration) {
       // For full regeneration, clear ALL incomplete tasks for this habit
       console.log('Full regeneration: clearing ALL incomplete tasks for habit:', habit.id)
-      await this.clearAllIncompleteHabitTasks(habit.id)
+      await this.clearAllIncompleteHabitTasks(habit.id, true) // true = preserve today's and future tasks
       
       // Add a small delay to ensure deletion completes
       await new Promise(resolve => setTimeout(resolve, 500))
@@ -131,8 +131,8 @@ export class HabitTaskGenerator {
    * Clear ALL incomplete habit tasks (for full regeneration)
    * Preserves ALL of today's tasks (both active and on_deck) to avoid deleting current tasks
    */
-  async clearAllIncompleteHabitTasks(habitId: string): Promise<void> {
-    console.log(`=== CLEARING ALL INCOMPLETE TASKS FOR HABIT ${habitId} ===`)
+  async clearAllIncompleteHabitTasks(habitId: string, preserveFuture: boolean = false): Promise<void> {
+    console.log(`=== CLEARING ALL INCOMPLETE TASKS FOR HABIT ${habitId} (preserveFuture: ${preserveFuture}) ===`)
 
     const today = new Date()
     const todayStr = today.toISOString().split('T')[0] // YYYY-MM-DD format
@@ -142,7 +142,7 @@ export class HabitTaskGenerator {
       .from('tasks')
       .select('id, assigned_date, status')
       .eq('habit_id', habitId)
-    
+
     if (allTasksError) {
       console.error('Error finding all tasks:', allTasksError)
     } else {
@@ -152,26 +152,33 @@ export class HabitTaskGenerator {
       })
     }
 
-    // Get all incomplete tasks first, then filter out today's active tasks
+    // Get all incomplete tasks first, then filter based on preserveFuture parameter
     const { data: allIncomplete, error } = await this.supabase
       .from('tasks')
       .select('id, assigned_date, status')
       .eq('habit_id', habitId)
       .neq('status', 'completed')
-    
+
     if (error) {
       console.error('Error finding incomplete tasks:', error)
       return
     }
-    
-    // Filter out today's and future tasks to preserve them
-    // Only delete past incomplete tasks when doing full regeneration
-    const tasksToDelete = allIncomplete?.filter(task => {
-      if (!task.assigned_date) return true; // Delete tasks with no date
-      return task.assigned_date < todayStr; // Only delete past tasks
-    }) || []
 
-    console.log(`Found ${tasksToDelete?.length || 0} past incomplete tasks to delete for habit ${habitId} (preserving today's and future tasks)`)
+    // Determine which tasks to delete based on preserveFuture parameter
+    let tasksToDelete
+    if (preserveFuture) {
+      // Only delete past incomplete tasks when doing full regeneration
+      tasksToDelete = allIncomplete?.filter(task => {
+        if (!task.assigned_date) return true; // Delete tasks with no date
+        return task.assigned_date < todayStr; // Only delete past tasks
+      }) || []
+      console.log(`Found ${tasksToDelete?.length || 0} past incomplete tasks to delete for habit ${habitId} (preserving today's and future tasks)`)
+    } else {
+      // Delete ALL incomplete tasks (used when deactivating a habit)
+      tasksToDelete = allIncomplete || []
+      console.log(`Found ${tasksToDelete?.length || 0} incomplete tasks to delete for habit ${habitId} (deleting ALL incomplete tasks)`)
+    }
+
     if (tasksToDelete && tasksToDelete.length > 0) {
       console.log('Tasks being deleted:', tasksToDelete.map(t => `${t.id} (${t.assigned_date || 'no date'}, status: ${t.status})`))
     }
