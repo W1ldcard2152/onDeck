@@ -29,9 +29,17 @@ import { FeedbackModal } from '../FeedbackModal';
 
 const DesktopLayout = () => {
   const { user, loading } = useSupabaseAuth();
-  const [activeSection, setActiveSection] = useState<SectionType>('dashboard');
   const [isFeedbackModalOpen, setIsFeedbackModalOpen] = useState(false);
   const [isInPWA, setIsInPWA] = useState(false);
+
+  // Initialize active section from sessionStorage (persists on minimize) or default to dashboard
+  const [activeSection, setActiveSection] = useState<SectionType>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = sessionStorage.getItem('ondeck-active-section');
+      return (saved as SectionType) || 'dashboard';
+    }
+    return 'dashboard';
+  });
   
   // Memoize service worker options to prevent re-registration
   const serviceWorkerOptions = useMemo(() => ({
@@ -59,7 +67,14 @@ const DesktopLayout = () => {
 
   // Register and monitor the service worker
   const { isActive, isRegistered, error } = useServiceWorker(serviceWorkerOptions);
-  
+
+  // Save active section to sessionStorage whenever it changes
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem('ondeck-active-section', activeSection);
+    }
+  }, [activeSection]);
+
   // Check if running as PWA
   useEffect(() => {
     const checkPWAStatus = () => {
