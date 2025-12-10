@@ -65,7 +65,8 @@ export function useNotes(userId: string | undefined, limit: number = 10, include
             )
           )
         `)
-        .in('id', itemIds);
+        .in('id', itemIds)
+        .eq('note_type', 'note');
 
       if (notesError) throw notesError;
 
@@ -83,6 +84,7 @@ export function useNotes(userId: string | undefined, limit: number = 10, include
             url: noteData.url || null,
             file_path: noteData.file_path || null,
             entry_type: noteData.entry_type || 'note',
+            note_type: noteData.note_type || 'note',
             knowledge_base_id: noteData.knowledge_base_id || null,
             item: item
             // knowledge_base omitted - it's optional

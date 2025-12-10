@@ -12,6 +12,7 @@ import type { SectionType } from './responsiveNav/types';
 import DashboardPage from '@/app/dashboard/page';
 import TasksPage from '@/app/tasks/page';
 import NotesPage from '@/app/notes/page';
+import TrainOfThoughtPage from '@/app/train-of-thought/page';
 import UserMenu from '../UserMenu';
 import IntegratedSearch from '../IntegratedSearch';
 import ClientLayout from './ClientLayout';
@@ -117,6 +118,8 @@ const DesktopLayout = () => {
         return <TasksPage />;
       case 'notes':
         return <NotesPage />;
+      case 'train-of-thought':
+        return <TrainOfThoughtPage />;
       case 'projects':
         return <ProjectsPage />;
       case 'habits':

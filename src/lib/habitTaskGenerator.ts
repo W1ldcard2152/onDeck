@@ -869,6 +869,7 @@ export class HabitTaskGenerator {
 
   /**
    * Daily cleanup: Remove past incomplete habit tasks for all active habits
+   * Also cleans up ALL incomplete tasks for inactive habits
    */
   async cleanupPastHabitTasks(): Promise<void> {
     const { data: activeHabits, error } = await this.supabase
@@ -884,6 +885,26 @@ export class HabitTaskGenerator {
         await this.clearPastIncompleteHabitTasks(habit.id)
       } catch (e) {
         console.error(`Failed to cleanup tasks for habit ${habit.id}:`, e)
+      }
+    }
+
+    // Also clean up ALL incomplete tasks for inactive habits
+    const { data: inactiveHabits, error: inactiveError } = await this.supabase
+      .from('habits')
+      .select('id')
+      .eq('user_id', this.userId)
+      .eq('is_active', false)
+
+    if (inactiveError) {
+      console.error('Error fetching inactive habits:', inactiveError)
+    } else {
+      for (const habit of inactiveHabits || []) {
+        try {
+          console.log(`Cleaning up ALL incomplete tasks for inactive habit ${habit.id}`)
+          await this.clearAllIncompleteHabitTasks(habit.id, false) // false = delete ALL incomplete tasks
+        } catch (e) {
+          console.error(`Failed to cleanup tasks for inactive habit ${habit.id}:`, e)
+        }
       }
     }
   }

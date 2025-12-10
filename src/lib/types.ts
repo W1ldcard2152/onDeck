@@ -2,6 +2,7 @@ export type TaskStatus = 'on_deck' | 'active' | 'completed';
 export type Priority = 'low' | 'normal' | 'high' | null;
 export type EntryType = 'task' | 'note' | 'project' | 'quote';
 export type KnowledgeEntryType = 'article' | 'video' | 'document' | 'resource' | 'note' | 'link';
+export type NoteType = 'note' | 'thought';
 export type ProjectStatus = 'active' | 'completed' | 'on_hold';
 export type StepStatus = 'pending' | 'in_progress' | 'completed';
 export type DailyContext = 'morning' | 'work' | 'family' | 'evening';
@@ -61,6 +62,7 @@ export interface NoteWithDetails {
   url: string | null;
   file_path: string | null;
   entry_type: KnowledgeEntryType;
+  note_type: NoteType;
   knowledge_base_id: string | null;
   item: Item;
   knowledge_base?: KnowledgeBase;
