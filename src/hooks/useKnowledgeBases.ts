@@ -188,6 +188,7 @@ export function useKnowledgeBases(userId: string | undefined) {
       url: note.url,
       file_path: note.file_path,
       entry_type: note.entry_type,
+      note_type: note.note_type || 'note',
       knowledge_base_id: note.knowledge_base_id,
       item: {
         id: note.items.id,
