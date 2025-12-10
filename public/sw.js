@@ -1,9 +1,12 @@
 // Service Worker for OnDeck PWA
-// Place this file in the public folder
+// Enhanced caching strategy for faster PWA loads
 
-const CACHE_NAME = 'ondeck-v1.3'; // Force icon refresh
+const CACHE_VERSION = '1.4';
+const CACHE_NAME = `ondeck-v${CACHE_VERSION}`;
+const RUNTIME_CACHE = `ondeck-runtime-v${CACHE_VERSION}`;
+const DATA_CACHE = `ondeck-data-v${CACHE_VERSION}`;
 
-// Resources to cache on install
+// Critical resources to cache on install for instant loads
 const PRECACHE_RESOURCES = [
   '/',
   '/manifest.json',
@@ -14,6 +17,9 @@ const PRECACHE_RESOURCES = [
   '/splash.html',
   '/favicon.ico'
 ];
+
+// Max age for cached responses (7 days)
+const MAX_CACHE_AGE = 7 * 24 * 60 * 60 * 1000;
 
 // Install event - cache static assets
 self.addEventListener('install', (event) => {
@@ -37,11 +43,13 @@ self.addEventListener('install', (event) => {
 // Activate event - clean up old caches
 self.addEventListener('activate', (event) => {
   console.log('[ServiceWorker] Activate');
-  
+
+  const validCaches = [CACHE_NAME, RUNTIME_CACHE, DATA_CACHE];
+
   event.waitUntil(
     caches.keys().then((keyList) => {
       return Promise.all(keyList.map((key) => {
-        if (key !== CACHE_NAME) {
+        if (!validCaches.includes(key)) {
           console.log('[ServiceWorker] Removing old cache', key);
           return caches.delete(key);
         }
@@ -49,99 +57,169 @@ self.addEventListener('activate', (event) => {
     })
     .then(() => {
       console.log('[ServiceWorker] Claiming clients');
-      return self.clients.claim(); // This ensures the ServiceWorker takes control immediately
+      return self.clients.claim();
     })
   );
 });
 
-// Fetch event - improved caching strategy for PWA
+// Helper function to check if cache is stale
+function isCacheStale(response) {
+  if (!response) return true;
+  const dateHeader = response.headers.get('date');
+  if (!dateHeader) return false;
+  const cacheDate = new Date(dateHeader).getTime();
+  return Date.now() - cacheDate > MAX_CACHE_AGE;
+}
+
+// Fetch event - enhanced caching strategy for PWA
 self.addEventListener('fetch', (event) => {
-  // Skip cross-origin requests, API calls, and authentication requests
-  if (!event.request.url.startsWith(self.location.origin) || 
-      event.request.url.includes('/api/') ||
-      event.request.url.includes('supabase.co') ||
-      event.request.url.includes('auth/') ||
-      event.request.method !== 'GET') {
+  const { request } = event;
+  const url = new URL(request.url);
+
+  // Skip cross-origin requests (except Supabase which we handle below)
+  if (!url.origin.includes(self.location.hostname) && !url.origin.includes('supabase.co')) {
     return;
   }
-  
-  const url = new URL(event.request.url);
-  
-  // For HTML navigation requests - network first with offline fallback
-  if (event.request.mode === 'navigate' || 
-      (event.request.method === 'GET' && 
-       event.request.headers.get('accept') && 
-       event.request.headers.get('accept').includes('text/html'))) {
-    
+
+  // Skip non-GET requests
+  if (request.method !== 'GET') {
+    return;
+  }
+
+  // Strategy 1: API/Supabase requests - Network first with short-lived cache fallback
+  if (url.pathname.includes('/api/') ||
+      url.origin.includes('supabase.co') ||
+      url.pathname.includes('/auth/')) {
     event.respondWith(
-      fetch(event.request)
+      fetch(request)
         .then((response) => {
-          // Cache successful responses for offline use
-          if (response && response.status === 200 && response.type === 'basic') {
+          // Cache successful API responses for 5 minutes
+          if (response && response.status === 200) {
             const responseToCache = response.clone();
-            caches.open(CACHE_NAME)
-              .then((cache) => {
-                cache.put(event.request, responseToCache);
-              });
+            caches.open(DATA_CACHE).then((cache) => {
+              cache.put(request, responseToCache);
+            });
           }
           return response;
         })
         .catch(() => {
-          // If network fails, try cache first, then offline page
-          return caches.match(event.request)
-            .then((response) => {
-              if (response) {
-                return response;
+          // Fallback to cache for offline support
+          return caches.match(request)
+            .then((cachedResponse) => {
+              if (cachedResponse) {
+                console.log('[ServiceWorker] Serving cached API response (offline)');
+                return cachedResponse;
               }
-              console.log('[ServiceWorker] Fetch failed; returning offline page instead.');
-              return caches.match('/offline.html');
+              return new Response(
+                JSON.stringify({ error: 'Offline - data not available' }),
+                { status: 503, headers: { 'Content-Type': 'application/json' } }
+              );
             });
         })
     );
     return;
   }
-  
-  // For static assets (JS, CSS, images) - cache first with network fallback
-  if (url.pathname.match(/\.(js|css|png|jpg|jpeg|gif|svg|ico|woff|woff2|ttf|eot)$/)) {
+
+  // Strategy 2: Next.js app bundles and chunks - Cache first (aggressive caching)
+  if (url.pathname.includes('/_next/') ||
+      url.pathname.match(/\.(js|css)$/)) {
     event.respondWith(
-      caches.match(event.request)
-        .then((cachedResponse) => {
-          if (cachedResponse) {
-            // Serve from cache and update in background
-            fetch(event.request)
-              .then((networkResponse) => {
-                if (networkResponse && networkResponse.status === 200) {
-                  caches.open(CACHE_NAME)
-                    .then((cache) => {
-                      cache.put(event.request, networkResponse.clone());
-                    });
-                }
-              })
-              .catch(() => {
-                // Silent fail for background update
-              });
+      caches.open(RUNTIME_CACHE).then((cache) => {
+        return cache.match(request).then((cachedResponse) => {
+          if (cachedResponse && !isCacheStale(cachedResponse)) {
+            // Serve from cache immediately
+            // Update in background if needed
+            fetch(request).then((networkResponse) => {
+              if (networkResponse && networkResponse.status === 200) {
+                cache.put(request, networkResponse.clone());
+              }
+            }).catch(() => {});
+
             return cachedResponse;
           }
-          
-          // Not in cache, fetch from network
-          return fetch(event.request)
-            .then((networkResponse) => {
-              if (networkResponse && networkResponse.status === 200) {
-                const responseToCache = networkResponse.clone();
-                caches.open(CACHE_NAME)
-                  .then((cache) => {
-                    cache.put(event.request, responseToCache);
-                  });
-              }
-              return networkResponse;
-            })
-            .catch((error) => {
-              console.log('[ServiceWorker] Asset fetch failed:', error);
-              return new Response('Asset not available offline', { status: 408 });
-            });
-        })
+
+          // Fetch from network and cache
+          return fetch(request).then((networkResponse) => {
+            if (networkResponse && networkResponse.status === 200) {
+              cache.put(request, networkResponse.clone());
+            }
+            return networkResponse;
+          }).catch(() => {
+            // If we have a stale cache, use it
+            if (cachedResponse) {
+              console.log('[ServiceWorker] Using stale cache for:', url.pathname);
+              return cachedResponse;
+            }
+            return new Response('Asset not available', { status: 408 });
+          });
+        });
+      })
     );
+    return;
   }
+
+  // Strategy 3: HTML navigation - Stale while revalidate
+  if (request.mode === 'navigate' ||
+      (request.headers.get('accept') &&
+       request.headers.get('accept').includes('text/html'))) {
+    event.respondWith(
+      caches.open(CACHE_NAME).then((cache) => {
+        return cache.match(request).then((cachedResponse) => {
+          const fetchPromise = fetch(request).then((networkResponse) => {
+            if (networkResponse && networkResponse.status === 200) {
+              cache.put(request, networkResponse.clone());
+            }
+            return networkResponse;
+          }).catch(() => {
+            console.log('[ServiceWorker] Network failed for navigation');
+            return caches.match('/offline.html');
+          });
+
+          // Return cached version immediately if available, but update in background
+          return cachedResponse || fetchPromise;
+        });
+      })
+    );
+    return;
+  }
+
+  // Strategy 4: Images and fonts - Cache first with background update
+  if (url.pathname.match(/\.(png|jpg|jpeg|gif|svg|ico|woff|woff2|ttf|eot|webp)$/)) {
+    event.respondWith(
+      caches.open(RUNTIME_CACHE).then((cache) => {
+        return cache.match(request).then((cachedResponse) => {
+          if (cachedResponse) {
+            // Update in background
+            fetch(request).then((networkResponse) => {
+              if (networkResponse && networkResponse.status === 200) {
+                cache.put(request, networkResponse.clone());
+              }
+            }).catch(() => {});
+
+            return cachedResponse;
+          }
+
+          return fetch(request).then((networkResponse) => {
+            if (networkResponse && networkResponse.status === 200) {
+              cache.put(request, networkResponse.clone());
+            }
+            return networkResponse;
+          }).catch((error) => {
+            console.log('[ServiceWorker] Asset fetch failed:', error);
+            return new Response('Image not available offline', { status: 408 });
+          });
+        });
+      })
+    );
+    return;
+  }
+
+  // Default: Network first
+  event.respondWith(
+    fetch(request).catch(() => {
+      return caches.match(request);
+    })
+  );
 });
 
 // Handle push notifications if needed
