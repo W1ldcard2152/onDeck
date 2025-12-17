@@ -1,10 +1,10 @@
-// Service Worker for OnDeck PWA
+// Service Worker for Sophia Praxis PWA
 // Enhanced caching strategy for faster PWA loads
 
 const CACHE_VERSION = '1.4';
-const CACHE_NAME = `ondeck-v${CACHE_VERSION}`;
-const RUNTIME_CACHE = `ondeck-runtime-v${CACHE_VERSION}`;
-const DATA_CACHE = `ondeck-data-v${CACHE_VERSION}`;
+const CACHE_NAME = `sophia-praxis-v${CACHE_VERSION}`;
+const RUNTIME_CACHE = `sophia-praxis-runtime-v${CACHE_VERSION}`;
+const DATA_CACHE = `sophia-praxis-data-v${CACHE_VERSION}`;
 
 // Critical resources to cache on install for instant loads
 const PRECACHE_RESOURCES = [
@@ -227,7 +227,7 @@ self.addEventListener('push', (event) => {
   console.log('[Service Worker] Push Received.');
   console.log(`[Service Worker] Push had this data: "${event.data ? event.data.text() : 'no data'}"`);
 
-  const title = 'OnDeck';
+  const title = 'Sophia Praxis';
   const options = {
     body: event.data && event.data.text() ? event.data.text() : 'Something new happened!',
     icon: '/icons/android/android-launchericon-192-192.png',

@@ -1,5 +1,5 @@
 /**
- * OnDeck PWA Service Worker
+ * Sophia Praxis PWA Service Worker
  * Advanced configuration with specific cache strategies
  */
 

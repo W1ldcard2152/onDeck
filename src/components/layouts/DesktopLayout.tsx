@@ -35,7 +35,7 @@ const DesktopLayout = () => {
   // Initialize active section from sessionStorage (persists on minimize) or default to dashboard
   const [activeSection, setActiveSection] = useState<SectionType>(() => {
     if (typeof window !== 'undefined') {
-      const saved = sessionStorage.getItem('ondeck-active-section');
+      const saved = sessionStorage.getItem('sophia-praxis-active-section');
       return (saved as SectionType) || 'dashboard';
     }
     return 'dashboard';
@@ -54,7 +54,7 @@ const DesktopLayout = () => {
       
       // Show notification if permissions are granted
       if ('Notification' in window && Notification.permission === 'granted') {
-        new Notification('OnDeck Update Available', {
+        new Notification('Sophia Praxis Update Available', {
           body: 'New features are available. Refresh to update.',
           icon: '/icons/icon-192x192.png'
         });
@@ -71,7 +71,7 @@ const DesktopLayout = () => {
   // Save active section to sessionStorage whenever it changes
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      sessionStorage.setItem('ondeck-active-section', activeSection);
+      sessionStorage.setItem('sophia-praxis-active-section', activeSection);
     }
   }, [activeSection]);
 

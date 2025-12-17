@@ -50,12 +50,12 @@ export const MobileHeader: React.FC<MobileHeaderProps> = ({
       className
     )}>
       {/* Logo */}
-      <button 
+      <button
         onClick={() => onSectionChange?.('dashboard')}
         className="flex items-center hover:opacity-90 transition-opacity"
       >
-        <div className="w-8 h-8 bg-blue-500 rounded-lg mr-2"></div>
-        <span className="text-xl font-semibold">OnDeck</span>
+        <div className="w-8 h-8 bg-orange-500 rounded-lg mr-2"></div>
+        <span className="text-xl font-semibold">Sophia Praxis</span>
       </button>
 
       {/* Actions */}

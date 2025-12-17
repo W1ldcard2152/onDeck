@@ -5,17 +5,17 @@ export default function Document() {
     <Html lang="en">
       <Head>
         <meta charSet="utf-8" />
-        <meta name="application-name" content="OnDeck" />
+        <meta name="application-name" content="Sophia Praxis" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-        <meta name="apple-mobile-web-app-title" content="OnDeck" />
+        <meta name="apple-mobile-web-app-title" content="Sophia Praxis" />
         <meta name="description" content="Task, project, and note management application" />
         <meta name="format-detection" content="telephone=no" />
         <meta name="mobile-web-app-capable" content="yes" />
         <meta name="msapplication-config" content="/browserconfig.xml" />
-        <meta name="msapplication-TileColor" content="#2563eb" />
+        <meta name="msapplication-TileColor" content="#ea580c" />
         <meta name="msapplication-tap-highlight" content="no" />
-        <meta name="theme-color" content="#2563eb" />
+        <meta name="theme-color" content="#ea580c" />
         
         {/* PWA manifest - this is critical for installability */}
         <link rel="manifest" href="/manifest.json" />

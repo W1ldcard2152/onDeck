@@ -794,20 +794,27 @@ export class HabitTaskGenerator {
     console.log(`createHabitTask called for "${habit.title}" on ${dateStr}`);
     console.log(`  recurrence_rule exists: ${!!habit.recurrence_rule}`);
     console.log(`  time_of_day: ${habit.recurrence_rule?.time_of_day || 'NOT SET'}`)
-    
+    console.log(`  is_active: ${habit.is_active}`)
+
+    // DEFENSIVE CHECK: Ensure habit is active before creating any task
+    if (!habit.is_active) {
+      console.warn(`⚠️ BLOCKED: Attempted to create task for INACTIVE habit "${habit.title}" (${habit.id}) on ${dateStr}`)
+      return
+    }
+
     // Check if a task already exists for this habit on this date
-    const { data: existingTask, error: checkError } = await this.supabase
+    const { data: existingTask, error: checkError} = await this.supabase
       .from('tasks')
       .select('id')
       .eq('habit_id', habit.id)
       .eq('assigned_date', dateStr)
       .maybeSingle()
-    
+
     if (checkError) {
       console.error('Error checking for existing task:', checkError)
       throw checkError
     }
-    
+
     if (existingTask) {
       console.log(`Task already exists for habit ${habit.id} on ${dateStr}, skipping`)
       return

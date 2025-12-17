@@ -5,7 +5,7 @@ import type { Metadata, Viewport } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'OnDeck',
+  title: 'Sophia Praxis',
   description: 'Task, project, and note management application',
   manifest: '/manifest.json',
   icons: {
@@ -26,7 +26,7 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     statusBarStyle: 'default',
-    title: 'OnDeck'
+    title: 'Sophia Praxis'
   },
   formatDetection: {
     telephone: false
@@ -34,7 +34,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: '#2563eb',
+  themeColor: '#ea580c',
   width: 'device-width',
   initialScale: 1,
   maximumScale: 1,

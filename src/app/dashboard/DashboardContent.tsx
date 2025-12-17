@@ -335,7 +335,7 @@ const DashboardPage: React.FC = () => {
       case 'low':
         return 'bg-gray-100 text-gray-800';
       default:
-        return 'bg-blue-100 text-blue-800';
+        return 'bg-orange-100 text-orange-800';
     }
   };
 
@@ -423,13 +423,13 @@ const DashboardPage: React.FC = () => {
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild disabled={loadingTasks[task.id]}>
                           <button
-                            className="mr-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 rounded-sm disabled:opacity-50"
+                            className="mr-2 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 rounded-sm disabled:opacity-50"
                             aria-label="Change task status"
                           >
                             {loadingTasks[task.id] ? (
-                              <div className="h-5 w-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                              <div className="h-5 w-5 border-2 border-orange-500 border-t-transparent rounded-full animate-spin" />
                             ) : (
-                              <CheckSquare className="h-5 w-5 text-blue-500" />
+                              <CheckSquare className="h-5 w-5 text-orange-500" />
                             )}
                           </button>
                         </DropdownMenuTrigger>
@@ -528,13 +528,13 @@ const DashboardPage: React.FC = () => {
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild disabled={loadingTasks[task.id]}>
                           <button
-                            className="mr-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 rounded-sm disabled:opacity-50"
+                            className="mr-2 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 rounded-sm disabled:opacity-50"
                             aria-label="Change task status"
                           >
                             {loadingTasks[task.id] ? (
-                              <div className="h-5 w-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                              <div className="h-5 w-5 border-2 border-orange-500 border-t-transparent rounded-full animate-spin" />
                             ) : (
-                              <CheckSquare className="h-5 w-5 text-blue-500" />
+                              <CheckSquare className="h-5 w-5 text-orange-500" />
                             )}
                           </button>
                         </DropdownMenuTrigger>
@@ -687,7 +687,7 @@ const DashboardPage: React.FC = () => {
               )}
               
               <div className="pt-2">
-                <Button variant="ghost" className="text-blue-600 hover:text-blue-700 p-0 h-auto" asChild>
+                <Button variant="ghost" className="text-orange-600 hover:text-orange-700 p-0 h-auto" asChild>
                   <a href="/tasks">
                     View all tasks <ArrowRight className="ml-1 h-4 w-4" />
                   </a>
