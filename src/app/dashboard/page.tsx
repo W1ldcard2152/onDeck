@@ -4,10 +4,8 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { TaskCard } from '@/components/TaskCard';
 import { NoteCard } from '@/components/NoteCard';
 import { DashboardCard } from '@/components/DashboardCard';
-import { NewTaskForm } from '@/components/NewTaskForm';
-import { NewNoteForm } from '@/components/NewNoteForm';
 import { NewEntryForm } from '@/components/NewEntryForm';
-import { DoneEntryForm } from '@/components/DoneEntryForm';
+import { NewEntryDropdown } from '@/components/NewEntryDropdown';
 import { Button } from '@/components/ui/button';
 import { Plus, Calendar, Clock, CheckSquare, FileText, ArrowRight, MoreHorizontal, MoreVertical, Link, CheckCircle2 } from 'lucide-react';
 import { useTasks } from '@/hooks/useTasks';
@@ -716,21 +714,13 @@ const DashboardPage: React.FC = () => {
         {/* Desktop layout: title and buttons on same line */}
         <div className="hidden sm:flex justify-between items-center">
           <h1 className="text-2xl font-bold">Dashboard</h1>
-          <div className="flex gap-2">
-            <DoneEntryForm onEntryCreated={handleUpdate} />
-            <NewTaskForm onEntryCreated={handleUpdate} />
-            <NewNoteForm onEntryCreated={handleUpdate} />
-          </div>
+          <NewEntryDropdown onEntryCreated={handleUpdate} />
         </div>
-        
+
         {/* Mobile layout: title on top, buttons underneath */}
         <div className="sm:hidden space-y-4">
           <h1 className="text-2xl font-bold">Dashboard</h1>
-          <div className="flex flex-wrap gap-2">
-            <DoneEntryForm onEntryCreated={handleUpdate} />
-            <NewTaskForm onEntryCreated={handleUpdate} />
-            <NewNoteForm onEntryCreated={handleUpdate} />
-          </div>
+          <NewEntryDropdown onEntryCreated={handleUpdate} />
         </div>
       </div>
       

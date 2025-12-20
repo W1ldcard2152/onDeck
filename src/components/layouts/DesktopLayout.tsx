@@ -21,6 +21,7 @@ import HabitsPage from '@/app/habits/page';
 import ChecklistsPage from '@/app/checklists/page';
 import FeedbackPage from '@/app/feedback/page';
 import QuotesPage from '@/app/quotes/page';
+import RelationshipsPage from '@/app/relationships/page';
 import InstallPWA from '../InstallPWA';
 import PWAStatus from '../PWAStatus';
 import OfflineNotification from '../OfflineNotification';
@@ -143,6 +144,8 @@ const DesktopLayout = () => {
         return <ChecklistsPage />;
       case 'quotes':
         return <QuotesPage />;
+      case 'relationships':
+        return <RelationshipsPage />;
       case 'media-vault':
         return <div className="text-center py-12">Media Vault feature coming soon</div>;
       case 'feedback':

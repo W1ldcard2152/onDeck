@@ -12,14 +12,20 @@ import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 
 interface DoneEntryFormProps {
   onEntryCreated?: (entry: any) => void;
+  open?: boolean;
+  setOpen?: (open: boolean) => void;
 }
 
-export const DoneEntryForm: React.FC<DoneEntryFormProps> = ({ 
-  onEntryCreated
+export const DoneEntryForm: React.FC<DoneEntryFormProps> = ({
+  onEntryCreated,
+  open: controlledOpen,
+  setOpen: controlledSetOpen
 }) => {
   const { user } = useSupabaseAuth();
   const supabase = createClientComponentClient();
-  const [open, setOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
+  const open = controlledOpen !== undefined ? controlledOpen : internalOpen;
+  const setOpen = controlledSetOpen || setInternalOpen;
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -81,12 +87,14 @@ export const DoneEntryForm: React.FC<DoneEntryFormProps> = ({
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button variant="outline" className="flex items-center gap-2">
-          <CheckSquare className="h-4 w-4" />
-          + Done
-        </Button>
-      </DialogTrigger>
+      {controlledOpen === undefined && (
+        <DialogTrigger asChild>
+          <Button variant="outline" className="flex items-center gap-2">
+            <CheckSquare className="h-4 w-4" />
+            + Done
+          </Button>
+        </DialogTrigger>
+      )}
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Add Completed Task</DialogTitle>

@@ -101,15 +101,8 @@ export function useTasks(
         return;
       }
       
-      // Apply date filtering in JavaScript for more reliable results
-      const allTasks = allTasksRaw.filter(task => {
-        // Include tasks with no assigned_date
-        if (!task.assigned_date) return true;
-        
-        // Check if assigned_date is within our range
-        const taskDate = task.assigned_date; // YYYY-MM-DD format
-        return taskDate >= lowerDateFilter && taskDate <= upperDateFilter;
-      });
+      // No date filtering - show all tasks
+      const allTasks = allTasksRaw;
       
       console.log(`Filtered ${allTasksRaw.length} tasks down to ${allTasks.length} within date range ${lowerDateFilter} to ${upperDateFilter}`);
       

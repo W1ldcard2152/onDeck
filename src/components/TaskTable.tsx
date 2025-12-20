@@ -2,7 +2,7 @@ import { useSupabaseAuth } from '@/hooks/useSupabaseAuth';
 import React, { useState, useEffect } from 'react';
 import TruncatedCell from './TruncatedCell';
 import { format } from 'date-fns';
-import { Check, MoreHorizontal, Link, ChevronDown, ChevronUp, ChevronRight, ChevronLeft, AlertCircle, Repeat } from 'lucide-react';
+import { Check, MoreHorizontal, Link, ChevronDown, ChevronUp, ChevronRight, ChevronLeft, AlertCircle, Repeat, Trash2 } from 'lucide-react';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import { NewEntryForm } from '@/components/NewEntryForm';
 import {
@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import type { Database } from '@/types/database.types';
 import type { TaskWithDetails } from '@/lib/types';
 import type { Priority, TaskStatus } from '@/types/database.types';
@@ -43,6 +44,8 @@ interface TaskTableProps {
   onTaskUpdate: () => void;
   onCompletedToggle?: (shouldFetch: boolean) => void;
   completedLoading?: boolean;
+  title?: string;
+  showCompletedSection?: boolean;
 }
 
 interface TaskTableBaseProps {
@@ -91,8 +94,8 @@ function formatContextsForDisplay(dailyContext: string | null): string {
 }
 
 // TaskTableBase Component
-const TaskTableBase: React.FC<TaskTableBaseProps> = ({ 
-  tasks, 
+const TaskTableBase: React.FC<TaskTableBaseProps> = ({
+  tasks,
   onTaskUpdate,
   sorts,
   onSort,
@@ -102,6 +105,7 @@ const TaskTableBase: React.FC<TaskTableBaseProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [taskToEdit, setTaskToEdit] = useState<TaskWithDetails | null>(null);
   const [projectInfoMap, setProjectInfoMap] = useState<Record<string, ProjectInfo>>({});
+  const [selectedTasks, setSelectedTasks] = useState<Set<string>>(new Set());
   const supabase = createClientComponentClient<Database>();
   const { user } = useSupabaseAuth();
 
@@ -202,10 +206,91 @@ const TaskTableBase: React.FC<TaskTableBaseProps> = ({
     }
   }, [tasks, supabase]);
 
+  const toggleTaskSelection = (taskId: string) => {
+    setSelectedTasks(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(taskId)) {
+        newSet.delete(taskId);
+      } else {
+        newSet.add(taskId);
+      }
+      return newSet;
+    });
+  };
+
+  const toggleAllTasks = () => {
+    if (selectedTasks.size === tasks.length) {
+      setSelectedTasks(new Set());
+    } else {
+      setSelectedTasks(new Set(tasks.map(t => t.id)));
+    }
+  };
+
+  const bulkDeleteTasks = async (): Promise<void> => {
+    if (selectedTasks.size === 0) return;
+
+    const confirmMessage = `Are you sure you want to delete ${selectedTasks.size} task(s)? This cannot be undone.`;
+    if (!window.confirm(confirmMessage)) return;
+
+    setError(null);
+    const tasksToDelete = Array.from(selectedTasks);
+
+    try {
+      for (const taskId of tasksToDelete) {
+        setLoading(prev => ({ ...prev, [taskId]: true }));
+
+        // Get the task to check if it's project-related
+        const { data: taskData, error: fetchError } = await supabase
+          .from('tasks')
+          .select('*')
+          .eq('id', taskId)
+          .single();
+
+        if (fetchError) throw fetchError;
+
+        // If task is part of a project, notify the ProjectTaskManager
+        if (taskData?.project_id) {
+          const projectTaskManager = new ProjectTaskManager({
+            supabase,
+            userId: user ? user.id : null
+          });
+          await projectTaskManager.handleTaskDeletion(taskId);
+        }
+
+        // Delete the task
+        const { error: taskError } = await supabase
+          .from('tasks')
+          .delete()
+          .eq('id', taskId);
+
+        if (taskError) throw taskError;
+
+        // Delete the item
+        const { error: itemError } = await supabase
+          .from('items')
+          .delete()
+          .eq('id', taskId);
+
+        if (itemError) throw itemError;
+      }
+
+      setSelectedTasks(new Set());
+      onTaskUpdate();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Error deleting tasks';
+      setError(message);
+      console.error('Error deleting tasks:', err);
+    } finally {
+      tasksToDelete.forEach(taskId => {
+        setLoading(prev => ({ ...prev, [taskId]: false }));
+      });
+    }
+  };
+
   const deleteTask = async (taskId: string): Promise<void> => {
     setLoading(prev => ({ ...prev, [taskId]: true }));
     setError(null);
-    
+
     try {
       // Get the task to check if it's project-related
       const { data: taskData, error: fetchError } = await supabase
@@ -213,7 +298,7 @@ const TaskTableBase: React.FC<TaskTableBaseProps> = ({
         .select('*')
         .eq('id', taskId)
         .single();
-        
+
       if (fetchError) throw fetchError;
       
       // If task is part of a project, check if it should be allowed to be deleted
@@ -528,15 +613,49 @@ const TaskTableBase: React.FC<TaskTableBaseProps> = ({
           {error}
         </div>
       )}
-      
+
+      {selectedTasks.size > 0 && (
+        <div className="mb-4 flex items-center gap-4 p-4 bg-blue-50 rounded-lg">
+          <span className="text-sm font-medium text-blue-900">
+            {selectedTasks.size} task(s) selected
+          </span>
+          <Button
+            variant="destructive"
+            size="sm"
+            onClick={bulkDeleteTasks}
+            className="flex items-center gap-2"
+          >
+            <Trash2 className="h-4 w-4" />
+            Delete Selected
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setSelectedTasks(new Set())}
+          >
+            Clear Selection
+          </Button>
+        </div>
+      )}
+
       <div className="relative">
         <ScrollableTableWrapper>
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-12">
+                  <Checkbox
+                    checked={selectedTasks.size === tasks.length && tasks.length > 0}
+                    onCheckedChange={toggleAllTasks}
+                    aria-label="Select all tasks"
+                  />
+                </TableHead>
+                <TableHead className="w-12">
+                  <span className="text-sm font-medium">Actions</span>
+                </TableHead>
                 <TableHead>
-                  <Button 
-                    variant="ghost" 
+                  <Button
+                    variant="ghost"
                     onClick={() => onSort('status')}
                     className="hover:bg-gray-100"
                   >
@@ -592,16 +711,13 @@ const TaskTableBase: React.FC<TaskTableBaseProps> = ({
                   </Button>
                 </TableHead>
                 <TableHead>
-                  <Button 
-                    variant="ghost" 
+                  <Button
+                    variant="ghost"
                     onClick={() => onSort('project')}
                     className="hover:bg-gray-100"
                   >
                     Linked Project {getSortIcon('project')}
                   </Button>
-                </TableHead>
-                <TableHead className="w-12 text-right">
-                  <span className="text-sm font-medium">Actions</span>
                 </TableHead>
               </TableRow>
             </TableHeader>
@@ -613,12 +729,69 @@ const TaskTableBase: React.FC<TaskTableBaseProps> = ({
                 const isProjectTask = Boolean(task.project_id);
                 const isHabitTask = Boolean(task.habit_id);
                 const projectInfo = task.project_id ? projectInfoMap[task.project_id] : null;
-                
+
                 return (
-                  <TableRow 
+                  <TableRow
                     key={task.id}
                     className={isProjectTask ? "bg-blue-50/30" : isHabitTask ? "bg-green-50/30" : ""}
                   >
+                    <TableCell>
+                      <Checkbox
+                        checked={selectedTasks.has(task.id)}
+                        onCheckedChange={() => toggleTaskSelection(task.id)}
+                        aria-label={`Select ${task.item.title}`}
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            disabled={isLoading}
+                          >
+                            <MoreHorizontal className="h-4 w-4" />
+                            <span className="sr-only">Open menu</span>
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="start">
+                          <DropdownMenuItem
+                            onClick={() => setTaskToEdit(task)}
+                            disabled={isLoading}
+                          >
+                            Edit Task
+                          </DropdownMenuItem>
+
+                          {/* Show different options based on current status */}
+                          {status !== 'completed' && (
+                            <DropdownMenuItem
+                              onClick={() => updateTaskStatus(task.id, 'completed')}
+                              disabled={isLoading}
+                            >
+                              Mark Completed
+                            </DropdownMenuItem>
+                          )}
+                          {status === 'completed' && (
+                            <DropdownMenuItem
+                              onClick={() => updateTaskStatus(task.id, 'active')}
+                              disabled={isLoading}
+                            >
+                              Mark Active
+                            </DropdownMenuItem>
+                          )}
+
+                          {/* Delete task with warning for project tasks */}
+                          <DropdownMenuItem
+                            onClick={() => deleteTask(task.id)}
+                            disabled={isLoading}
+                            className="text-red-600 hover:text-red-700"
+                          >
+                            Delete Task
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </TableCell>
                     <TableCell>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
@@ -768,57 +941,6 @@ const TaskTableBase: React.FC<TaskTableBaseProps> = ({
                         </div>
                       ) : '-'}
                     </TableCell>
-                    
-                    <TableCell className="text-right">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button 
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8"
-                            disabled={isLoading}
-                          >
-                            <MoreHorizontal className="h-4 w-4" />
-                            <span className="sr-only">Open menu</span>
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem
-                            onClick={() => setTaskToEdit(task)}
-                            disabled={isLoading}
-                          >
-                            Edit Task
-                          </DropdownMenuItem>
-                          
-                          {/* Show different options based on current status */}
-                          {status !== 'completed' && (
-                            <DropdownMenuItem
-                              onClick={() => updateTaskStatus(task.id, 'completed')}
-                              disabled={isLoading}
-                            >
-                              Mark Completed
-                            </DropdownMenuItem>
-                          )}
-                          {status === 'completed' && (
-                            <DropdownMenuItem
-                              onClick={() => updateTaskStatus(task.id, 'active')}
-                              disabled={isLoading}
-                            >
-                              Mark Active
-                            </DropdownMenuItem>
-                          )}
-                          
-                          {/* Delete task with warning for project tasks */}
-                          <DropdownMenuItem
-                            onClick={() => deleteTask(task.id)}
-                            disabled={isLoading}
-                            className="text-red-600 hover:text-red-700"
-                          >
-                            Delete Task
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </TableCell>
                   </TableRow>
                 );
               })}
@@ -843,11 +965,13 @@ const TaskTableBase: React.FC<TaskTableBaseProps> = ({
 };
 
 // Main TaskTable component
-const TaskTable: React.FC<TaskTableProps> = ({ 
-  tasks, 
-  onTaskUpdate, 
+const TaskTable: React.FC<TaskTableProps> = ({
+  tasks,
+  onTaskUpdate,
   onCompletedToggle,
-  completedLoading = false 
+  completedLoading = false,
+  title,
+  showCompletedSection = true
 }) => {
   const [showCompleted, setShowCompleted] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -1017,8 +1141,11 @@ const TaskTable: React.FC<TaskTableProps> = ({
 
   return (
     <div className="space-y-6">
+      {title && (
+        <h2 className="text-xl font-semibold">{title}</h2>
+      )}
       <div className="bg-white rounded-lg shadow">
-        <TaskTableBase 
+        <TaskTableBase
           tasks={activeTasks}
           onTaskUpdate={onTaskUpdate}
           sorts={activeSorts}
@@ -1028,7 +1155,8 @@ const TaskTable: React.FC<TaskTableProps> = ({
         />
       </div>
 
-      <div className="bg-white rounded-lg shadow">
+      {showCompletedSection && (
+        <div className="bg-white rounded-lg shadow">
         <div 
           className="p-4 border-b cursor-pointer hover:bg-gray-50 transition-colors"
           onClick={() => {
@@ -1128,7 +1256,8 @@ const TaskTable: React.FC<TaskTableProps> = ({
             )}
           </div>
         )}
-      </div>
+        </div>
+      )}
     </div>
   );
 };

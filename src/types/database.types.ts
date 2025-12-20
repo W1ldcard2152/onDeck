@@ -1,6 +1,8 @@
 export type TaskStatus = 'on_deck' | 'active' | 'completed';
 export type Priority = 'low' | 'normal' | 'high';
 export type EntryType = 'article' | 'video' | 'document' | 'resource' | 'note' | 'link';
+export type CommunicationMedium = 'Phone Call' | 'Text' | 'Email' | 'In Person' | 'Video Call' | 'Other';
+export type TimeOfDay = 'Morning' | 'Afternoon' | 'Evening' | 'Other';
 
 export interface NoteWithDetails {
   id: string;
@@ -245,6 +247,85 @@ export interface Database {
           content?: string;
           author?: string | null;
           source?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
+      relationships: {
+        Row: {
+          id: string;
+          user_id: string;
+          name: string;
+          phone: string | null;
+          email: string | null;
+          address: string | null;
+          notes: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          name: string;
+          phone?: string | null;
+          email?: string | null;
+          address?: string | null;
+          notes?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          name?: string;
+          phone?: string | null;
+          email?: string | null;
+          address?: string | null;
+          notes?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
+      communications: {
+        Row: {
+          id: string;
+          user_id: string;
+          relationship_id: string;
+          medium: CommunicationMedium;
+          medium_other: string | null;
+          summary: string;
+          communication_date: string;
+          time_of_day: TimeOfDay | null;
+          time_of_day_other: string | null;
+          synced: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          relationship_id: string;
+          medium: CommunicationMedium;
+          medium_other?: string | null;
+          summary: string;
+          communication_date?: string;
+          time_of_day?: TimeOfDay | null;
+          time_of_day_other?: string | null;
+          synced?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          relationship_id?: string;
+          medium?: CommunicationMedium;
+          medium_other?: string | null;
+          summary?: string;
+          communication_date?: string;
+          time_of_day?: TimeOfDay | null;
+          time_of_day_other?: string | null;
+          synced?: boolean;
           created_at?: string;
           updated_at?: string;
         };

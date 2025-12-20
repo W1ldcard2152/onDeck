@@ -18,19 +18,19 @@ export default function TasksPage() {
   const { user } = useSupabaseAuth();
   const [shouldFetchCompleted, setShouldFetchCompleted] = useState(false);
   
-  // Initially only load on_deck and active tasks
+  // Initially only load on_deck and active tasks (including habit tasks)
   const { tasks: activeTasks, isLoading, error, refetch } = useTasks(
     user?.id,
     50,
-    false,
+    true, // Include habit tasks
     ['on_deck', 'active']
   );
-  
+
   // Separate hook for completed tasks - always defined but only fetches when userId is provided
   const { tasks: completedTasks, isLoading: completedLoading } = useTasks(
     shouldFetchCompleted ? user?.id : undefined,
     50,
-    false,
+    true, // Include habit tasks
     shouldFetchCompleted ? ['completed'] : undefined
   );
   
@@ -51,20 +51,35 @@ export default function TasksPage() {
     setRefreshKey(prev => prev + 1);
   }, [activeTasks, completedTasks, shouldFetchCompleted]);
 
-  // Filter tasks based on selected date
+  // Filter tasks based on selected date and separate regular vs habit tasks
+  const [filteredRegularTasks, setFilteredRegularTasks] = useState<typeof activeTasks>([]);
+  const [filteredHabitTasks, setFilteredHabitTasks] = useState<typeof activeTasks>([]);
+
   useEffect(() => {
+    // Separate regular and habit tasks
+    const regularTasks = localTasks.filter(task => !task.habit_id);
+    const habitTasks = localTasks.filter(task => task.habit_id);
+
     if (!selectedDate) {
+      setFilteredRegularTasks(regularTasks);
+      setFilteredHabitTasks(habitTasks);
       setFilteredTasks(localTasks);
       return;
     }
 
-    const tasksForDate = localTasks.filter(task => {
-      const taskDate = task.due_date ? parseISO(task.due_date) : 
+    const filterByDate = (tasks: typeof localTasks) => tasks.filter(task => {
+      const taskDate = task.due_date ? parseISO(task.due_date) :
                       task.assigned_date ? parseISO(task.assigned_date) : null;
       return taskDate && isSameDay(taskDate, selectedDate);
     });
 
-    setFilteredTasks(tasksForDate);
+    setFilteredRegularTasks(filterByDate(regularTasks));
+    setFilteredHabitTasks(filterByDate(habitTasks));
+    setFilteredTasks(localTasks.filter(task => {
+      const taskDate = task.due_date ? parseISO(task.due_date) :
+                      task.assigned_date ? parseISO(task.assigned_date) : null;
+      return taskDate && isSameDay(taskDate, selectedDate);
+    }));
   }, [localTasks, selectedDate]);
 
   const handleDateSelect = (date: Date) => {
@@ -127,25 +142,40 @@ export default function TasksPage() {
       </div>
 
       {/* Monthly Calendar */}
-      <MonthlyCalendar 
+      <MonthlyCalendar
         tasks={localTasks.filter(task => !task.habit_id)} // Only show regular tasks, not habit tasks
         onDateSelect={handleDateSelect}
         selectedDate={selectedDate}
         showHabits={false}
       />
 
-      {/* Add key to force re-render on data changes */}
-      <TaskTable 
-        tasks={filteredTasks} 
+      {/* Regular Tasks Table */}
+      <TaskTable
+        tasks={filteredRegularTasks}
         onTaskUpdate={handleTaskUpdate}
         onCompletedToggle={setShouldFetchCompleted}
         completedLoading={completedLoading}
-        key={`tasks-table-${refreshKey}`} 
+        title="Regular Tasks"
+        showCompletedSection={true}
+        key={`regular-tasks-table-${refreshKey}`}
       />
-      
+
+      {/* Habit Tasks Section */}
+      {filteredHabitTasks.length > 0 && (
+        <TaskTable
+          tasks={filteredHabitTasks}
+          onTaskUpdate={handleTaskUpdate}
+          title="Habit Tasks"
+          showCompletedSection={false}
+          key={`habit-tasks-table-${refreshKey}`}
+        />
+      )}
+
       {/* Debug information */}
       <div className="text-xs text-gray-400 mt-8">
         Tasks with project links: {localTasks.filter(t => t.project_id).length} / {localTasks.length}
+        <br />
+        Regular tasks: {filteredRegularTasks.length} | Habit tasks: {filteredHabitTasks.length}
       </div>
       
       {/* Add TasksDebugger but only manually trigger refreshes */}
