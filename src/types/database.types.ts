@@ -3,6 +3,7 @@ export type Priority = 'low' | 'normal' | 'high';
 export type EntryType = 'article' | 'video' | 'document' | 'resource' | 'note' | 'link';
 export type CommunicationMedium = 'Phone Call' | 'Text' | 'Email' | 'In Person' | 'Video Call' | 'Other';
 export type TimeOfDay = 'Morning' | 'Afternoon' | 'Evening' | 'Other';
+export type ResourceType = 'website' | 'video' | 'article' | 'documentation' | 'tutorial' | 'other';
 
 export interface NoteWithDetails {
   id: string;
@@ -326,6 +327,41 @@ export interface Database {
           time_of_day?: TimeOfDay | null;
           time_of_day_other?: string | null;
           synced?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
+      catalog: {
+        Row: {
+          id: string;
+          user_id: string;
+          url: string;
+          title: string | null;
+          description: string | null;
+          resource_type: ResourceType | null;
+          capture_date: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          url: string;
+          title?: string | null;
+          description?: string | null;
+          resource_type?: ResourceType | null;
+          capture_date?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          url?: string;
+          title?: string | null;
+          description?: string | null;
+          resource_type?: ResourceType | null;
+          capture_date?: string;
           created_at?: string;
           updated_at?: string;
         };
