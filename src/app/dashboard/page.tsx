@@ -7,7 +7,7 @@ import { DashboardCard } from '@/components/DashboardCard';
 import { NewEntryForm } from '@/components/NewEntryForm';
 import { NewEntryDropdown } from '@/components/NewEntryDropdown';
 import { Button } from '@/components/ui/button';
-import { Plus, Calendar, Clock, CheckSquare, FileText, ArrowRight, MoreHorizontal, MoreVertical, Link, CheckCircle2 } from 'lucide-react';
+import { Plus, Calendar, Clock, CheckSquare, FileText, ArrowRight, MoreHorizontal, MoreVertical, Link, CheckCircle2, ChevronUp, ChevronDown } from 'lucide-react';
 import { useTasks } from '@/hooks/useTasks';
 import { useNotes } from '@/hooks/useNotes';
 import { useSupabaseAuth } from '@/hooks/useSupabaseAuth';
@@ -39,7 +39,13 @@ import { startOfDay, parseISO, isBefore } from 'date-fns';
 
 const DashboardPage: React.FC = () => {
   const { user } = useSupabaseAuth();
-  const { tasks: fetchedTasks, isLoading: tasksLoading, refetch: refetchTasks } = useTasks(user?.id, 50, true);
+  // Only fetch non-completed tasks for dashboard - filtering at database level for performance
+  const { tasks: fetchedTasks, isLoading: tasksLoading, refetch: refetchTasks } = useTasks(
+    user?.id,
+    50,
+    true, // includeHabitTasks
+    ['on_deck', 'active'] // Only fetch non-completed tasks (habit tasks included via includeHabitTasks flag)
+  );
   const { notes, isLoading: notesLoading, refetch: refetchNotes } = useNotes(user?.id);
   const { habits, isLoading: habitsLoading } = useHabits(user?.id);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -167,6 +173,17 @@ const DashboardPage: React.FC = () => {
     return isAllDay || taskContexts.includes(context);
   };
 
+  // Get primary context for a task
+  const getPrimaryContext = (task: TaskWithDetails): DailyContext | 'none' => {
+    if (!task.daily_context) return 'none';
+    try {
+      const contexts: DailyContext[] = JSON.parse(task.daily_context);
+      return contexts[0] || 'none';
+    } catch {
+      return 'none';
+    }
+  };
+
   // Filter tasks by context and date
   const getFilteredTasks = (context: DailyContext | 'all' | 'past') => {
     const today = startOfDay(new Date());
@@ -195,8 +212,91 @@ const DashboardPage: React.FC = () => {
       return (hasRelevantAssignedDate || hasRelevantDueDate) && taskMatchesContext(task, context);
     });
 
-    console.log(`Filtered tasks count: ${filtered.length}`);
-    return filtered;
+    // Sort tasks by context, then by due date priority
+    const contextOrder: Record<string, number> = {
+      'all_day': 0,
+      'morning': 1,
+      'work': 2,
+      'family': 3,
+      'evening': 4,
+      'none': 5
+    };
+
+    const sorted = filtered.sort((a, b) => {
+      // First sort by context (if viewing "all" tab)
+      if (context === 'all' || context === 'past') {
+        const contextA = getPrimaryContext(a);
+        const contextB = getPrimaryContext(b);
+        const contextDiff = contextOrder[contextA] - contextOrder[contextB];
+        if (contextDiff !== 0) return contextDiff;
+      }
+
+      // Within each context, prioritize tasks with due dates
+      const hasDueA = !!a.due_date;
+      const hasDueB = !!b.due_date;
+      if (hasDueA && !hasDueB) return -1;
+      if (!hasDueA && hasDueB) return 1;
+
+      // If both have due dates, sort by due date (earliest first)
+      if (hasDueA && hasDueB) {
+        const dateA = new Date(a.due_date!).getTime();
+        const dateB = new Date(b.due_date!).getTime();
+        if (dateA !== dateB) return dateA - dateB;
+      }
+
+      // Otherwise maintain assigned date order
+      if (a.assigned_date && b.assigned_date) {
+        return new Date(a.assigned_date).getTime() - new Date(b.assigned_date).getTime();
+      }
+
+      return 0;
+    });
+
+    console.log(`Filtered tasks count: ${sorted.length}`);
+    return sorted;
+  };
+
+  // Move task up or down in the list by swapping assigned dates
+  const moveTask = async (taskId: string, direction: 'up' | 'down', filteredTasks: TaskWithDetails[]) => {
+    const currentIndex = filteredTasks.findIndex(t => t.id === taskId);
+    if (currentIndex === -1) return;
+
+    const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
+    if (targetIndex < 0 || targetIndex >= filteredTasks.length) return;
+
+    const currentTask = filteredTasks[currentIndex];
+    const targetTask = filteredTasks[targetIndex];
+
+    // Don't allow moving past tasks with due dates if current task doesn't have one
+    if (!currentTask.due_date && targetTask.due_date) return;
+
+    // Swap the assigned_date values to maintain order
+    const tempDate = currentTask.assigned_date;
+    const newCurrentDate = targetTask.assigned_date;
+    const newTargetDate = tempDate;
+
+    // Optimistically update local state
+    setLocalTasks(prev => prev.map(task => {
+      if (task.id === currentTask.id) {
+        return { ...task, assigned_date: newCurrentDate };
+      }
+      if (task.id === targetTask.id) {
+        return { ...task, assigned_date: newTargetDate };
+      }
+      return task;
+    }));
+
+    try {
+      // Update both tasks in the database
+      await Promise.all([
+        supabase.from('tasks').update({ assigned_date: newCurrentDate }).eq('id', currentTask.id),
+        supabase.from('tasks').update({ assigned_date: newTargetDate }).eq('id', targetTask.id)
+      ]);
+    } catch (error) {
+      console.error('Error moving task:', error);
+      // Revert on error
+      refetchTasks();
+    }
   };
 
   // Handle updates
@@ -285,16 +385,15 @@ const DashboardPage: React.FC = () => {
     const tomorrow = addDays(today, 1);
     const dayAfterTomorrow = addDays(today, 2);
     const threeDaysLater = addDays(today, 3);
-    
-    // Get non-completed tasks
-    const activeTasks = tasks.filter(task => task.status !== 'completed');
-    
+
+    // Tasks are already filtered at database level to exclude 'completed' status
+    // No need for additional client-side filtering
+    const activeTasks = tasks;
+
     // Debug logging to see what tasks we have
-    console.log('All tasks:', tasks.length);
-    console.log('Active tasks:', activeTasks.length);
-    console.log('Habit tasks in all tasks:', tasks.filter(task => task.habit_id).length);
-    console.log('Habit tasks in active tasks:', activeTasks.filter(task => task.habit_id).length);
-    
+    console.log('All tasks (non-completed only):', tasks.length);
+    console.log('Habit tasks:', tasks.filter(task => task.habit_id).length);
+
     return { today, tomorrow, dayAfterTomorrow, threeDaysLater, activeTasks };
   }, [tasks]);
 
@@ -588,24 +687,74 @@ const DashboardPage: React.FC = () => {
     }
   };
 
+  // Get context background color for task cards
+  const getContextColor = (task: TaskWithDetails): string => {
+    // Tasks due TODAY or PAST get dark red color (priority alert)
+    // Only check due_date, not assigned_date
+    if (task.due_date) {
+      const isDueToday = isDateToday(task.due_date);
+      const isDuePast = isDatePast(task.due_date);
+
+      if (isDueToday || isDuePast) {
+        return 'bg-red-100 border-red-400'; // Dark red for due today or overdue
+      }
+    }
+
+    // Get the task's daily context
+    const dailyContexts: DailyContext[] = task.daily_context
+      ? (() => {
+          try {
+            return JSON.parse(task.daily_context);
+          } catch {
+            return [];
+          }
+        })()
+      : [];
+
+    // Use the first context for color (most tasks will have one context)
+    const primaryContext = dailyContexts[0];
+
+    switch (primaryContext) {
+      case 'all_day':
+        return 'bg-white border-gray-200'; // White for all day
+      case 'morning':
+        return 'bg-orange-50 border-orange-200'; // Orange for morning
+      case 'work':
+        return 'bg-red-50 border-red-200'; // Red for work
+      case 'family':
+        return 'bg-green-50 border-green-200'; // Green for family
+      case 'evening':
+        return 'bg-purple-50 border-purple-200'; // Purple for evening
+      default:
+        return 'bg-white border-gray-200'; // Default white for no context
+    }
+  };
+
   // Render task list for a given context
   const renderTaskList = (context: DailyContext | 'all' | 'past') => {
     const filteredTasks = getFilteredTasks(context);
 
+    const getContextTitle = (ctx: typeof context) => {
+      if (ctx === 'all') return 'All';
+      if (ctx === 'past') return 'Past';
+      if (ctx === 'all_day') return 'All Day';
+      return ctx.charAt(0).toUpperCase() + ctx.slice(1);
+    };
+
     return (
       <DashboardCard
-        title={`${context === 'all' ? 'All' : context === 'past' ? 'Past' : context.charAt(0).toUpperCase() + context.slice(1)} Tasks (${filteredTasks.length})`}
+        title={`${getContextTitle(context)} Tasks (${filteredTasks.length})`}
         content={
           <div className="space-y-3">
             {filteredTasks.length === 0 ? (
               <div className="text-gray-500 text-center py-4">No tasks</div>
             ) : (
-              filteredTasks.map(task => {
+              filteredTasks.map((task, index) => {
                 const isPastDue = task.due_date && isDatePast(task.due_date);
                 const isPastAssigned = task.assigned_date && isDatePast(task.assigned_date);
                 const contextLabel = isPastDue ? "OVERDUE" : isPastAssigned ? "PAST ASSIGNED" : undefined;
 
-                return renderTask(task, contextLabel);
+                return renderTask(task, contextLabel, filteredTasks, index);
               })
             )}
           </div>
@@ -615,53 +764,78 @@ const DashboardPage: React.FC = () => {
   };
 
   // Render a task item with simpler design
-  const renderTask = (task: TaskWithDetails, contextLabel?: string) => (
-    <div key={task.id} className={`p-3 md:p-4 rounded-lg border hover:shadow-sm transition-shadow ${getTimeColor(task)}`}>
-      <div className="flex items-start gap-2 md:gap-3">
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-9 w-9 md:h-8 md:w-8 flex-shrink-0"
-            >
-              <MoreVertical className="h-5 w-5 md:h-4 md:w-4" />
-              <span className="sr-only">Open menu</span>
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="w-48">
-            <DropdownMenuItem
-              onClick={() => setTaskToEdit(task)}
-              className="text-base md:text-sm py-3 md:py-2"
-            >
-              Edit Task
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onClick={() => updateTaskStatus(task.id, 'completed')}
-              className="text-base md:text-sm py-3 md:py-2"
-            >
-              Mark Completed
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onClick={() => updateTaskStatus(task.id, task.status === 'active' ? 'on_deck' : 'active')}
-              className="text-base md:text-sm py-3 md:py-2"
-            >
-              Edit Status: {task.status === 'active' ? 'Set On Deck' : 'Set Active'}
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onClick={() => deleteTask(task.id)}
-              className="text-red-600 hover:text-red-700 text-base md:text-sm py-3 md:py-2"
-            >
-              Delete Task
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-        <button
-          onClick={() => updateTaskStatus(task.id, 'completed')}
-          className="flex-shrink-0 mt-0.5 p-1 md:p-0"
-        >
-          <CheckCircle2 className="h-6 w-6 md:h-5 md:w-5 text-blue-500" />
-        </button>
+  const renderTask = (task: TaskWithDetails, contextLabel?: string, filteredTasks?: TaskWithDetails[], index?: number) => {
+    const canMoveUp = filteredTasks && index !== undefined && index > 0;
+    const canMoveDown = filteredTasks && index !== undefined && index < filteredTasks.length - 1;
+
+    return (
+      <div key={task.id} className={`p-3 md:p-4 rounded-lg border hover:shadow-sm transition-shadow ${getContextColor(task)}`}>
+        <div className="flex items-start gap-2 md:gap-3">
+          {/* Manual ordering arrows */}
+          {filteredTasks && index !== undefined && (
+            <div className="flex flex-col gap-0.5 flex-shrink-0">
+              <button
+                onClick={() => moveTask(task.id, 'up', filteredTasks)}
+                disabled={!canMoveUp}
+                className={`p-0.5 rounded hover:bg-gray-200 transition-colors ${!canMoveUp ? 'opacity-30 cursor-not-allowed' : ''}`}
+                title="Move up"
+              >
+                <ChevronUp className="h-4 w-4 text-gray-600" />
+              </button>
+              <button
+                onClick={() => moveTask(task.id, 'down', filteredTasks)}
+                disabled={!canMoveDown}
+                className={`p-0.5 rounded hover:bg-gray-200 transition-colors ${!canMoveDown ? 'opacity-30 cursor-not-allowed' : ''}`}
+                title="Move down"
+              >
+                <ChevronDown className="h-4 w-4 text-gray-600" />
+              </button>
+            </div>
+          )}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-9 w-9 md:h-8 md:w-8 flex-shrink-0"
+              >
+                <MoreVertical className="h-5 w-5 md:h-4 md:w-4" />
+                <span className="sr-only">Open menu</span>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-48">
+              <DropdownMenuItem
+                onClick={() => setTaskToEdit(task)}
+                className="text-base md:text-sm py-3 md:py-2"
+              >
+                Edit Task
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => updateTaskStatus(task.id, 'completed')}
+                className="text-base md:text-sm py-3 md:py-2"
+              >
+                Mark Completed
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => updateTaskStatus(task.id, task.status === 'active' ? 'on_deck' : 'active')}
+                className="text-base md:text-sm py-3 md:py-2"
+              >
+                Edit Status: {task.status === 'active' ? 'Set On Deck' : 'Set Active'}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => deleteTask(task.id)}
+                className="text-red-600 hover:text-red-700 text-base md:text-sm py-3 md:py-2"
+              >
+                Delete Task
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <button
+            onClick={() => updateTaskStatus(task.id, 'completed')}
+            className="flex-shrink-0 mt-0.5 p-1 md:p-0"
+          >
+            <CheckCircle2 className="h-6 w-6 md:h-5 md:w-5 text-blue-500" />
+          </button>
         <div className="flex-1 min-w-0">
           <h3 className="font-medium text-gray-900 text-base md:text-sm break-words">{task.item.title}</h3>
           <div className="flex flex-col sm:flex-row gap-1 sm:gap-2 mt-1 text-xs text-gray-600">
@@ -706,7 +880,8 @@ const DashboardPage: React.FC = () => {
         <Badge className="bg-blue-100 text-blue-800 flex-shrink-0 text-xs">{task.priority || 'normal'}</Badge>
       </div>
     </div>
-  );
+    );
+  };
 
   return (
     <div className="space-y-6 py-6">
@@ -827,9 +1002,10 @@ const DashboardPage: React.FC = () => {
 
       {/* Tabs for Context-based Tasks */}
       <Tabs defaultValue="all" className="w-full">
-        <TabsList className="grid w-full grid-cols-3 md:grid-cols-6 gap-1">
+        <TabsList className="grid w-full grid-cols-4 md:grid-cols-7 gap-1">
           <TabsTrigger value="all" className="text-xs md:text-sm">All</TabsTrigger>
           <TabsTrigger value="past" className="text-xs md:text-sm">Past</TabsTrigger>
+          <TabsTrigger value="all_day" className="text-xs md:text-sm">All Day</TabsTrigger>
           <TabsTrigger value="morning" className="text-xs md:text-sm">Morning</TabsTrigger>
           <TabsTrigger value="work" className="text-xs md:text-sm">Work</TabsTrigger>
           <TabsTrigger value="family" className="text-xs md:text-sm">Family</TabsTrigger>
@@ -842,6 +1018,10 @@ const DashboardPage: React.FC = () => {
 
         <TabsContent value="past">
           {renderTaskList('past')}
+        </TabsContent>
+
+        <TabsContent value="all_day">
+          {renderTaskList('all_day')}
         </TabsContent>
 
         <TabsContent value="morning">

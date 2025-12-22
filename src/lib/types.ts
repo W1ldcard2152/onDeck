@@ -5,7 +5,7 @@ export type KnowledgeEntryType = 'article' | 'video' | 'document' | 'resource' |
 export type NoteType = 'note' | 'thought';
 export type ProjectStatus = 'active' | 'completed' | 'on_hold';
 export type StepStatus = 'pending' | 'in_progress' | 'completed';
-export type DailyContext = 'morning' | 'work' | 'family' | 'evening';
+export type DailyContext = 'all_day' | 'morning' | 'work' | 'family' | 'evening';
 
 export interface Item {
   id: string;

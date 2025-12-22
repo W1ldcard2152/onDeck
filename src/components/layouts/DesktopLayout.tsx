@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useMemo } from 'react';
+import dynamic from 'next/dynamic';
 import { Bell, Settings, MessageSquare } from 'lucide-react';
 import { BottomNav } from './responsiveNav/BottomNav';
 import { DesktopNav } from './responsiveNav/DesktopNav';
@@ -9,25 +10,47 @@ import AuthUI from '@/components/Auth';
 import { useSupabaseAuth } from '@/hooks/useSupabaseAuth';
 import { useServiceWorker } from '@/hooks/useServiceWorker';
 import type { SectionType } from './responsiveNav/types';
-import DashboardPage from '@/app/dashboard/page';
-import TasksPage from '@/app/tasks/page';
-import NotesPage from '@/app/notes/page';
-import TrainOfThoughtPage from '@/app/train-of-thought/page';
 import UserMenu from '../UserMenu';
 import IntegratedSearch from '../IntegratedSearch';
 import ClientLayout from './ClientLayout';
-import ProjectsPage from '@/app/projects/page';
-import HabitsPage from '@/app/habits/page';
-import ChecklistsPage from '@/app/checklists/page';
-import FeedbackPage from '@/app/feedback/page';
-import QuotesPage from '@/app/quotes/page';
-import RelationshipsPage from '@/app/relationships/page';
-import CatalogPage from '@/app/catalog/page';
 import InstallPWA from '../InstallPWA';
 import PWAStatus from '../PWAStatus';
 import OfflineNotification from '../OfflineNotification';
 import PWANavigationBar from '../PWANavigationBar';
 import { FeedbackModal } from '../FeedbackModal';
+
+// Critical pages - loaded immediately for fast initial render
+import DashboardPage from '@/app/dashboard/page';
+import TasksPage from '@/app/tasks/page';
+
+// Non-critical pages - lazy loaded on demand
+const NotesPage = dynamic(() => import('@/app/notes/page'), {
+  loading: () => <div className="flex items-center justify-center h-32"><div className="text-lg text-gray-500">Loading...</div></div>
+});
+const TrainOfThoughtPage = dynamic(() => import('@/app/train-of-thought/page'), {
+  loading: () => <div className="flex items-center justify-center h-32"><div className="text-lg text-gray-500">Loading...</div></div>
+});
+const ProjectsPage = dynamic(() => import('@/app/projects/page'), {
+  loading: () => <div className="flex items-center justify-center h-32"><div className="text-lg text-gray-500">Loading...</div></div>
+});
+const HabitsPage = dynamic(() => import('@/app/habits/page'), {
+  loading: () => <div className="flex items-center justify-center h-32"><div className="text-lg text-gray-500">Loading...</div></div>
+});
+const ChecklistsPage = dynamic(() => import('@/app/checklists/page'), {
+  loading: () => <div className="flex items-center justify-center h-32"><div className="text-lg text-gray-500">Loading...</div></div>
+});
+const FeedbackPage = dynamic(() => import('@/app/feedback/page'), {
+  loading: () => <div className="flex items-center justify-center h-32"><div className="text-lg text-gray-500">Loading...</div></div>
+});
+const QuotesPage = dynamic(() => import('@/app/quotes/page'), {
+  loading: () => <div className="flex items-center justify-center h-32"><div className="text-lg text-gray-500">Loading...</div></div>
+});
+const RelationshipsPage = dynamic(() => import('@/app/relationships/page'), {
+  loading: () => <div className="flex items-center justify-center h-32"><div className="text-lg text-gray-500">Loading...</div></div>
+});
+const CatalogPage = dynamic(() => import('@/app/catalog/page'), {
+  loading: () => <div className="flex items-center justify-center h-32"><div className="text-lg text-gray-500">Loading...</div></div>
+});
 
 const DesktopLayout = () => {
   const { user, loading } = useSupabaseAuth();
@@ -106,14 +129,55 @@ const DesktopLayout = () => {
   // Log service worker status in development
   useEffect(() => {
     if (process.env.NODE_ENV !== 'production') {
-      console.log('Service worker status in DesktopLayout:', { 
-        isActive, 
+      console.log('Service worker status in DesktopLayout:', {
+        isActive,
         isRegistered,
         error: error?.message,
         isInPWA
       });
     }
   }, [isActive, isRegistered, error, isInPWA]);
+
+  // Preload non-critical page chunks in the background after initial render
+  // This caches them so navigation is instant when user clicks on those sections
+  useEffect(() => {
+    if (!user || loading) return;
+
+    // Wait a bit after initial render to ensure critical path is complete
+    const preloadTimer = setTimeout(() => {
+      // Preload all dynamic page components in the background
+      // These will be cached by the browser, making navigation instant
+      const preloadPages = async () => {
+        try {
+          // Stagger the imports slightly to avoid network congestion
+          await Promise.all([
+            import('@/app/notes/page'),
+            import('@/app/projects/page'),
+            import('@/app/habits/page'),
+          ]);
+
+          // Load second tier after a small delay
+          setTimeout(async () => {
+            await Promise.all([
+              import('@/app/checklists/page'),
+              import('@/app/quotes/page'),
+              import('@/app/relationships/page'),
+              import('@/app/catalog/page'),
+              import('@/app/train-of-thought/page'),
+              import('@/app/feedback/page'),
+            ]);
+          }, 1000);
+        } catch (err) {
+          // Silently fail - these are just optimizations
+          console.log('Background page preload failed (non-critical):', err);
+        }
+      };
+
+      preloadPages();
+    }, 2000); // Wait 2 seconds after initial render
+
+    return () => clearTimeout(preloadTimer);
+  }, [user, loading]);
 
   if (loading) {
     return (

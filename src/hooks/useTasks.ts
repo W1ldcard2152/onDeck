@@ -69,26 +69,18 @@ export function useTasks(
         .from('tasks')
         .select('*');
       
-      // Apply status filter if provided, combined with habit task filtering
+      // Apply status filter if provided
       if (statusFilter && statusFilter.length > 0) {
-        if (includeHabitTasks === true) {
-          // Include tasks that match status OR are habit tasks
-          tasksQuery = tasksQuery.or(`status.in.(${statusFilter.join(',')}),habit_id.not.is.null`);
-        } else if (includeHabitTasks === false) {
-          // Only include tasks that match status AND are not habit tasks
-          tasksQuery = tasksQuery.in('status', statusFilter).is('habit_id', null);
-        } else {
-          // Default behavior - just filter by status
-          tasksQuery = tasksQuery.in('status', statusFilter);
-        }
-      } else {
-        // No status filter - use original behavior for habit filtering
-        if (includeHabitTasks === false) {
-          // Only exclude habit tasks if explicitly set to false
-          tasksQuery = tasksQuery.is('habit_id', null);
-        }
-        // If includeHabitTasks is true or not specified, include all tasks (both regular and habit tasks)
+        // Filter by status first - this applies to ALL tasks (habit and non-habit)
+        tasksQuery = tasksQuery.in('status', statusFilter);
       }
+
+      // Then apply habit task filtering
+      if (includeHabitTasks === false) {
+        // Explicitly exclude habit tasks
+        tasksQuery = tasksQuery.is('habit_id', null);
+      }
+      // If includeHabitTasks is true or not specified, include all tasks (both regular and habit tasks)
       
       const { data: allTasksRaw, error: tasksError } = await tasksQuery
         .order('due_date', { ascending: true })
