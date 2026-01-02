@@ -1,15 +1,15 @@
 'use client'
 
 import React, { useState, useEffect, useCallback, useRef } from 'react'
-import type { TaskWithDetails } from '@/lib/types'
+import type { TaskWithDetails, TaskStatus } from '@/lib/types'
 import type { Database } from '@/types/database.types'
 import { getSupabaseClient } from '@/lib/supabase-client'
 
 export function useTasks(
-  userId: string | undefined, 
-  limit: number = 50, 
+  userId: string | undefined,
+  limit: number = 50,
   includeHabitTasks: boolean = false,
-  statusFilter?: ('on_deck' | 'active' | 'completed' | 'habit')[]
+  statusFilter?: TaskStatus[]
 ) {
   const [tasks, setTasks] = useState<TaskWithDetails[]>([])
   const [isLoading, setIsLoading] = useState(true)
