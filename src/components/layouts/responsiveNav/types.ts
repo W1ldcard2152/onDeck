@@ -1,4 +1,4 @@
-export type SectionType = 'dashboard' | 'tasks' | 'notes' | 'train-of-thought' | 'projects' | 'habits' | 'checklists' | 'quotes' | 'catalog' | 'relationships' | 'feedback' | 'media-vault';
+export type SectionType = 'dashboard' | 'tasks' | 'notes' | 'train-of-thought' | 'projects' | 'habits' | 'checklists' | 'quotes' | 'catalog' | 'relationships' | 'feedback' | 'media-vault' | 'protocols';
 
 export interface NavProps {
   activeSection: SectionType;

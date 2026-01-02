@@ -32,6 +32,7 @@ export interface Task {
   is_project_converted: boolean;
   converted_project_id: string | null;
   daily_context?: string | null; // JSON array of DailyContext values, or null for all-day
+  sort_order: number; // Manual sort order within context
 }
 
 export interface TaskWithDetails {
@@ -53,6 +54,7 @@ export interface TaskWithDetails {
   is_project_converted: boolean;
   converted_project_id: string | null;
   daily_context?: string | null; // JSON array of DailyContext values, or null for all-day
+  sort_order: number; // Manual sort order within context
   item: Item;
 }
 

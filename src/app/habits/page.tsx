@@ -8,9 +8,8 @@ import { MonthlyCalendar } from '@/components/MonthlyCalendar';
 import { useSupabaseAuth } from '@/hooks/useSupabaseAuth';
 import { useHabits, type Habit } from '@/hooks/useHabits';
 import { getSupabaseClient } from '@/lib/supabase-client';
-import { ChevronDown, ChevronUp, Trash2 } from 'lucide-react';
+import { ChevronDown, ChevronUp } from 'lucide-react';
 import type { TaskWithDetails } from '@/lib/types';
-import { HabitTaskGenerator } from '@/lib/habitTaskGenerator';
 
 export default function HabitsPage() {
   const { user } = useSupabaseAuth();
@@ -20,7 +19,6 @@ export default function HabitsPage() {
   const [habitTasks, setHabitTasks] = useState<TaskWithDetails[]>([]);
   const [showHabitTasks, setShowHabitTasks] = useState(false);
   const [loadingHabitTasks, setLoadingHabitTasks] = useState(false);
-  const [monthlyRegen, setMonthlyRegen] = useState(false);
   
   // State for habit editing
   const [editingHabit, setEditingHabit] = useState<Habit | null>(null);
@@ -52,33 +50,28 @@ export default function HabitsPage() {
         console.error('Error fetching active habits:', habitsError);
       }
       
-      // Get habit tasks within extended range to support minimum task generation (365 days max)
-      const oneYearFromNow = new Date();
-      oneYearFromNow.setDate(oneYearFromNow.getDate() + 365);
-      const dateFilter = oneYearFromNow.toISOString().split('T')[0]; // YYYY-MM-DD format
-      
-      console.log(`Fetching habit tasks with assigned_date <= ${dateFilter} for debugging (extended for minimum task generation)`);
-      
-      // Get habit tasks directly with date filtering to avoid processing too many items
-      // Exclude completed tasks from the debug view
+      // Get current and future habit tasks
+      // Since tasks now generate on completion, we only need to show active tasks
+      console.log('Fetching habit tasks (active only - tasks generate on completion)');
+
+      // Get habit tasks with status 'habit' (not completed)
       const { data: habitTasksData, error: habitTasksError } = await supabase
         .from('tasks')
         .select('*')
         .not('habit_id', 'is', null)
-        .neq('status', 'completed')
-        .or(`assigned_date.is.null,assigned_date.lte.${dateFilter}`)
+        .eq('status', 'habit')
         .order('assigned_date', { ascending: true });
       
       console.log('Raw habit tasks query result:', { data: habitTasksData?.length || 0, error: habitTasksError });
       
       if (habitTasksError) throw habitTasksError;
       if (!habitTasksData || habitTasksData.length === 0) {
-        console.log('NO HABIT TASKS FOUND - This indicates task generation may not be working');
+        console.log('NO ACTIVE HABIT TASKS FOUND - Complete a habit to generate the next task');
         setHabitTasks([]);
         return;
       }
-      
-      console.log(`Found ${habitTasksData.length} habit tasks within 1 year (for minimum task generation support)`);
+
+      console.log(`Found ${habitTasksData.length} active habit tasks`);
       console.log('Sample tasks:', habitTasksData.slice(0, 3).map(t => ({ id: t.id, habit_id: t.habit_id, assigned_date: t.assigned_date, status: t.status })));
       
       // Get corresponding items for these tasks
@@ -205,38 +198,6 @@ export default function HabitsPage() {
   
   
 
-  const handleMonthlyRegeneration = async () => {
-    if (!user?.id) return;
-    
-    const confirmed = confirm(
-      'MONTHLY REGENERATION: This will clean up past incomplete tasks and regenerate ' +
-      'all habit tasks while preserving your completion history and rhythm patterns. Continue?'
-    );
-    
-    if (!confirmed) return;
-    
-    setMonthlyRegen(true); // Reusing the loading state
-    try {
-      const supabase = getSupabaseClient();
-      const taskGenerator = new HabitTaskGenerator(supabase, user.id);
-      
-      console.log('Starting monthly habit task regeneration...');
-      await taskGenerator.monthlyRegeneration();
-      console.log('Monthly regeneration completed');
-      
-      // Refresh the habit tasks debug view
-      if (showHabitTasks) {
-        await fetchHabitTasks();
-      }
-      
-      alert('Monthly regeneration completed! Your habit tasks have been refreshed with rhythm preservation.');
-    } catch (err) {
-      console.error('Failed to run monthly regeneration:', err);
-      alert('Monthly regeneration failed. Check console for details.');
-    } finally {
-      setMonthlyRegen(false);
-    }
-  };
 
   const handleEditHabit = (habit: Habit) => {
     setEditingHabit(habit);
@@ -267,41 +228,21 @@ export default function HabitsPage() {
         {/* Desktop layout: title and buttons on same line */}
         <div className="hidden sm:flex justify-between items-center">
           <h1 className="text-2xl font-bold">Habits</h1>
-          <div className="flex gap-2">
-            <button
-              onClick={handleMonthlyRegeneration}
-              disabled={monthlyRegen}
-              className="inline-flex items-center px-3 py-2 border border-blue-300 shadow-sm text-sm leading-4 font-medium rounded-md text-blue-700 bg-blue-50 hover:bg-blue-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
-            >
-              <Trash2 className={`h-4 w-4 mr-2 ${monthlyRegen ? 'animate-spin' : ''}`} />
-              {monthlyRegen ? 'Regenerating...' : 'Monthly Regeneration'}
-            </button>
-            <NewHabitForm 
-              onHabitCreated={handleHabitCreated} 
-              editingHabit={editingHabit}
-              onHabitUpdated={handleHabitUpdated}
-            />
-          </div>
+          <NewHabitForm
+            onHabitCreated={handleHabitCreated}
+            editingHabit={editingHabit}
+            onHabitUpdated={handleHabitUpdated}
+          />
         </div>
-        
+
         {/* Mobile layout: title on top, buttons underneath */}
         <div className="sm:hidden space-y-4">
           <h1 className="text-2xl font-bold">Habits</h1>
-          <div className="flex flex-wrap gap-2">
-            <button
-              onClick={handleMonthlyRegeneration}
-              disabled={monthlyRegen}
-              className="inline-flex items-center px-3 py-2 border border-blue-300 shadow-sm text-sm leading-4 font-medium rounded-md text-blue-700 bg-blue-50 hover:bg-blue-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
-            >
-              <Trash2 className={`h-4 w-4 mr-2 ${monthlyRegen ? 'animate-spin' : ''}`} />
-              {monthlyRegen ? 'Regenerating...' : 'Monthly Regeneration'}
-            </button>
-            <NewHabitForm 
-              onHabitCreated={handleHabitCreated} 
-              editingHabit={editingHabit}
-              onHabitUpdated={handleHabitUpdated}
-            />
-          </div>
+          <NewHabitForm
+            onHabitCreated={handleHabitCreated}
+            editingHabit={editingHabit}
+            onHabitUpdated={handleHabitUpdated}
+          />
         </div>
       </div>
 
@@ -365,7 +306,7 @@ export default function HabitsPage() {
               )}
             </div>
             <p className="text-sm text-gray-500">
-              Shows all tasks linked to habits (within 14 days) • Use Monthly Regeneration to refresh tasks
+              Shows current habit tasks • New tasks generate when you complete a habit
             </p>
           </div>
           

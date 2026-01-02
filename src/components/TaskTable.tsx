@@ -462,11 +462,11 @@ const TaskTableBase: React.FC<TaskTableBaseProps> = ({
       
       // Handle project-related task logic with ProjectTaskManager
       if (isProjectTask) {
-        const projectTaskManager = new ProjectTaskManager({ 
-          supabase, 
-          userId: user ? user.id : null 
+        const projectTaskManager = new ProjectTaskManager({
+          supabase,
+          userId: user ? user.id : null
         });
-        
+
         if (isCompletingTask) {
           // When marking a task as completed
           await projectTaskManager.handleTaskCompletion(taskId, currentTask.project_id);
@@ -477,7 +477,39 @@ const TaskTableBase: React.FC<TaskTableBaseProps> = ({
           console.log('Project task uncompleted and step reset');
         }
       }
-  
+
+      // Handle habit task completion - generate next task
+      if (currentTask?.habit_id && isCompletingTask && user) {
+        console.log('=== HABIT TASK COMPLETION ===');
+        console.log(`Habit task ${taskId} completed, generating next task`);
+        try {
+          // Dynamically import to avoid circular dependencies
+          const { HabitTaskGenerator } = await import('@/lib/habitTaskGenerator');
+
+          // Get the habit
+          const { data: habit, error: habitError } = await supabase
+            .from('habits')
+            .select('*')
+            .eq('id', currentTask.habit_id)
+            .single();
+
+          if (habitError) {
+            console.error('Error fetching habit:', habitError);
+          } else if (habit && habit.is_active) {
+            // Generate next task from the completion date
+            const taskGenerator = new HabitTaskGenerator(supabase, user.id);
+            const completedDate = new Date(); // Task was just completed
+            await taskGenerator.generateNextTask(habit, completedDate);
+            console.log(`✅ Generated next task for habit "${habit.title}"`);
+          } else if (habit && !habit.is_active) {
+            console.log('Habit is inactive, not generating next task');
+          }
+        } catch (genError) {
+          console.error('Error generating next habit task:', genError);
+          // Don't throw - task completion succeeded, next task generation is optional
+        }
+      }
+
       onTaskUpdate();
     } catch (err) {
       console.error('Error in updateTaskStatus:', err);

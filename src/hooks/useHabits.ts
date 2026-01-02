@@ -22,7 +22,7 @@ export interface RecurrenceRule {
   after_completion?: boolean;
   delay_after_completion?: string;
   skip_conditions?: string[];
-  time_of_day?: string;
+  daily_context?: ('morning' | 'work' | 'family' | 'evening')[];
   custom_exclusions?: string[];
   custom_inclusions?: string[];
   offset_days?: number;
@@ -137,16 +137,24 @@ export function useHabits(userId: string | undefined) {
       throw error
     }
 
-    // Generate tasks if the habit is active
+    // Generate first task if the habit is active
     if (habitData.is_active) {
       console.log('=== TASK GENERATION DEBUG ===')
-      console.log('Generating tasks for habit:', data)
+      console.log('Generating first task for habit:', data)
+      console.log('habitData.recurrence_rule:', habitData.recurrence_rule)
+      console.log('habitData.recurrence_rule.start_date:', habitData.recurrence_rule?.start_date)
       try {
         const taskGenerator = new HabitTaskGenerator(supabase, userId)
-        await taskGenerator.generateTasksForHabit(data)
-        console.log('✅ Tasks generated successfully for habit:', data.title)
+        // Generate the first task starting from today or the habit's start_date
+        // Parse date in local timezone to avoid UTC conversion issues
+        const startDate = habitData.recurrence_rule?.start_date
+          ? new Date(habitData.recurrence_rule.start_date + 'T00:00:00')
+          : new Date()
+        console.log('startDate being passed to generateNextTask:', startDate)
+        await taskGenerator.generateNextTask(data, startDate, true) // isInitialTask = true
+        console.log('✅ First task generated successfully for habit:', data.title)
       } catch (taskGenError) {
-        console.error('❌ Error generating tasks:', taskGenError)
+        console.error('❌ Error generating first task:', taskGenError)
         console.error('Task generation failed for habit:', data.title, 'Error:', taskGenError)
         // Don't throw - let the habit creation succeed even if task generation fails
       }
@@ -178,23 +186,51 @@ export function useHabits(userId: string | undefined) {
 
     console.log('Habit updated successfully:', data)
 
-    // If the habit is active and we're updating the recurrence rule, regenerate tasks
+    const taskGenerator = new HabitTaskGenerator(supabase, userId)
+
+    // If the habit is active and we're updating the recurrence rule, regenerate next task
     if (data.is_active && updates.recurrence_rule) {
       console.log('=== TASK REGENERATION DEBUG ===')
-      console.log('Recurrence rule changed - need to regenerate tasks')
+      console.log('Recurrence rule changed - deleting incomplete tasks and generating new one')
       console.log('Habit data:', { id: data.id, title: data.title, is_active: data.is_active })
       try {
-        const taskGenerator = new HabitTaskGenerator(supabase, userId)
-        // Only do full regeneration when recurrence rule changes
-        // This is necessary because the schedule has fundamentally changed
-        await taskGenerator.generateTasksForHabit(data, true) // true = full regeneration ONLY for recurrence changes
+        // Delete all incomplete tasks (completed tasks are kept for history)
+        await taskGenerator.deleteIncompleteHabitTasks(data.id)
+        // Generate new task with updated recurrence rule
+        // Parse date in local timezone to avoid UTC conversion issues
+        const startDate = data.recurrence_rule?.start_date
+          ? new Date(data.recurrence_rule.start_date + 'T00:00:00')
+          : new Date()
+        await taskGenerator.generateNextTask(data, startDate, true) // isInitialTask = true
         console.log('✅ Tasks regenerated successfully after recurrence rule change')
       } catch (taskGenError) {
         console.error('❌ Error regenerating tasks after habit update:', taskGenError)
         // Don't throw - let the habit update succeed even if task generation fails
       }
+    } else if (data.is_active && updates.is_active === true) {
+      // If habit is being activated (toggled on), generate first task
+      console.log('Habit activated - generating first task')
+      try {
+        // Parse date in local timezone to avoid UTC conversion issues
+        const startDate = data.recurrence_rule?.start_date
+          ? new Date(data.recurrence_rule.start_date + 'T00:00:00')
+          : new Date()
+        await taskGenerator.generateNextTask(data, startDate, true) // isInitialTask = true
+        console.log('✅ First task generated for activated habit')
+      } catch (taskGenError) {
+        console.error('❌ Error generating first task:', taskGenError)
+      }
+    } else if (!data.is_active && updates.is_active === false) {
+      // If habit is being deactivated (toggled off), delete incomplete tasks
+      console.log('Habit deactivated - deleting incomplete tasks')
+      try {
+        await taskGenerator.deleteIncompleteHabitTasks(data.id)
+        console.log('✅ Incomplete tasks deleted for deactivated habit')
+      } catch (taskGenError) {
+        console.error('❌ Error deleting incomplete tasks:', taskGenError)
+      }
     } else {
-      console.log('Not regenerating tasks - habit is_active:', data.is_active, 'updates.recurrence_rule:', !!updates.recurrence_rule)
+      console.log('Not modifying tasks - habit is_active:', data.is_active, 'updates.is_active:', updates.is_active, 'updates.recurrence_rule:', !!updates.recurrence_rule)
     }
 
     // Refresh habits list

@@ -51,6 +51,9 @@ const RelationshipsPage = dynamic(() => import('@/app/relationships/page'), {
 const CatalogPage = dynamic(() => import('@/app/catalog/page'), {
   loading: () => <div className="flex items-center justify-center h-32"><div className="text-lg text-gray-500">Loading...</div></div>
 });
+const ProtocolsPage = dynamic(() => import('@/app/protocols/page'), {
+  loading: () => <div className="flex items-center justify-center h-32"><div className="text-lg text-gray-500">Loading...</div></div>
+});
 
 const DesktopLayout = () => {
   const { user, loading } = useSupabaseAuth();
@@ -160,6 +163,7 @@ const DesktopLayout = () => {
           setTimeout(async () => {
             await Promise.all([
               import('@/app/checklists/page'),
+              import('@/app/protocols/page'),
               import('@/app/quotes/page'),
               import('@/app/relationships/page'),
               import('@/app/catalog/page'),
@@ -213,6 +217,8 @@ const DesktopLayout = () => {
         return <RelationshipsPage />;
       case 'catalog':
         return <CatalogPage />;
+      case 'protocols':
+        return <ProtocolsPage />;
       case 'feedback':
         return <FeedbackPage />;
       default:

@@ -1,7 +1,7 @@
 'use client'
 
 import React from 'react';
-import { Home, CheckSquare, BookOpen, FolderOpen, ListChecks, Quote, Bookmark, Star, Menu, Lightbulb, Users } from 'lucide-react';
+import { Home, CheckSquare, BookOpen, FolderOpen, ListChecks, Quote, Bookmark, Star, Menu, Lightbulb, Users, FileText } from 'lucide-react';
 import { cn } from "@/lib/utils";
 import {
   Sheet,
@@ -17,12 +17,13 @@ export const navItems: Array<{
   id: SectionType;
 }> = [
   { icon: Home, label: 'Dashboard', id: 'dashboard' },
-  { icon: CheckSquare, label: 'Tasks', id: 'tasks' },
-  { icon: BookOpen, label: 'Notes', id: 'notes' },
   { icon: Lightbulb, label: 'Train of Thought', id: 'train-of-thought' },
-  { icon: FolderOpen, label: 'Projects', id: 'projects' },
-  { icon: Star, label: 'Habits', id: 'habits' },
   { icon: ListChecks, label: 'Checklists', id: 'checklists' },
+  { icon: FileText, label: 'Protocols', id: 'protocols' },
+  { icon: BookOpen, label: 'Notes', id: 'notes' },
+  { icon: CheckSquare, label: 'Tasks', id: 'tasks' },
+  { icon: Star, label: 'Habits', id: 'habits' },
+  { icon: FolderOpen, label: 'Projects', id: 'projects' },
   { icon: Users, label: 'Relationships', id: 'relationships' },
   { icon: Quote, label: 'Quotes', id: 'quotes' },
   { icon: Bookmark, label: 'Catalog', id: 'catalog' },

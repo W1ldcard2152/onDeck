@@ -39,12 +39,12 @@ import { startOfDay, parseISO, isBefore } from 'date-fns';
 
 const DashboardPage: React.FC = () => {
   const { user } = useSupabaseAuth();
-  // Only fetch non-completed tasks for dashboard - filtering at database level for performance
+  // Only fetch active, habit, and project tasks for dashboard - filtering at database level for performance
   const { tasks: fetchedTasks, isLoading: tasksLoading, refetch: refetchTasks } = useTasks(
     user?.id,
     50,
     true, // includeHabitTasks
-    ['on_deck', 'active'] // Only fetch non-completed tasks (habit tasks included via includeHabitTasks flag)
+    ['active', 'habit', 'project'] // Only fetch active, habit, and project tasks
   );
   const { notes, isLoading: notesLoading, refetch: refetchNotes } = useNotes(user?.id);
   const { habits, isLoading: habitsLoading } = useHabits(user?.id);
@@ -244,19 +244,15 @@ const DashboardPage: React.FC = () => {
         if (dateA !== dateB) return dateA - dateB;
       }
 
-      // Otherwise maintain assigned date order
-      if (a.assigned_date && b.assigned_date) {
-        return new Date(a.assigned_date).getTime() - new Date(b.assigned_date).getTime();
-      }
-
-      return 0;
+      // Use sort_order for manual ordering (lower numbers first)
+      return a.sort_order - b.sort_order;
     });
 
     console.log(`Filtered tasks count: ${sorted.length}`);
     return sorted;
   };
 
-  // Move task up or down in the list by swapping assigned dates
+  // Move task up or down in the list by swapping sort_order
   const moveTask = async (taskId: string, direction: 'up' | 'down', filteredTasks: TaskWithDetails[]) => {
     const currentIndex = filteredTasks.findIndex(t => t.id === taskId);
     if (currentIndex === -1) return;
@@ -270,31 +266,43 @@ const DashboardPage: React.FC = () => {
     // Don't allow moving past tasks with due dates if current task doesn't have one
     if (!currentTask.due_date && targetTask.due_date) return;
 
-    // Swap the assigned_date values to maintain order
-    const tempDate = currentTask.assigned_date;
-    const newCurrentDate = targetTask.assigned_date;
-    const newTargetDate = tempDate;
+    // Simply swap the sort_order values
+    const newCurrentSortOrder = targetTask.sort_order;
+    const newTargetSortOrder = currentTask.sort_order;
+
+    // Store previous state for rollback
+    const previousTasks = [...localTasks];
 
     // Optimistically update local state
     setLocalTasks(prev => prev.map(task => {
       if (task.id === currentTask.id) {
-        return { ...task, assigned_date: newCurrentDate };
+        return { ...task, sort_order: newCurrentSortOrder };
       }
       if (task.id === targetTask.id) {
-        return { ...task, assigned_date: newTargetDate };
+        return { ...task, sort_order: newTargetSortOrder };
       }
       return task;
     }));
 
     try {
       // Update both tasks in the database
-      await Promise.all([
-        supabase.from('tasks').update({ assigned_date: newCurrentDate }).eq('id', currentTask.id),
-        supabase.from('tasks').update({ assigned_date: newTargetDate }).eq('id', targetTask.id)
+      const results = await Promise.all([
+        supabase.from('tasks').update({ sort_order: newCurrentSortOrder }).eq('id', currentTask.id),
+        supabase.from('tasks').update({ sort_order: newTargetSortOrder }).eq('id', targetTask.id)
       ]);
+
+      // Check for errors in the responses
+      const errors = results.filter(r => r.error);
+      if (errors.length > 0) {
+        console.error('Database update errors:', errors);
+        // Revert to previous state
+        setLocalTasks(previousTasks);
+        refetchTasks();
+      }
     } catch (error) {
       console.error('Error moving task:', error);
-      // Revert on error
+      // Revert to previous state
+      setLocalTasks(previousTasks);
       refetchTasks();
     }
   };
@@ -611,18 +619,6 @@ const DashboardPage: React.FC = () => {
     );
   }
 
-  // Get priority badge color
-  const getPriorityColor = (priority: string | null) => {
-    switch (priority) {
-      case 'high':
-        return 'bg-red-100 text-red-800';
-      case 'low':
-        return 'bg-gray-100 text-gray-800';
-      default:
-        return 'bg-blue-100 text-blue-800';
-    }
-  };
-
   // Helper function to get background color based on task time
   const getTimeColor = (task: TaskWithDetails): string => {
     // Get the actual time for this task
@@ -877,7 +873,7 @@ const DashboardPage: React.FC = () => {
             )}
           </div>
         </div>
-        <Badge className="bg-blue-100 text-blue-800 flex-shrink-0 text-xs">{task.priority || 'normal'}</Badge>
+        <Badge className={`${getStatusColor(task.status || 'active')} flex-shrink-0 text-xs`}>{task.status || 'active'}</Badge>
       </div>
     </div>
     );
@@ -957,9 +953,6 @@ const DashboardPage: React.FC = () => {
               </div>
               
               <div className="flex gap-2">
-                <Badge className={getPriorityColor(taskToView.priority)}>
-                  {taskToView.priority || 'normal'}
-                </Badge>
                 <Badge className={getStatusColor(taskToView.status || 'on_deck')}>
                   {taskToView.status || 'on_deck'}
                 </Badge>
@@ -1145,6 +1138,24 @@ const DashboardPage: React.FC = () => {
       </div>
     </div>
   );
+};
+
+// Helper function to get status color
+const getStatusColor = (status: TaskStatus): string => {
+  switch (status) {
+    case 'on_deck':
+      return 'bg-gray-100 text-gray-800';
+    case 'active':
+      return 'bg-orange-100 text-orange-800';
+    case 'habit':
+      return 'bg-blue-100 text-blue-800';
+    case 'project':
+      return 'bg-purple-100 text-purple-800';
+    case 'completed':
+      return 'bg-green-100 text-green-800';
+    default:
+      return 'bg-gray-100 text-gray-800';
+  }
 };
 
 export default DashboardPage;

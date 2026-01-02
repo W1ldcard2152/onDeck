@@ -41,15 +41,30 @@ const HabitsTable = ({ habits, onHabitUpdate, onEditHabit }: HabitsTableProps) =
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [nextScheduledDates, setNextScheduledDates] = useState<Record<string, Date | null>>({});
   const { user } = useSupabaseAuth();
-  
+
   const supabase = createClientComponentClient<Database>();
+
+  // Sort habits: active first, then alphabetically by title
+  const sortedHabits = React.useMemo(() => {
+    return [...habits].sort((a, b) => {
+      // First sort by active status (active first)
+      if (a.is_active !== b.is_active) {
+        return a.is_active ? -1 : 1;
+      }
+      // Then sort alphabetically by title
+      return a.title.localeCompare(b.title);
+    });
+  }, [habits]);
 
   // Fetch actual next scheduled dates from the tasks table
   const fetchNextScheduledDates = async () => {
     if (!user?.id || habits.length === 0) return;
 
     try {
-      const today = new Date().toISOString().split('T')[0];
+      // Get today's date in local timezone (YYYY-MM-DD)
+      const todayDate = new Date();
+      const today = `${todayDate.getFullYear()}-${String(todayDate.getMonth() + 1).padStart(2, '0')}-${String(todayDate.getDate()).padStart(2, '0')}`;
+
       const { data: tasks, error } = await supabase
         .from('tasks')
         .select('habit_id, assigned_date')
@@ -219,7 +234,7 @@ const HabitsTable = ({ habits, onHabitUpdate, onEditHabit }: HabitsTableProps) =
 
   const handleToggleActive = async (habitId: string, isActive: boolean) => {
     if (!user) return;
-    
+
     setLoading(prev => ({ ...prev, [habitId]: true }));
     setError(null);
 
@@ -232,11 +247,11 @@ const HabitsTable = ({ habits, onHabitUpdate, onEditHabit }: HabitsTableProps) =
 
       if (updateError) throw updateError;
 
-      // Generate or clear tasks
+      // Generate or clear tasks based on new on-completion model
       const generator = new HabitTaskGenerator(supabase, user.id);
-      
+
       if (isActive) {
-        // Get the habit data and generate tasks
+        // Get the habit data and generate first task
         const { data: habit, error: habitError } = await supabase
           .from('habits')
           .select('*')
@@ -245,11 +260,16 @@ const HabitsTable = ({ habits, onHabitUpdate, onEditHabit }: HabitsTableProps) =
 
         if (habitError) throw habitError;
         if (habit) {
-          await generator.generateTasksForHabit(habit as Habit);
+          // Generate first task starting from today or the habit's start_date
+          // Parse date in local timezone to avoid UTC conversion issues
+          const startDate = habit.recurrence_rule?.start_date
+            ? new Date(habit.recurrence_rule.start_date + 'T00:00:00')
+            : new Date();
+          await generator.generateNextTask(habit as Habit, startDate, true); // isInitialTask = true
         }
       } else {
-        // Clear existing tasks
-        await generator.clearAllIncompleteHabitTasks(habitId);
+        // Delete incomplete tasks when deactivating
+        await generator.deleteIncompleteHabitTasks(habitId);
       }
 
       onHabitUpdate();
@@ -271,11 +291,11 @@ const HabitsTable = ({ habits, onHabitUpdate, onEditHabit }: HabitsTableProps) =
     if (!habitToDelete || !user) return;
 
     setLoading(prev => ({ ...prev, [habitToDelete]: true }));
-    
+
     try {
-      // First clear any associated tasks
+      // First clear any associated incomplete tasks
       const generator = new HabitTaskGenerator(supabase, user.id);
-      await generator.clearAllIncompleteHabitTasks(habitToDelete);
+      await generator.deleteIncompleteHabitTasks(habitToDelete);
 
       // Then delete the habit
       const { error } = await supabase
@@ -299,7 +319,7 @@ const HabitsTable = ({ habits, onHabitUpdate, onEditHabit }: HabitsTableProps) =
 
   const handleRegenerateTasks = async (habitId: string) => {
     if (!user) return;
-    
+
     setLoading(prev => ({ ...prev, [habitId]: true }));
     setError(null);
 
@@ -316,7 +336,16 @@ const HabitsTable = ({ habits, onHabitUpdate, onEditHabit }: HabitsTableProps) =
       }
 
       const generator = new HabitTaskGenerator(supabase, user.id);
-      await generator.generateTasksForHabit(habit as Habit);
+
+      // Delete incomplete tasks and generate a fresh one
+      await generator.deleteIncompleteHabitTasks(habitId);
+
+      // Generate next task starting from today
+      // Parse date in local timezone to avoid UTC conversion issues
+      const startDate = habit.recurrence_rule?.start_date
+        ? new Date(habit.recurrence_rule.start_date + 'T00:00:00')
+        : new Date();
+      await generator.generateNextTask(habit as Habit, startDate, true); // isInitialTask = true
 
       onHabitUpdate();
       await fetchNextScheduledDates(); // Refresh next scheduled dates
@@ -351,7 +380,7 @@ const HabitsTable = ({ habits, onHabitUpdate, onEditHabit }: HabitsTableProps) =
             </TableRow>
           </TableHeader>
           <TableBody>
-            {habits.map((habit) => {
+            {sortedHabits.map((habit) => {
               const isLoading = loading[habit.id];
               
               return (

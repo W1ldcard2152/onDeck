@@ -19,10 +19,11 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { TimePicker } from "@/components/ui/time-picker";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Plus } from 'lucide-react';
 import { useHabits, type RecurrenceRule, type Habit } from '@/hooks/useHabits';
 import { useSupabaseAuth } from '@/hooks/useSupabaseAuth';
+import type { DailyContext } from '@/lib/types';
 
 interface NewHabitFormProps {
   onHabitCreated: () => void;
@@ -41,22 +42,12 @@ const NewHabitForm = ({ onHabitCreated, editingHabit, onHabitUpdated }: NewHabit
   const [interval, setInterval] = useState(1);
   const [selectedDays, setSelectedDays] = useState<string[]>([]);
   const [selectedDaysOfMonth, setSelectedDaysOfMonth] = useState<number[]>([]);
-  const [timeOfDay, setTimeOfDay] = useState('');
+  const [dailyContexts, setDailyContexts] = useState<DailyContext[]>([]);
   const [startDate, setStartDate] = useState('');
   const [offsetDays, setOffsetDays] = useState(0);
-  const [showCustomTimePicker, setShowCustomTimePicker] = useState(false);
   
   const { user } = useSupabaseAuth();
   const { createHabit, updateHabit } = useHabits(user?.id);
-
-  // Preset time options
-  const presetTimes = [
-    { label: '8:00am', value: '08:00' },
-    { label: '9:45am', value: '09:45' },
-    { label: '1:00pm', value: '13:00' },
-    { label: '6:15pm', value: '18:15' },
-    { label: '8:20pm', value: '20:20' },
-  ];
 
   const dayOptions = [
     'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'
@@ -75,15 +66,9 @@ const NewHabitForm = ({ onHabitCreated, editingHabit, onHabitUpdated }: NewHabit
       setInterval(rule.interval || 1);
       setSelectedDays(rule.days_of_week || []);
       setSelectedDaysOfMonth(rule.days_of_month || []);
-      setTimeOfDay(rule.time_of_day || '');
+      setDailyContexts(rule.daily_context || []);
       setStartDate(rule.start_date || '');
       setOffsetDays(rule.offset_days || 0);
-      // Show custom time picker if the time is not one of the presets
-      if (rule.time_of_day && !presetTimes.some(p => p.value === rule.time_of_day)) {
-        setShowCustomTimePicker(true);
-      } else {
-        setShowCustomTimePicker(false);
-      }
     }
   }, [editingHabit]);
 
@@ -99,10 +84,9 @@ const NewHabitForm = ({ onHabitCreated, editingHabit, onHabitUpdated }: NewHabit
       setInterval(1);
       setSelectedDays([]);
       setSelectedDaysOfMonth([]);
-      setTimeOfDay('');
+      setDailyContexts([]);
       setStartDate('');
       setOffsetDays(0);
-      setShowCustomTimePicker(false);
       if (open) {
         setOpen(false);
       }
@@ -110,19 +94,20 @@ const NewHabitForm = ({ onHabitCreated, editingHabit, onHabitUpdated }: NewHabit
     prevEditingHabit.current = editingHabit;
   }, [editingHabit, open]);
 
+  // Helper function to get local date in YYYY-MM-DD format
+  const getLocalDateString = (date: Date = new Date()): string => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim() || loading) return;
 
     setLoading(true);
     try {
-      // Helper function to get local date in YYYY-MM-DD format
-      const getLocalDateString = (date: Date = new Date()): string => {
-        const year = date.getFullYear();
-        const month = String(date.getMonth() + 1).padStart(2, '0');
-        const day = String(date.getDate()).padStart(2, '0');
-        return `${year}-${month}-${day}`;
-      };
 
       const recurrenceRule: RecurrenceRule = {
         type: frequencyType,
@@ -131,7 +116,7 @@ const NewHabitForm = ({ onHabitCreated, editingHabit, onHabitUpdated }: NewHabit
         unit: frequencyType === 'daily' ? 'day' : frequencyType === 'weekly' ? 'week' : 'month',
         ...(frequencyType === 'weekly' && selectedDays.length > 0 && { days_of_week: selectedDays }),
         ...(frequencyType === 'monthly' && selectedDaysOfMonth.length > 0 && { days_of_month: selectedDaysOfMonth }),
-        ...(timeOfDay && { time_of_day: timeOfDay }),
+        ...(dailyContexts.length > 0 && { daily_context: dailyContexts }),
         ...(frequencyType === 'daily' && offsetDays > 0 && { offset_days: offsetDays }),
         end_condition: { type: 'none' }
       };
@@ -165,10 +150,9 @@ const NewHabitForm = ({ onHabitCreated, editingHabit, onHabitUpdated }: NewHabit
       setInterval(1);
       setSelectedDays([]);
       setSelectedDaysOfMonth([]);
-      setTimeOfDay('');
+      setDailyContexts([]);
       setStartDate('');
       setOffsetDays(0);
-      setShowCustomTimePicker(false);
       setOpen(false);
       
     } catch (error) {
@@ -252,54 +236,38 @@ const NewHabitForm = ({ onHabitCreated, editingHabit, onHabitUpdated }: NewHabit
               </Select>
             </div>
 
-            <div className="space-y-2">
-              <Label>Time of Day (optional)</Label>
-              <div className="grid grid-cols-3 gap-2">
-                {presetTimes.map((preset) => (
-                  <Button
-                    key={preset.value}
-                    type="button"
-                    variant={timeOfDay === preset.value ? "default" : "outline"}
-                    className="w-full"
-                    onClick={() => {
-                      setTimeOfDay(preset.value);
-                      setShowCustomTimePicker(false);
-                    }}
-                  >
-                    {preset.label}
-                  </Button>
-                ))}
-                <Button
-                  type="button"
-                  variant={showCustomTimePicker || (timeOfDay && !presetTimes.some(p => p.value === timeOfDay)) ? "default" : "outline"}
-                  className="w-full"
-                  onClick={() => setShowCustomTimePicker(!showCustomTimePicker)}
-                >
-                  {showCustomTimePicker || (timeOfDay && !presetTimes.some(p => p.value === timeOfDay)) 
-                    ? (() => {
-                        if (timeOfDay) {
-                          const [hour, minute] = timeOfDay.split(':');
-                          const hourNum = parseInt(hour, 10);
-                          const period = hourNum >= 12 ? 'pm' : 'am';
-                          const hour12 = hourNum === 0 ? 12 : hourNum > 12 ? hourNum - 12 : hourNum;
-                          return `${hour12}:${minute}${period}`;
+            <div className="space-y-4 border-t pt-4 bg-blue-50 p-4 rounded-lg">
+              <div className="text-sm font-semibold text-blue-800">📅 Daily Context (Optional)</div>
+              <div className="text-xs text-blue-600">Choose when you'd like to work on this habit</div>
+
+              <div className="grid grid-cols-2 gap-4">
+                {(['morning', 'work', 'family', 'evening'] as const).map((context) => (
+                  <div key={context} className="flex items-center space-x-2">
+                    <Checkbox
+                      id={`context-${context}`}
+                      checked={dailyContexts.includes(context)}
+                      onCheckedChange={(checked) => {
+                        if (checked) {
+                          setDailyContexts([...dailyContexts, context]);
+                        } else {
+                          setDailyContexts(dailyContexts.filter(c => c !== context));
                         }
-                        return 'Custom';
-                      })()
-                    : 'Custom'}
-                </Button>
+                      }}
+                    />
+                    <Label
+                      htmlFor={`context-${context}`}
+                      className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+                    >
+                      {context.charAt(0).toUpperCase() + context.slice(1)}
+                    </Label>
+                  </div>
+                ))}
               </div>
-              {showCustomTimePicker && (
-                <TimePicker
-                  value={timeOfDay}
-                  onChange={(value) => {
-                    setTimeOfDay(value);
-                  }}
-                />
+              {dailyContexts.length === 0 && (
+                <div className="text-xs text-gray-500 italic">
+                  No contexts selected - task will be shown all day
+                </div>
               )}
-              <p className="text-sm text-gray-500">
-                Set a preferred time for this habit
-              </p>
             </div>
 
             <div className="space-y-2">
@@ -309,7 +277,7 @@ const NewHabitForm = ({ onHabitCreated, editingHabit, onHabitUpdated }: NewHabit
                 type="date"
                 value={startDate}
                 onChange={(e) => setStartDate(e.target.value)}
-                min={new Date().toISOString().split('T')[0]} // Can't start in the past
+                min={getLocalDateString()} // Can't start in the past (using local timezone)
               />
               <p className="text-sm text-gray-500">
                 When should this habit start? Leave empty to start today.

@@ -82,9 +82,10 @@ export function useTasks(
       }
       // If includeHabitTasks is true or not specified, include all tasks (both regular and habit tasks)
       
-      const { data: allTasksRaw, error: tasksError } = await tasksQuery
-        .order('due_date', { ascending: true })
-        .order('assigned_date', { ascending: true });
+      const { data: allTasksRaw, error: tasksError} = await tasksQuery
+        .order('due_date', { ascending: true, nullsFirst: false })
+        .order('sort_order', { ascending: true })
+        .order('assigned_date', { ascending: true, nullsFirst: false });
       
       console.log('Tasks query completed:', { taskCount: allTasksRaw?.length, tasksError })
       if (tasksError) throw tasksError;
@@ -196,6 +197,7 @@ export function useTasks(
             project_id: task.project_id,
             habit_id: task.habit_id,
             daily_context: task.daily_context,
+            sort_order: task.sort_order || 0,
             created_at: item.created_at,
             updated_at: item.updated_at,
             title: item.title,

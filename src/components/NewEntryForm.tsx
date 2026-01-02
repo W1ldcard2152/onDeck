@@ -53,7 +53,8 @@ const DatePickerField: React.FC<{
   label: string;
   selectedDate: Date | undefined;
   onDateChange: (date: Date | undefined) => void;
-}> = ({ label, selectedDate, onDateChange }) => {
+  showClearButton?: boolean;
+}> = ({ label, selectedDate, onDateChange, showClearButton = false }) => {
   const [open, setOpen] = useState(false);
 
   const handleSelect = (date: Date | undefined) => {
@@ -67,9 +68,28 @@ const DatePickerField: React.FC<{
     setOpen(!open);
   };
 
+  const handleClear = (e: React.MouseEvent<HTMLButtonElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    onDateChange(undefined);
+  };
+
   return (
     <div className="space-y-2">
-      <Label>{label}</Label>
+      <div className="flex justify-between items-center">
+        <Label>{label}</Label>
+        {showClearButton && selectedDate && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={handleClear}
+            className="h-6 px-2 text-xs text-gray-500 hover:text-gray-700"
+          >
+            Clear
+          </Button>
+        )}
+      </div>
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
           <Button
@@ -120,7 +140,10 @@ export const NewEntryForm: React.FC<NewEntryFormProps> = ({
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [dueDate, setDueDate] = useState<Date | undefined>();
-  const [assignedDate, setAssignedDate] = useState<Date | undefined>();
+  const [assignedDate, setAssignedDate] = useState<Date | undefined>(
+    // Default to today's date for new tasks only
+    !isEditing && defaultType === 'task' ? new Date() : undefined
+  );
   const [dailyContexts, setDailyContexts] = useState<DailyContext[]>([]);
   const [priority, setPriority] = useState<Priority>('normal');
   const [status, setStatus] = useState<TaskStatus>('active');
@@ -438,6 +461,7 @@ export const NewEntryForm: React.FC<NewEntryFormProps> = ({
                   label="Assigned Date"
                   selectedDate={assignedDate}
                   onDateChange={setAssignedDate}
+                  showClearButton={true}
                 />
                 <DatePickerField
                   label="Due Date"
