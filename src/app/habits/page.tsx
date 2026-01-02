@@ -38,12 +38,14 @@ export default function HabitsPage() {
       console.log('User ID:', user.id);
       
       // First, let's check if we have any active habits at all
+      // @ts-ignore - Supabase type inference issue
       const { data: activeHabits, error: habitsError } = await supabase
         .from('habits')
         .select('*')
         .eq('user_id', user.id)
         .eq('is_active', true);
-      
+
+      // @ts-ignore - Supabase type inference issue
       console.log('Active habits found:', activeHabits?.length || 0, activeHabits?.map(h => ({ id: h.id, title: h.title })));
       
       if (habitsError) {
@@ -55,15 +57,16 @@ export default function HabitsPage() {
       console.log('Fetching habit tasks (active only - tasks generate on completion)');
 
       // Get habit tasks with status 'habit' (not completed)
+      // @ts-ignore - Supabase type inference issue
       const { data: habitTasksData, error: habitTasksError } = await supabase
         .from('tasks')
         .select('*')
         .not('habit_id', 'is', null)
         .eq('status', 'habit')
         .order('assigned_date', { ascending: true });
-      
+
       console.log('Raw habit tasks query result:', { data: habitTasksData?.length || 0, error: habitTasksError });
-      
+
       if (habitTasksError) throw habitTasksError;
       if (!habitTasksData || habitTasksData.length === 0) {
         console.log('NO ACTIVE HABIT TASKS FOUND - Complete a habit to generate the next task');
@@ -71,10 +74,13 @@ export default function HabitsPage() {
         return;
       }
 
+      // @ts-ignore - Supabase type inference issue
       console.log(`Found ${habitTasksData.length} active habit tasks`);
+      // @ts-ignore - Supabase type inference issue
       console.log('Sample tasks:', habitTasksData.slice(0, 3).map(t => ({ id: t.id, habit_id: t.habit_id, assigned_date: t.assigned_date, status: t.status })));
-      
+
       // Get corresponding items for these tasks
+      // @ts-ignore - Supabase type inference issue
       const taskIds = habitTasksData.map(task => task.id);
       console.log('Fetching items for habit task IDs in batches:', taskIds.length);
       
@@ -125,12 +131,12 @@ export default function HabitsPage() {
       }
       
       const taskData = habitTasksData;
-      const itemsData = allItemData;
-      
+      const itemsData = allItemData as any[];
+
       // Combine items and tasks
       const combinedTasks: TaskWithDetails[] = taskData
-        .map(task => {
-          const item = itemsData.find(item => item.id === task.id);
+        .map((task: any) => {
+          const item = itemsData.find((item: any) => item.id === task.id);
           if (!item) return null;
           
           return {

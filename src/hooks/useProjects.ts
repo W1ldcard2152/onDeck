@@ -75,7 +75,9 @@ export function useProjects(userId: string | undefined) {
             project_id: task.project_id?.toString() || null,
             habit_id: task.habit_id || null,
             is_project_converted: task.is_project_converted || false,
-            converted_project_id: task.converted_project_id || null
+            converted_project_id: task.converted_project_id || null,
+            sort_order: task.sort_order || 0,
+            daily_context: task.daily_context || null
           })) || [];
 
           const projectSteps: ProjectStep[] = stepsData

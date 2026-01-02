@@ -22,10 +22,11 @@ export interface RecurrenceRule {
   after_completion?: boolean;
   delay_after_completion?: string;
   skip_conditions?: string[];
-  daily_context?: ('morning' | 'work' | 'family' | 'evening')[];
+  daily_context?: ('morning' | 'work' | 'family' | 'evening' | 'all_day')[];
   custom_exclusions?: string[];
   custom_inclusions?: string[];
   offset_days?: number;
+  time_of_day?: string;
 }
 
 export interface Habit {

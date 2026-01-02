@@ -1102,7 +1102,7 @@ const TaskTable: React.FC<TaskTableProps> = ({
         
         switch (sort.field) {
           case 'status': {
-            const statusOrder: Record<TaskStatus, number> = { 'active': 0, 'on_deck': 1, 'completed': 2 };
+            const statusOrder: Record<TaskStatus, number> = { 'active': 0, 'habit': 1, 'project': 2, 'on_deck': 3, 'completed': 4 };
             const aStatus = a.status || 'on_deck';
             const bStatus = b.status || 'on_deck';
             comparison = statusOrder[aStatus] - statusOrder[bStatus];

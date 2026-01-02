@@ -83,6 +83,7 @@ export default function FeedbackPage() {
       const supabase = getSupabaseClient();
       const { error } = await supabase
         .from('feedback')
+        // @ts-ignore - Supabase type inference issue
         .update({ message: editMessage.trim() })
         .eq('id', item.id);
 
@@ -117,7 +118,8 @@ export default function FeedbackPage() {
       const supabase = getSupabaseClient();
       const { error } = await supabase
         .from('feedback')
-        .update({ 
+        // @ts-ignore - Supabase type inference issue
+        .update({
           is_archived: !isArchived,
           archived_at: !isArchived ? new Date().toISOString() : null
         })
@@ -141,6 +143,7 @@ export default function FeedbackPage() {
 
       const { error } = await supabase
         .from('feedback')
+        // @ts-ignore - Supabase type inference issue
         .insert({
           user_id: user.id,
           message: newFeedback.trim()
@@ -156,7 +159,8 @@ export default function FeedbackPage() {
     }
   };
 
-  const formatDate = (dateString: string) => {
+  const formatDate = (dateString: string | null) => {
+    if (!dateString) return 'N/A';
     return new Date(dateString).toLocaleDateString('en-US', {
       year: 'numeric',
       month: 'short',
@@ -233,7 +237,7 @@ export default function FeedbackPage() {
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => handleArchive(item.id, item.is_archived)}
+                  onClick={() => handleArchive(item.id, item.is_archived || false)}
                 >
                   {isArchived ? (
                     <ArchiveRestore className="h-4 w-4" />

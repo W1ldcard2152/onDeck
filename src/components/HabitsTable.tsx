@@ -77,7 +77,7 @@ const HabitsTable = ({ habits, onHabitUpdate, onEditHabit }: HabitsTableProps) =
 
       // Group tasks by habit_id and find the earliest date for each
       const nextDates: Record<string, Date | null> = {};
-      
+
       // Initialize all habits to null
       habits.forEach(habit => {
         nextDates[habit.id] = null;
@@ -85,7 +85,7 @@ const HabitsTable = ({ habits, onHabitUpdate, onEditHabit }: HabitsTableProps) =
 
       // Find the earliest scheduled date for each habit
       if (tasks) {
-        tasks.forEach(task => {
+        tasks.forEach((task: any) => {
           if (task.habit_id && task.assigned_date) {
             const currentNext = nextDates[task.habit_id];
             const taskDate = new Date(task.assigned_date + 'T00:00:00'); // Parse as local date

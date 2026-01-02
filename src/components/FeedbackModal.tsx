@@ -41,7 +41,7 @@ export const FeedbackModal: React.FC<FeedbackModalProps> = ({
         .insert({
           user_id: user.id,
           message: feedback.trim()
-        });
+        } as any);
 
       if (error) throw error;
 

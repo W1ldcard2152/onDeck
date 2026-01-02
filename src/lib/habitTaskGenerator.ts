@@ -336,7 +336,7 @@ export class HabitTaskGenerator {
           'Thursday': 4, 'Friday': 5, 'Saturday': 6
         }
         const daysOfWeek = rule.days_of_week || []
-        const targetDays = daysOfWeek.map(day => dayMap[day]).filter(d => d !== undefined)
+        const targetDays = daysOfWeek.map((day: string) => dayMap[day]).filter((d: number | undefined) => d !== undefined)
 
         while (current <= end) {
           if (targetDays.includes(current.getDay())) {
