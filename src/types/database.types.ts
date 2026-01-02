@@ -1,4 +1,4 @@
-export type TaskStatus = 'on_deck' | 'active' | 'completed';
+export type TaskStatus = 'on_deck' | 'active' | 'completed' | 'habit' | 'project';
 export type Priority = 'low' | 'normal' | 'high';
 export type EntryType = 'article' | 'video' | 'document' | 'resource' | 'note' | 'link';
 export type CommunicationMedium = 'Phone Call' | 'Text' | 'Email' | 'In Person' | 'Video Call' | 'Other';
