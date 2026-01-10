@@ -6,14 +6,6 @@ import { useSupabaseAuth } from '@/hooks/useSupabaseAuth';
 import AuthUI from '@/components/Auth';
 import { Textarea } from '@/components/ui/textarea';
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
-import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -21,7 +13,6 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
-import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Edit2, Trash2, Archive, ArchiveRestore, Plus } from 'lucide-react';
 import { getSupabaseClient } from '@/lib/supabase-client';
@@ -170,98 +161,6 @@ export default function FeedbackPage() {
     });
   };
 
-  const FeedbackTable = ({ items, isArchived = false }: { items: FeedbackItem[], isArchived?: boolean }) => (
-    <Table>
-      <TableHeader>
-        <TableRow>
-          <TableHead>Feedback</TableHead>
-          <TableHead>Date</TableHead>
-          <TableHead>Status</TableHead>
-          <TableHead className="text-right">Actions</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {items.map((item) => (
-          <TableRow key={item.id}>
-            <TableCell className="max-w-md">
-              <div className="truncate">
-                {item.message}
-              </div>
-            </TableCell>
-            <TableCell>
-              {formatDate(isArchived ? item.archived_at || item.created_at : item.created_at)}
-            </TableCell>
-            <TableCell>
-              <Badge variant={isArchived ? "secondary" : "default"}>
-                {isArchived ? 'Archived' : 'Active'}
-              </Badge>
-            </TableCell>
-            <TableCell className="text-right">
-              <div className="flex justify-end gap-1">
-                <Dialog>
-                  <DialogTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => {
-                        setEditingItem(item);
-                        setEditMessage(item.message);
-                      }}
-                    >
-                      <Edit2 className="h-4 w-4" />
-                    </Button>
-                  </DialogTrigger>
-                  <DialogContent>
-                    <DialogHeader>
-                      <DialogTitle>Edit Feedback</DialogTitle>
-                      <DialogDescription>
-                        Make changes to your feedback message.
-                      </DialogDescription>
-                    </DialogHeader>
-                    <Textarea
-                      value={editMessage}
-                      onChange={(e) => setEditMessage(e.target.value)}
-                      className="min-h-[120px]"
-                    />
-                    <div className="flex justify-end gap-2">
-                      <Button variant="outline" onClick={() => setEditingItem(null)}>
-                        Cancel
-                      </Button>
-                      <Button onClick={() => handleEdit(item)}>
-                        Save Changes
-                      </Button>
-                    </div>
-                  </DialogContent>
-                </Dialog>
-
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => handleArchive(item.id, item.is_archived || false)}
-                >
-                  {isArchived ? (
-                    <ArchiveRestore className="h-4 w-4" />
-                  ) : (
-                    <Archive className="h-4 w-4" />
-                  )}
-                </Button>
-
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => handleDelete(item.id)}
-                  className="text-red-600 hover:text-red-700"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              </div>
-            </TableCell>
-          </TableRow>
-        ))}
-      </TableBody>
-    </Table>
-  );
-
   if (authLoading || isLoading) {
     return (
       <div className="container mx-auto py-8">
@@ -280,16 +179,16 @@ export default function FeedbackPage() {
     <div className="container mx-auto py-8 space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold">Feedback Management</h1>
+          <h1 className="text-3xl font-bold">Feedback</h1>
           <p className="text-muted-foreground">
-            Manage and track your feedback submissions
+            Share your thoughts, suggestions, or report issues
           </p>
         </div>
         <Dialog open={isAddingNew} onOpenChange={setIsAddingNew}>
           <DialogTrigger asChild>
-            <Button>
+            <Button className="bg-orange-300 hover:bg-orange-400">
               <Plus className="h-4 w-4 mr-2" />
-              Add Feedback
+              New Feedback
             </Button>
           </DialogTrigger>
           <DialogContent>
@@ -309,7 +208,7 @@ export default function FeedbackPage() {
               <Button variant="outline" onClick={() => setIsAddingNew(false)}>
                 Cancel
               </Button>
-              <Button onClick={handleAddNew} disabled={!newFeedback.trim()}>
+              <Button onClick={handleAddNew} disabled={!newFeedback.trim()} className="bg-orange-300 hover:bg-orange-400">
                 Submit Feedback
               </Button>
             </div>
@@ -317,55 +216,116 @@ export default function FeedbackPage() {
         </Dialog>
       </div>
 
-      {/* Active Feedback */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Active Feedback ({feedbackItems.length})</CardTitle>
-          <CardDescription>
-            Your current feedback items that need attention
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {feedbackItems.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              No active feedback items. Add some feedback to get started!
-            </div>
-          ) : (
-            <FeedbackTable items={feedbackItems} />
-          )}
-        </CardContent>
-      </Card>
+      {/* Filter buttons */}
+      <div className="flex gap-2">
+        <button
+          onClick={() => setShowArchived(false)}
+          className={`px-4 py-2 rounded-lg ${
+            !showArchived
+              ? 'bg-orange-300 text-white'
+              : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+          }`}
+        >
+          Active
+        </button>
+        <button
+          onClick={() => setShowArchived(true)}
+          className={`px-4 py-2 rounded-lg ${
+            showArchived
+              ? 'bg-orange-300 text-white'
+              : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+          }`}
+        >
+          Archived
+        </button>
+      </div>
 
-      {/* Archived Feedback */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle>Archived Feedback ({archivedItems.length})</CardTitle>
-              <CardDescription>
-                Feedback items that have been addressed or completed
-              </CardDescription>
-            </div>
-            <Button
-              variant="outline"
-              onClick={() => setShowArchived(!showArchived)}
-            >
-              {showArchived ? 'Hide' : 'Show'} Archived
-            </Button>
+      {/* Feedback Cards */}
+      <div className="bg-white rounded-lg shadow">
+        {(showArchived ? archivedItems : feedbackItems).length === 0 ? (
+          <div className="p-8 text-center text-gray-500">
+            {showArchived
+              ? 'No archived feedback items yet.'
+              : 'No active feedback items. Click "New Feedback" to create one.'
+            }
           </div>
-        </CardHeader>
-        {showArchived && (
-          <CardContent>
-            {archivedItems.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground">
-                No archived feedback items yet.
+        ) : (
+          <div className="divide-y">
+            {(showArchived ? archivedItems : feedbackItems).map((item) => (
+              <div key={item.id} className="p-4 hover:bg-gray-50">
+                <div className="flex justify-between items-start">
+                  <div className="flex-1">
+                    <p className="text-gray-800 mb-2">{item.message}</p>
+                    <p className="text-xs text-gray-400">
+                      Created: {formatDate(item.created_at)}
+                      {item.is_archived && item.archived_at && (
+                        <> • Archived: {formatDate(item.archived_at)}</>
+                      )}
+                    </p>
+                  </div>
+                  <div className="flex gap-2 ml-4">
+                    <Dialog>
+                      <DialogTrigger asChild>
+                        <button
+                          onClick={() => {
+                            setEditingItem(item);
+                            setEditMessage(item.message);
+                          }}
+                          className="p-2 hover:bg-blue-100 rounded"
+                          title="Edit"
+                        >
+                          <Edit2 className="h-4 w-4 text-blue-600" />
+                        </button>
+                      </DialogTrigger>
+                      <DialogContent>
+                        <DialogHeader>
+                          <DialogTitle>Edit Feedback</DialogTitle>
+                          <DialogDescription>
+                            Make changes to your feedback message.
+                          </DialogDescription>
+                        </DialogHeader>
+                        <Textarea
+                          value={editMessage}
+                          onChange={(e) => setEditMessage(e.target.value)}
+                          className="min-h-[120px]"
+                        />
+                        <div className="flex justify-end gap-2">
+                          <Button variant="outline" onClick={() => setEditingItem(null)}>
+                            Cancel
+                          </Button>
+                          <Button onClick={() => handleEdit(item)} className="bg-orange-300 hover:bg-orange-400">
+                            Save Changes
+                          </Button>
+                        </div>
+                      </DialogContent>
+                    </Dialog>
+
+                    <button
+                      onClick={() => handleArchive(item.id, item.is_archived || false)}
+                      className="p-2 hover:bg-gray-100 rounded"
+                      title={item.is_archived ? "Unarchive" : "Archive"}
+                    >
+                      {item.is_archived ? (
+                        <ArchiveRestore className="h-4 w-4 text-gray-600" />
+                      ) : (
+                        <Archive className="h-4 w-4 text-gray-600" />
+                      )}
+                    </button>
+
+                    <button
+                      onClick={() => handleDelete(item.id)}
+                      className="p-2 hover:bg-red-100 rounded"
+                      title="Delete"
+                    >
+                      <Trash2 className="h-4 w-4 text-red-600" />
+                    </button>
+                  </div>
+                </div>
               </div>
-            ) : (
-              <FeedbackTable items={archivedItems} isArchived={true} />
-            )}
-          </CardContent>
+            ))}
+          </div>
         )}
-      </Card>
+      </div>
     </div>
   );
 }

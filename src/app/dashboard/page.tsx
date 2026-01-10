@@ -6,6 +6,7 @@ import { NoteCard } from '@/components/NoteCard';
 import { DashboardCard } from '@/components/DashboardCard';
 import { NewEntryForm } from '@/components/NewEntryForm';
 import { NewEntryDropdown } from '@/components/NewEntryDropdown';
+import { QuoteOfTheDay } from '@/components/QuoteOfTheDay';
 import { Button } from '@/components/ui/button';
 import { Plus, Calendar, Clock, CheckSquare, FileText, ArrowRight, MoreHorizontal, MoreVertical, Link, CheckCircle2, ChevronUp, ChevronDown } from 'lucide-react';
 import { useTasks } from '@/hooks/useTasks';
@@ -893,6 +894,9 @@ const DashboardPage: React.FC = () => {
           <NewEntryDropdown onEntryCreated={handleUpdate} />
         </div>
       </div>
+
+      {/* Quote of the Day */}
+      <QuoteOfTheDay />
       
       {/* Edit task modal */}
       {taskToEdit && (
