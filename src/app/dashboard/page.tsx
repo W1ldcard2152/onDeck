@@ -317,10 +317,13 @@ const DashboardPage: React.FC = () => {
   
   // Update task status with optimistic UI update
   const updateTaskStatus = async (taskId: string, newStatus: TaskStatus): Promise<void> => {
+    // Find the task to check if it's a habit task
+    const task = localTasks.find(t => t.id === taskId);
+
     // Optimistic update - immediately update the local UI
     const previousTasks = [...localTasks];
-    setLocalTasks(prev => prev.map(task =>
-      task.id === taskId ? { ...task, status: newStatus } : task
+    setLocalTasks(prev => prev.map(t =>
+      t.id === taskId ? { ...t, status: newStatus } : t
     ));
 
     try {
@@ -341,6 +344,28 @@ const DashboardPage: React.FC = () => {
         .eq('id', taskId);
 
       if (itemError) throw itemError;
+
+      // If completing a habit task, generate the next occurrence
+      if (newStatus === 'completed' && task?.habit_id && user?.id) {
+        const habit = habits.find(h => h.id === task.habit_id);
+        if (habit && habit.is_active) {
+          console.log('Habit task completed - generating next occurrence for:', habit.title);
+          try {
+            const taskGenerator = new HabitTaskGenerator(supabase, user.id);
+            // Use the completed task's assigned_date as the base for calculating next occurrence
+            const completedDate = task.assigned_date
+              ? new Date(task.assigned_date + 'T00:00:00')
+              : new Date();
+            await taskGenerator.generateNextTask(habit, completedDate, false); // isInitialTask = false
+            console.log('✅ Next habit task generated successfully');
+            // Refetch tasks to show the new habit task
+            refetchTasks();
+          } catch (genError) {
+            console.error('❌ Error generating next habit task:', genError);
+            // Don't rollback - the completion was successful, just task generation failed
+          }
+        }
+      }
 
       // Success - the realtime subscription will eventually sync, but we already have the right state
     } catch (err) {

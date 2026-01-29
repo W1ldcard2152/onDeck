@@ -106,8 +106,18 @@ const TaskTableBase: React.FC<TaskTableBaseProps> = ({
   const [taskToEdit, setTaskToEdit] = useState<TaskWithDetails | null>(null);
   const [projectInfoMap, setProjectInfoMap] = useState<Record<string, ProjectInfo>>({});
   const [selectedTasks, setSelectedTasks] = useState<Set<string>>(new Set());
+  const [localTasks, setLocalTasks] = useState<TaskWithDetails[]>(tasks);
   const supabase = createClientComponentClient<Database>();
   const { user } = useSupabaseAuth();
+
+  // Update local tasks when tasks prop changes
+  useEffect(() => {
+    console.log('TaskTable: tasks prop changed, updating localTasks', {
+      newTasksCount: tasks.length,
+      firstThreeSortOrders: tasks.slice(0, 3).map(t => ({ title: t.item?.title, sort_order: t.sort_order }))
+    });
+    setLocalTasks(tasks);
+  }, [tasks]);
 
   // Fetch project information for project-linked tasks with optimized query
   useEffect(() => {
@@ -205,6 +215,71 @@ const TaskTableBase: React.FC<TaskTableBaseProps> = ({
       setProjectInfoMap({});
     }
   }, [tasks, supabase]);
+
+  // Move task up or down in the list by swapping sort_order
+  const moveTask = async (taskId: string, direction: 'up' | 'down') => {
+    const currentIndex = localTasks.findIndex(t => t.id === taskId);
+    if (currentIndex === -1) return;
+
+    const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
+    if (targetIndex < 0 || targetIndex >= localTasks.length) return;
+
+    const currentTask = localTasks[currentIndex];
+    const targetTask = localTasks[targetIndex];
+
+    // Don't allow moving past tasks with due dates if current task doesn't have one
+    if (!currentTask.due_date && targetTask.due_date) return;
+
+    // Simply swap the sort_order values
+    const newCurrentSortOrder = targetTask.sort_order;
+    const newTargetSortOrder = currentTask.sort_order;
+
+    console.log('TaskTable moveTask:', {
+      currentTask: currentTask.item?.title,
+      targetTask: targetTask.item?.title,
+      direction,
+      swappingSortOrders: `${currentTask.sort_order} ↔ ${targetTask.sort_order}`
+    });
+
+    // Store previous state for rollback
+    const previousTasks = [...localTasks];
+
+    // Optimistically update local state
+    setLocalTasks(prev => prev.map(task => {
+      if (task.id === currentTask.id) {
+        return { ...task, sort_order: newCurrentSortOrder };
+      }
+      if (task.id === targetTask.id) {
+        return { ...task, sort_order: newTargetSortOrder };
+      }
+      return task;
+    }));
+
+    try {
+      // Update both tasks in the database
+      const results = await Promise.all([
+        supabase.from('tasks').update({ sort_order: newCurrentSortOrder }).eq('id', currentTask.id),
+        supabase.from('tasks').update({ sort_order: newTargetSortOrder }).eq('id', targetTask.id)
+      ]);
+
+      // Check for errors in the responses
+      const errors = results.filter(r => r.error);
+      if (errors.length > 0) {
+        console.error('Database update errors:', errors);
+        // Revert to previous state
+        setLocalTasks(previousTasks);
+        onTaskUpdate();
+      } else {
+        console.log('TaskTable: Database updates successful');
+      }
+      // On success, the subscription will automatically update with the correct order
+    } catch (error) {
+      console.error('Error moving task:', error);
+      // Revert to previous state
+      setLocalTasks(previousTasks);
+      onTaskUpdate();
+    }
+  };
 
   const toggleTaskSelection = (taskId: string) => {
     setSelectedTasks(prev => {
@@ -683,6 +758,9 @@ const TaskTableBase: React.FC<TaskTableBaseProps> = ({
                   />
                 </TableHead>
                 <TableHead className="w-12">
+                  <span className="text-sm font-medium">Order</span>
+                </TableHead>
+                <TableHead className="w-12">
                   <span className="text-sm font-medium">Actions</span>
                 </TableHead>
                 <TableHead>
@@ -754,13 +832,15 @@ const TaskTableBase: React.FC<TaskTableBaseProps> = ({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {tasks.map((task) => {
+              {localTasks.map((task, index) => {
                 const isLoading = loading[task.id];
                 const status = task.status || 'on_deck';
                 const priority = task.priority || 'normal';
                 const isProjectTask = Boolean(task.project_id);
                 const isHabitTask = Boolean(task.habit_id);
                 const projectInfo = task.project_id ? projectInfoMap[task.project_id] : null;
+                const canMoveUp = index > 0;
+                const canMoveDown = index < localTasks.length - 1;
 
                 return (
                   <TableRow
@@ -773,6 +853,26 @@ const TaskTableBase: React.FC<TaskTableBaseProps> = ({
                         onCheckedChange={() => toggleTaskSelection(task.id)}
                         aria-label={`Select ${task.item.title}`}
                       />
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex flex-col gap-0.5">
+                        <button
+                          onClick={() => moveTask(task.id, 'up')}
+                          disabled={!canMoveUp || isLoading}
+                          className={`p-0.5 rounded hover:bg-gray-200 transition-colors ${!canMoveUp ? 'opacity-30 cursor-not-allowed' : ''}`}
+                          title="Move up"
+                        >
+                          <ChevronUp className="h-4 w-4 text-gray-600" />
+                        </button>
+                        <button
+                          onClick={() => moveTask(task.id, 'down')}
+                          disabled={!canMoveDown || isLoading}
+                          className={`p-0.5 rounded hover:bg-gray-200 transition-colors ${!canMoveDown ? 'opacity-30 cursor-not-allowed' : ''}`}
+                          title="Move down"
+                        >
+                          <ChevronDown className="h-4 w-4 text-gray-600" />
+                        </button>
+                      </div>
                     </TableCell>
                     <TableCell>
                       <DropdownMenu>
@@ -1097,9 +1197,10 @@ const TaskTable: React.FC<TaskTableProps> = ({
 
   const sortTasks = (tasksToSort: TaskWithDetails[], sorts: SortState[]): TaskWithDetails[] => {
     return [...tasksToSort].sort((a, b) => {
+      // If there are active sorts, apply them
       for (const sort of sorts) {
         let comparison = 0;
-        
+
         switch (sort.field) {
           case 'status': {
             const statusOrder: Record<TaskStatus, number> = { 'active': 0, 'habit': 1, 'project': 2, 'on_deck': 3, 'completed': 4 };
@@ -1149,7 +1250,11 @@ const TaskTable: React.FC<TaskTableProps> = ({
           return sort.direction === 'asc' ? comparison : -comparison;
         }
       }
-      return 0;
+
+      // If no sorts are active or all comparisons are equal, fall back to sort_order
+      const aSortOrder = a.sort_order || 0;
+      const bSortOrder = b.sort_order || 0;
+      return aSortOrder - bSortOrder;
     });
   };
 
@@ -1157,7 +1262,7 @@ const TaskTable: React.FC<TaskTableProps> = ({
     const status = task?.status?.toLowerCase() || 'on_deck';
     return status === 'active' || status === 'on_deck';
   }), activeSorts);
-  
+
   const allCompletedTasks = sortTasks(tasks.filter(task => {
     const status = task?.status?.toLowerCase() || 'on_deck';
     return status === 'completed';

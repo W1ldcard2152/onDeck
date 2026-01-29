@@ -4,10 +4,10 @@ import { Auth } from '@supabase/auth-ui-react'
 import { ThemeSupa } from '@supabase/auth-ui-shared'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 
-const redirectTo = typeof window !== 'undefined' 
-  ? `${window.location.origin}/auth/callback` 
-  : process.env.NEXT_PUBLIC_SITE_URL 
-    ? `${process.env.NEXT_PUBLIC_SITE_URL}/auth/callback` 
+const redirectTo = typeof window !== 'undefined'
+  ? `${window.location.origin}/auth/callback`
+  : process.env.NEXT_PUBLIC_SITE_URL
+    ? `${process.env.NEXT_PUBLIC_SITE_URL}/auth/callback`
     : 'http://localhost:3000/auth/callback';
 
 export default function AuthUI() {

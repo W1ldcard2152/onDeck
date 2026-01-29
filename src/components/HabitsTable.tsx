@@ -340,12 +340,8 @@ const HabitsTable = ({ habits, onHabitUpdate, onEditHabit }: HabitsTableProps) =
       // Delete incomplete tasks and generate a fresh one
       await generator.deleteIncompleteHabitTasks(habitId);
 
-      // Generate next task starting from today
-      // Parse date in local timezone to avoid UTC conversion issues
-      const startDate = habit.recurrence_rule?.start_date
-        ? new Date(habit.recurrence_rule.start_date + 'T00:00:00')
-        : new Date();
-      await generator.generateNextTask(habit as Habit, startDate, true); // isInitialTask = true
+      // Generate next task starting from today (not the habit's original start_date)
+      await generator.generateNextTask(habit as Habit, new Date(), true); // isInitialTask = true
 
       onHabitUpdate();
       await fetchNextScheduledDates(); // Refresh next scheduled dates

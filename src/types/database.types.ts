@@ -167,6 +167,7 @@ export interface Database {
           project_id: string | null;
           habit_id: string | null;
           daily_context: string | null;
+          sort_order: number;
         };
         Insert: {
           id: string;  // Must match items.id
@@ -181,6 +182,7 @@ export interface Database {
           project_id?: string | null;
           habit_id?: string | null;
           daily_context?: string | null;
+          sort_order?: number;
         };
         Update: {
           id?: string;
@@ -195,6 +197,7 @@ export interface Database {
           project_id?: string | null;
           habit_id?: string | null;
           daily_context?: string | null;
+          sort_order?: number;
         };
       };
       feedback: {
