@@ -190,12 +190,13 @@ export class HabitTaskGenerator {
     const dateStr = this.getLocalDateString(date) // YYYY-MM-DD format in local timezone
     console.log(`Creating habit task for "${habit.title}" on ${dateStr}`)
 
-    // Check if a task already exists for this habit on this date
+    // Check if a non-completed task already exists for this habit on this date
     const { data: existingTask, error: checkError } = await this.supabase
       .from('tasks')
       .select('id')
       .eq('habit_id', habit.id)
       .eq('assigned_date', dateStr)
+      .neq('status', 'completed')
       .maybeSingle()
 
     if (checkError) {

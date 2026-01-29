@@ -340,8 +340,8 @@ const HabitsTable = ({ habits, onHabitUpdate, onEditHabit }: HabitsTableProps) =
       // Delete incomplete tasks and generate a fresh one
       await generator.deleteIncompleteHabitTasks(habitId);
 
-      // Generate next task starting from today (not the habit's original start_date)
-      await generator.generateNextTask(habit as Habit, new Date(), true); // isInitialTask = true
+      // Generate the next task occurrence from today
+      await generator.generateNextTask(habit as Habit, new Date(), false); // isInitialTask = false to calculate next occurrence
 
       onHabitUpdate();
       await fetchNextScheduledDates(); // Refresh next scheduled dates
