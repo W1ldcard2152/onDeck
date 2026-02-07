@@ -352,10 +352,8 @@ const DashboardPage: React.FC = () => {
           console.log('Habit task completed - generating next occurrence for:', habit.title);
           try {
             const taskGenerator = new HabitTaskGenerator(supabase, user.id);
-            // Use the completed task's assigned_date as the base for calculating next occurrence
-            const completedDate = task.assigned_date
-              ? new Date(task.assigned_date + 'T00:00:00')
-              : new Date();
+            // Use the current date (when task is actually completed) as the base for calculating next occurrence
+            const completedDate = new Date();
             await taskGenerator.generateNextTask(habit, completedDate, false); // isInitialTask = false
             console.log('✅ Next habit task generated successfully');
             // Refetch tasks to show the new habit task
