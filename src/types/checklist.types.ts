@@ -71,4 +71,5 @@ export interface ChecklistTemplateWithDetails extends ChecklistTemplate {
   items: ChecklistItem[];
   contexts: ChecklistContextAssignment[];
   streak?: number;
+  completedToday?: boolean;
 }

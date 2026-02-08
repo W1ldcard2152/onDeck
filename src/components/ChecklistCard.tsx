@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { ChecklistTemplateWithDetails } from '@/types/checklist.types';
-import { Flame, Edit, Trash2, CheckSquare } from 'lucide-react';
+import { Flame, Edit, Trash2, CheckSquare, CheckCircle2 } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -32,6 +32,11 @@ export function ChecklistCard({ template, onComplete, onEdit, onDelete }: Checkl
       className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow cursor-pointer relative group"
       onClick={onComplete}
     >
+      {/* Completed Today Indicator */}
+      {template.completedToday && (
+        <CheckCircle2 className="absolute top-3 right-10 h-5 w-5 text-green-500" />
+      )}
+
       {/* Card Header */}
       <div className="flex justify-between items-start mb-3">
         <h3 className="text-lg font-semibold text-gray-900 flex-1 pr-2">{template.name}</h3>

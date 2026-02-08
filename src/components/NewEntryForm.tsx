@@ -321,7 +321,6 @@ export const NewEntryForm: React.FC<NewEntryFormProps> = ({
             .update({
               content: content.trim() || null,
               url: url.trim() || null,
-              knowledge_base_id: knowledgeBaseId === 'none' ? null : knowledgeBaseId || null,
               entry_type: entryType
             })
             .eq('id', initialData.id);
@@ -350,7 +349,7 @@ export const NewEntryForm: React.FC<NewEntryFormProps> = ({
           user_id: user.id,
           content: type === 'note' ? content.trim() : null,
           url: type === 'note' ? url.trim() || null : null,
-          knowledge_base_id: type === 'note' ? (knowledgeBaseId === 'none' ? null : knowledgeBaseId || null) : null,
+          knowledge_base_id: null,
           entry_type: type === 'note' ? entryType : undefined,
           due_date: preserveLocalDate(dueDate),
           assigned_date: preserveLocalDate(assignedDate),
@@ -397,7 +396,10 @@ export const NewEntryForm: React.FC<NewEntryFormProps> = ({
           </Button>
         ) : null}
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
+      <DialogContent className={type === 'note'
+        ? "w-[calc(100vw-400px)] h-[calc(100vh-60px)] max-w-none flex flex-col"
+        : "sm:max-w-[500px] max-h-[90vh] overflow-y-auto"
+      }>
         <DialogHeader>
           <DialogTitle>
             {isEditing ? 
@@ -414,7 +416,7 @@ export const NewEntryForm: React.FC<NewEntryFormProps> = ({
                 'Create a new task or note.'}
           </DialogDescription>
         </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className={type === 'note' ? "flex flex-col gap-4 flex-1 min-h-0" : "space-y-4"}>
           {error && (
             <div className="text-red-500 text-sm">{error}</div>
           )}
@@ -563,22 +565,11 @@ export const NewEntryForm: React.FC<NewEntryFormProps> = ({
             </>
           ) : (
             <>
-              <div className="space-y-2">
-                <Label htmlFor="url">URL (optional)</Label>
-                <Input
-                  id="url"
-                  type="url"
-                  value={url}
-                  onChange={(e) => setUrl(e.target.value)}
-                  placeholder="https://example.com"
-                />
-              </div>
-
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="entry_type">Entry Type</Label>
-                  <Select 
-                    value={entryType} 
+                  <Select
+                    value={entryType}
                     onValueChange={(value) => {
                       if (['article', 'video', 'document', 'resource', 'note', 'link'].includes(value)) {
                         setEntryType(value as KnowledgeEntryType);
@@ -600,35 +591,18 @@ export const NewEntryForm: React.FC<NewEntryFormProps> = ({
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="knowledge_base">Knowledge Base</Label>
-                  <Select
-                    value={knowledgeBaseId}
-                    onValueChange={setKnowledgeBaseId}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select knowledge base" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">No knowledge base</SelectItem>
-                      {knowledgeBases.map((kb) => (
-                        <SelectItem key={kb.id} value={kb.id}>
-                          <div className="flex items-center gap-2">
-                            {kb.keystone && (
-                              <div 
-                                className="w-2 h-2 rounded-full"
-                                style={{ backgroundColor: kb.keystone.color }}
-                              />
-                            )}
-                            {kb.name}
-                          </div>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <Label htmlFor="url">URL (optional)</Label>
+                  <Input
+                    id="url"
+                    type="url"
+                    value={url}
+                    onChange={(e) => setUrl(e.target.value)}
+                    placeholder="https://example.com"
+                  />
                 </div>
               </div>
 
-              <div className="space-y-2">
+              <div className="flex flex-col gap-2 flex-1 min-h-0">
                 <Label htmlFor="content">Content</Label>
                 <Textarea
                   id="content"
@@ -636,7 +610,7 @@ export const NewEntryForm: React.FC<NewEntryFormProps> = ({
                   value={content}
                   onChange={(e) => setContent(e.target.value)}
                   placeholder="Enter content"
-                  className="h-24 min-h-[6rem] resize-none"
+                  className="flex-1 text-sm resize-none"
                   onFocus={() => handleTextAreaFocus(contentRef)}
                 />
               </div>

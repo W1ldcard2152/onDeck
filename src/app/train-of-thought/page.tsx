@@ -7,7 +7,7 @@ import { SaveAsNoteDialog } from '@/components/SaveAsNoteDialog'
 import { ThoughtHistory } from '@/components/ThoughtHistory'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
-import { Save, Eraser, StickyNote } from 'lucide-react'
+import { Save, Eraser, StickyNote, Scissors } from 'lucide-react'
 import { format } from 'date-fns'
 
 export default function TrainOfThoughtPage() {
@@ -23,11 +23,14 @@ export default function TrainOfThoughtPage() {
     saveNow,
     clearAll,
     saveAsNote,
+    saveSelectionAsNote,
     loadFromHistory
   } = useTrainOfThought(user?.id)
 
   const [content, setContent] = useState('')
   const [isSaveDialogOpen, setIsSaveDialogOpen] = useState(false)
+  const [isSelectionDialogOpen, setIsSelectionDialogOpen] = useState(false)
+  const [selectedText, setSelectedText] = useState('')
 
   // Sync content with current thought
   useEffect(() => {
@@ -53,9 +56,25 @@ export default function TrainOfThoughtPage() {
     setContent('')
   }
 
-  const handleSaveAsNote = async (title: string) => {
-    await saveAsNote(title)
+  const handleSaveAsNote = async (title: string, content: string) => {
+    await saveAsNote(title, content)
     setContent('')
+  }
+
+  const handleSaveSelectionAsNote = async (title: string, content: string) => {
+    await saveSelectionAsNote(title, content)
+    setSelectedText('')
+  }
+
+  const handleTextSelect = (e: React.SyntheticEvent<HTMLTextAreaElement>) => {
+    const textarea = e.currentTarget
+    const start = textarea.selectionStart
+    const end = textarea.selectionEnd
+    if (start !== end) {
+      setSelectedText(textarea.value.substring(start, end))
+    } else {
+      setSelectedText('')
+    }
   }
 
   const handleLoadFromHistory = async (thoughtId: string) => {
@@ -108,6 +127,16 @@ export default function TrainOfThoughtPage() {
               <StickyNote className="h-4 w-4 mr-2" />
               Save as Note
             </Button>
+            {selectedText && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setIsSelectionDialogOpen(true)}
+              >
+                <Scissors className="h-4 w-4 mr-2" />
+                Save Selection
+              </Button>
+            )}
             <Button
               variant="outline"
               size="sm"
@@ -145,6 +174,16 @@ export default function TrainOfThoughtPage() {
               <StickyNote className="h-4 w-4 mr-2" />
               Save as Note
             </Button>
+            {selectedText && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setIsSelectionDialogOpen(true)}
+              >
+                <Scissors className="h-4 w-4 mr-2" />
+                Save Selection
+              </Button>
+            )}
             <Button
               variant="outline"
               size="sm"
@@ -172,6 +211,7 @@ export default function TrainOfThoughtPage() {
         <Textarea
           value={content}
           onChange={(e) => handleContentChange(e.target.value)}
+          onSelect={handleTextSelect}
           placeholder="Start typing... Your thoughts will auto-save after 2 seconds of inactivity."
           className="min-h-[500px] resize-none border-0 focus-visible:ring-0 text-base p-6"
           maxLength={50000}
@@ -204,6 +244,15 @@ export default function TrainOfThoughtPage() {
         onOpenChange={setIsSaveDialogOpen}
         onSave={handleSaveAsNote}
         currentContent={content}
+      />
+
+      {/* Save Selection as Note Dialog */}
+      <SaveAsNoteDialog
+        isOpen={isSelectionDialogOpen}
+        onOpenChange={setIsSelectionDialogOpen}
+        onSave={handleSaveSelectionAsNote}
+        currentContent={selectedText}
+        description="Save your selected text as a formal note in the Notes tab."
       />
     </div>
   )

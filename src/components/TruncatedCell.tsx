@@ -21,7 +21,7 @@ const TruncatedCell: React.FC<TruncatedCellProps> = ({ content, maxLength = 60 }
 
   // If content is shorter than maxLength, just return it
   if (content.length <= maxLength) {
-    return <span>{content}</span>;
+    return <span className="whitespace-pre-wrap">{content}</span>;
   }
 
   const truncatedContent = content.slice(0, maxLength) + '...';
@@ -33,10 +33,10 @@ const TruncatedCell: React.FC<TruncatedCellProps> = ({ content, maxLength = 60 }
           {truncatedContent}
         </span>
       </PopoverTrigger>
-      <PopoverContent className="w-80 p-4 bg-white">
-        <div 
+      <PopoverContent className="w-[32rem] p-6 bg-white">
+        <div
           className={cn(
-            "text-sm leading-relaxed whitespace-pre-wrap max-h-48 overflow-y-auto",
+            "text-sm leading-relaxed whitespace-pre-wrap max-h-[32rem] overflow-y-auto",
             "scrollbar-thin scrollbar-thumb-gray-200 scrollbar-track-transparent"
           )}
         >

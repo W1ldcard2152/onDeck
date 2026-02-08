@@ -84,11 +84,16 @@ export function useChecklists(userId: string | undefined) {
         // Calculate streak
         const streak = calculateStreak(completions.map(c => c.completed_at), template.recurrence_rule)
 
+        // Check if completed today
+        const todayStr = new Date().toISOString().split('T')[0]
+        const completedToday = completions.some(c => c.completed_at.split('T')[0] === todayStr)
+
         return {
           ...template,
           items,
           contexts,
-          streak
+          streak,
+          completedToday
         }
       })
 

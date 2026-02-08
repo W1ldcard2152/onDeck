@@ -270,17 +270,53 @@ export function useTrainOfThought(userId: string | undefined) {
     }
   }, [userId, currentThought, createThought])
 
-  // Save as formal note - changes note_type to 'note' and updates title
-  const saveAsNote = useCallback(async (title: string) => {
+  // Save a text selection as a new formal note (doesn't affect current thought)
+  const saveSelectionAsNote = useCallback(async (title: string, selectedContent: string) => {
+    if (!userId || !selectedContent.trim()) return
+
+    try {
+      const supabase = supabaseRef.current
+
+      const { data: itemData, error: itemError } = await supabase
+        .from('items')
+        .insert({
+          user_id: userId,
+          title: title,
+          item_type: 'note',
+          is_archived: false
+        })
+        .select()
+        .single()
+
+      if (itemError) throw itemError
+
+      const { error: noteError } = await supabase
+        .from('notes')
+        .insert({
+          id: itemData.id,
+          content: selectedContent,
+          note_type: 'note',
+          entry_type: 'note'
+        })
+
+      if (noteError) throw noteError
+    } catch (e) {
+      console.error('Error saving selection as note:', e)
+      setError(e instanceof Error ? e : new Error('Failed to save selection as note'))
+    }
+  }, [userId])
+
+  // Save as formal note - changes note_type to 'note' and updates title and content
+  const saveAsNote = useCallback(async (title: string, content: string) => {
     if (!userId || !currentThought) return
 
     try {
       const supabase = supabaseRef.current
 
-      // Update the note type
+      // Update the note type and content
       const { error: noteError } = await supabase
         .from('notes')
-        .update({ note_type: 'note' })
+        .update({ note_type: 'note', content })
         .eq('id', currentThought.id)
 
       if (noteError) throw noteError
@@ -344,6 +380,7 @@ export function useTrainOfThought(userId: string | undefined) {
     saveNow,
     clearAll,
     saveAsNote,
+    saveSelectionAsNote,
     loadFromHistory,
     refetch: fetchThoughts
   }
