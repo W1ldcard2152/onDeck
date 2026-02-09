@@ -33,6 +33,7 @@ export interface Task {
   converted_project_id: string | null;
   daily_context?: string | null; // JSON array of DailyContext values, or null for all-day
   sort_order: number; // Manual sort order within context
+  checklist_template_id: string | null;
 }
 
 export interface TaskWithDetails {
@@ -55,6 +56,7 @@ export interface TaskWithDetails {
   converted_project_id: string | null;
   daily_context?: string | null; // JSON array of DailyContext values, or null for all-day
   sort_order: number; // Manual sort order within context
+  checklist_template_id: string | null;
   item: Item;
 }
 

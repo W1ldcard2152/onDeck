@@ -37,6 +37,8 @@ import type { Database } from '@/types/database.types';
 import { HabitTaskGenerator } from '@/lib/habitTaskGenerator';
 import { getSupabaseClient } from '@/lib/supabase-client';
 import { startOfDay, parseISO, isBefore } from 'date-fns';
+import { useChecklists } from '@/hooks/useChecklists';
+import { ChecklistCompletion } from '@/components/ChecklistCompletion';
 
 const DashboardPage: React.FC = () => {
   const { user } = useSupabaseAuth();
@@ -49,6 +51,8 @@ const DashboardPage: React.FC = () => {
   );
   const { notes, isLoading: notesLoading, refetch: refetchNotes } = useNotes(user?.id);
   const { habits, isLoading: habitsLoading } = useHabits(user?.id);
+  const { templates: checklistTemplates } = useChecklists(user?.id);
+  const [completingTemplateId, setCompletingTemplateId] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [loadingTasks, setLoadingTasks] = useState<Record<string, boolean>>({});
   const [taskToEdit, setTaskToEdit] = useState<TaskWithDetails | null>(null);
@@ -894,6 +898,18 @@ const DashboardPage: React.FC = () => {
                 Project
               </span>
             )}
+            {task.checklist_template_id && (
+              <button
+                className="inline-flex items-center text-purple-600 hover:text-purple-800 font-medium whitespace-nowrap"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setCompletingTemplateId(task.checklist_template_id);
+                }}
+              >
+                <CheckSquare className="mr-1 h-3 w-3" />
+                Run Checklist
+              </button>
+            )}
           </div>
         </div>
         <Badge className={`${getStatusColor(task.status || 'active')} flex-shrink-0 text-xs`}>{task.status || 'active'}</Badge>
@@ -1162,6 +1178,22 @@ const DashboardPage: React.FC = () => {
           }
         />
       </div>
+
+      {/* Inline Checklist Completion Modal */}
+      {completingTemplateId && (() => {
+        const template = checklistTemplates.find(t => t.id === completingTemplateId);
+        if (!template) return null;
+        return (
+          <ChecklistCompletion
+            template={template}
+            onClose={() => setCompletingTemplateId(null)}
+            onComplete={() => {
+              setCompletingTemplateId(null);
+              refetchTasks();
+            }}
+          />
+        );
+      })()}
     </div>
   );
 };

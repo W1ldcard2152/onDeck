@@ -244,7 +244,8 @@ export class HabitTaskGenerator {
         status: 'habit',
         description: habit.description,
         priority: habit.priority,
-        habit_id: habit.id
+        habit_id: habit.id,
+        checklist_template_id: habit.checklist_template_id || null
       })
 
     if (taskError) {

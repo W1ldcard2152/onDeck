@@ -2,7 +2,7 @@ import { useSupabaseAuth } from '@/hooks/useSupabaseAuth';
 import React, { useState, useEffect } from 'react';
 import TruncatedCell from './TruncatedCell';
 import { format } from 'date-fns';
-import { Check, MoreHorizontal, Link, ChevronDown, ChevronUp, ChevronRight, ChevronLeft, AlertCircle, Repeat, Trash2 } from 'lucide-react';
+import { Check, MoreHorizontal, Link, ChevronDown, ChevronUp, ChevronRight, ChevronLeft, AlertCircle, Repeat, Trash2, CheckSquare } from 'lucide-react';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import { NewEntryForm } from '@/components/NewEntryForm';
 import {
@@ -28,6 +28,8 @@ import type { Priority, TaskStatus } from '@/types/database.types';
 import ScrollableTableWrapper from './layouts/responsiveNav/ScrollableTableWrapper';
 import { ProjectTaskManager } from '@/lib/projectTaskManager';
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { useChecklists } from '@/hooks/useChecklists';
+import { ChecklistCompletion } from '@/components/ChecklistCompletion';
 
 // Define types
 type SortDirection = 'asc' | 'desc' | null;
@@ -107,8 +109,10 @@ const TaskTableBase: React.FC<TaskTableBaseProps> = ({
   const [projectInfoMap, setProjectInfoMap] = useState<Record<string, ProjectInfo>>({});
   const [selectedTasks, setSelectedTasks] = useState<Set<string>>(new Set());
   const [localTasks, setLocalTasks] = useState<TaskWithDetails[]>(tasks);
+  const [completingTemplateId, setCompletingTemplateId] = useState<string | null>(null);
   const supabase = createClientComponentClient<Database>();
   const { user } = useSupabaseAuth();
+  const { templates: checklistTemplates } = useChecklists(user?.id);
 
   // Update local tasks when tasks prop changes
   useEffect(() => {
@@ -983,6 +987,18 @@ const TaskTableBase: React.FC<TaskTableBaseProps> = ({
                             Habit Task
                           </span>
                         )}
+                        {task.checklist_template_id && (
+                          <button
+                            className="inline-flex items-center bg-purple-100 text-purple-800 text-xs px-2 py-0.5 rounded-full hover:bg-purple-200 transition-colors"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setCompletingTemplateId(task.checklist_template_id);
+                            }}
+                          >
+                            <CheckSquare className="h-3 w-3 mr-1" />
+                            Run Checklist
+                          </button>
+                        )}
                       </div>
                     </TableCell>
                     
@@ -1091,6 +1107,22 @@ const TaskTableBase: React.FC<TaskTableBaseProps> = ({
             onClose={() => setTaskToEdit(null)}
           />
         )}
+
+        {/* Inline Checklist Completion Modal */}
+        {completingTemplateId && (() => {
+          const template = checklistTemplates.find(t => t.id === completingTemplateId);
+          if (!template) return null;
+          return (
+            <ChecklistCompletion
+              template={template}
+              onClose={() => setCompletingTemplateId(null)}
+              onComplete={() => {
+                setCompletingTemplateId(null);
+                onTaskUpdate();
+              }}
+            />
+          );
+        })()}
       </div>
     </div>
   );

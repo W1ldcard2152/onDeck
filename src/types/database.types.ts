@@ -168,6 +168,7 @@ export interface Database {
           habit_id: string | null;
           daily_context: string | null;
           sort_order: number;
+          checklist_template_id: string | null;
         };
         Insert: {
           id: string;  // Must match items.id
@@ -183,6 +184,7 @@ export interface Database {
           habit_id?: string | null;
           daily_context?: string | null;
           sort_order?: number;
+          checklist_template_id?: string | null;
         };
         Update: {
           id?: string;
@@ -198,6 +200,7 @@ export interface Database {
           habit_id?: string | null;
           daily_context?: string | null;
           sort_order?: number;
+          checklist_template_id?: string | null;
         };
       };
       feedback: {

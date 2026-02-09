@@ -84,9 +84,14 @@ export function useChecklists(userId: string | undefined) {
         // Calculate streak
         const streak = calculateStreak(completions.map(c => c.completed_at), template.recurrence_rule)
 
-        // Check if completed today
-        const todayStr = new Date().toISOString().split('T')[0]
-        const completedToday = completions.some(c => c.completed_at.split('T')[0] === todayStr)
+        // Check if completed today (using local timezone)
+        const now = new Date()
+        const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+        const completedToday = completions.some(c => {
+          const d = new Date(c.completed_at)
+          const localStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+          return localStr === todayStr
+        })
 
         return {
           ...template,

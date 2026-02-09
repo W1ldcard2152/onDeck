@@ -198,6 +198,7 @@ export function useTasks(
             habit_id: task.habit_id,
             daily_context: task.daily_context,
             sort_order: task.sort_order || 0,
+            checklist_template_id: task.checklist_template_id || null,
             created_at: item.created_at,
             updated_at: item.updated_at,
             title: item.title,

@@ -14,7 +14,6 @@ import UserMenu from '../UserMenu';
 import IntegratedSearch from '../IntegratedSearch';
 import ClientLayout from './ClientLayout';
 import InstallPWA from '../InstallPWA';
-import PWAStatus from '../PWAStatus';
 import OfflineNotification from '../OfflineNotification';
 import PWANavigationBar from '../PWANavigationBar';
 import { FeedbackModal } from '../FeedbackModal';
@@ -306,9 +305,6 @@ const DesktopLayout = () => {
           />
         </div>
       </div>
-      
-      {/* PWA Status Debug (visible in development) */}
-      <PWAStatus showDebug={process.env.NODE_ENV === 'development'} />
       
       {/* Offline notification */}
       <OfflineNotification />

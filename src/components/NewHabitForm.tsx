@@ -29,9 +29,10 @@ interface NewHabitFormProps {
   onHabitCreated: () => void;
   editingHabit?: Habit | null;
   onHabitUpdated?: () => void;
+  checklistTemplates?: { id: string; name: string }[];
 }
 
-const NewHabitForm = ({ onHabitCreated, editingHabit, onHabitUpdated }: NewHabitFormProps) => {
+const NewHabitForm = ({ onHabitCreated, editingHabit, onHabitUpdated, checklistTemplates }: NewHabitFormProps) => {
   console.log('NewHabitForm loaded - Monthly scheduling available!');
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -45,6 +46,7 @@ const NewHabitForm = ({ onHabitCreated, editingHabit, onHabitUpdated }: NewHabit
   const [dailyContexts, setDailyContexts] = useState<DailyContext[]>([]);
   const [startDate, setStartDate] = useState('');
   const [offsetDays, setOffsetDays] = useState(0);
+  const [checklistTemplateId, setChecklistTemplateId] = useState<string | null>(null);
   
   const { user } = useSupabaseAuth();
   const { createHabit, updateHabit } = useHabits(user?.id);
@@ -67,8 +69,9 @@ const NewHabitForm = ({ onHabitCreated, editingHabit, onHabitUpdated }: NewHabit
       setSelectedDays(rule.days_of_week || []);
       setSelectedDaysOfMonth(rule.days_of_month || []);
       setDailyContexts(rule.daily_context || []);
-      setStartDate(rule.start_date || '');
+      setStartDate(getLocalDateString());
       setOffsetDays(rule.offset_days || 0);
+      setChecklistTemplateId(editingHabit.checklist_template_id || null);
     }
   }, [editingHabit]);
 
@@ -87,6 +90,7 @@ const NewHabitForm = ({ onHabitCreated, editingHabit, onHabitUpdated }: NewHabit
       setDailyContexts([]);
       setStartDate('');
       setOffsetDays(0);
+      setChecklistTemplateId(null);
       if (open) {
         setOpen(false);
       }
@@ -128,6 +132,7 @@ const NewHabitForm = ({ onHabitCreated, editingHabit, onHabitUpdated }: NewHabit
           description: description.trim() || null,
           priority,
           recurrence_rule: recurrenceRule,
+          checklist_template_id: checklistTemplateId,
         });
         onHabitUpdated?.();
       } else {
@@ -137,7 +142,8 @@ const NewHabitForm = ({ onHabitCreated, editingHabit, onHabitUpdated }: NewHabit
           description: description.trim() || null,
           priority,
           recurrence_rule: recurrenceRule,
-          is_active: true
+          is_active: true,
+          checklist_template_id: checklistTemplateId,
         });
         onHabitCreated();
       }
@@ -153,6 +159,7 @@ const NewHabitForm = ({ onHabitCreated, editingHabit, onHabitUpdated }: NewHabit
       setDailyContexts([]);
       setStartDate('');
       setOffsetDays(0);
+      setChecklistTemplateId(null);
       setOpen(false);
       
     } catch (error) {
@@ -235,6 +242,26 @@ const NewHabitForm = ({ onHabitCreated, editingHabit, onHabitUpdated }: NewHabit
                 </SelectContent>
               </Select>
             </div>
+
+            {checklistTemplates && checklistTemplates.length > 0 && (
+              <div className="space-y-2">
+                <Label htmlFor="checklist">Attached Checklist (optional)</Label>
+                <Select
+                  value={checklistTemplateId || 'none'}
+                  onValueChange={(value) => setChecklistTemplateId(value === 'none' ? null : value)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="No checklist attached" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">No checklist attached</SelectItem>
+                    {checklistTemplates.map(t => (
+                      <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
 
             <div className="space-y-4 border-t pt-4 bg-blue-50 p-4 rounded-lg">
               <div className="text-sm font-semibold text-blue-800">📅 Daily Context (Optional)</div>

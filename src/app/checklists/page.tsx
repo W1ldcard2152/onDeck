@@ -1,6 +1,7 @@
 'use client'
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { useSupabaseAuth } from '@/hooks/useSupabaseAuth';
 import { useChecklists } from '@/hooks/useChecklists';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -18,12 +19,26 @@ const CONTEXT_TABS: ContextTab[] = ['Morning', 'Work', 'Family', 'Evening', 'Wee
 export default function ChecklistsPage() {
   const { user } = useSupabaseAuth();
   const { templates, isLoading, error, refetch } = useChecklists(user?.id);
+  const searchParams = useSearchParams();
   const [selectedContext, setSelectedContext] = useState<ContextTab>('All');
   const [showWizard, setShowWizard] = useState(false);
   const [completingTemplate, setCompletingTemplate] = useState<ChecklistTemplateWithDetails | null>(null);
   const [editingTemplate, setEditingTemplate] = useState<ChecklistTemplateWithDetails | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState<'name' | 'date' | 'streak' | 'context'>('name');
+
+  // Auto-open completion modal when navigated with ?complete=<template_id>
+  const completeTemplateId = searchParams.get('complete');
+  useEffect(() => {
+    if (completeTemplateId && templates.length > 0 && !completingTemplate) {
+      const template = templates.find(t => t.id === completeTemplateId);
+      if (template) {
+        setCompletingTemplate(template);
+        // Clean up the URL param
+        window.history.replaceState({}, '', '/checklists');
+      }
+    }
+  }, [completeTemplateId, templates, completingTemplate]);
 
   // Filter templates by context
   const filteredTemplates = useMemo(() => {

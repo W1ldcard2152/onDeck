@@ -39,6 +39,7 @@ export interface Habit {
   is_active: boolean;
   created_at: string;
   updated_at: string;
+  checklist_template_id: string | null;
   // Legacy fields (keeping for compatibility)
   frequency?: string;
   tracking_type?: string;
@@ -123,6 +124,7 @@ export function useHabits(userId: string | undefined) {
         priority: habitData.priority,
         recurrence_rule: habitData.recurrence_rule,
         is_active: habitData.is_active,
+        checklist_template_id: habitData.checklist_template_id || null,
         frequency: habitData.frequency || 'daily',
         tracking_type: habitData.tracking_type || 'boolean',
         tracking_config: habitData.tracking_config || {},
@@ -232,6 +234,19 @@ export function useHabits(userId: string | undefined) {
       }
     } else {
       console.log('Not modifying tasks - habit is_active:', data.is_active, 'updates.is_active:', updates.is_active, 'updates.recurrence_rule:', !!updates.recurrence_rule)
+    }
+
+    // If checklist_template_id changed, propagate to existing incomplete tasks
+    if (updates.checklist_template_id !== undefined) {
+      try {
+        await supabase
+          .from('tasks')
+          .update({ checklist_template_id: data.checklist_template_id })
+          .eq('habit_id', habitId)
+          .neq('status', 'completed')
+      } catch (propagateError) {
+        console.error('Error propagating checklist_template_id to tasks:', propagateError)
+      }
     }
 
     // Refresh habits list

@@ -8,13 +8,15 @@ import { MonthlyCalendar } from '@/components/MonthlyCalendar';
 import { useSupabaseAuth } from '@/hooks/useSupabaseAuth';
 import { useHabits, type Habit } from '@/hooks/useHabits';
 import { getSupabaseClient } from '@/lib/supabase-client';
+import { useChecklists } from '@/hooks/useChecklists';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 import type { TaskWithDetails } from '@/lib/types';
 
 export default function HabitsPage() {
   const { user } = useSupabaseAuth();
   const { habits, isLoading, error, refetch } = useHabits(user?.id);
-  
+  const { templates: checklistTemplates } = useChecklists(user?.id);
+
   // State for habit tasks debugging
   const [habitTasks, setHabitTasks] = useState<TaskWithDetails[]>([]);
   const [showHabitTasks, setShowHabitTasks] = useState(false);
@@ -238,6 +240,7 @@ export default function HabitsPage() {
             onHabitCreated={handleHabitCreated}
             editingHabit={editingHabit}
             onHabitUpdated={handleHabitUpdated}
+            checklistTemplates={checklistTemplates?.map(t => ({ id: t.id, name: t.name }))}
           />
         </div>
 
@@ -248,6 +251,7 @@ export default function HabitsPage() {
             onHabitCreated={handleHabitCreated}
             editingHabit={editingHabit}
             onHabitUpdated={handleHabitUpdated}
+            checklistTemplates={checklistTemplates?.map(t => ({ id: t.id, name: t.name }))}
           />
         </div>
       </div>

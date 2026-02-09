@@ -76,7 +76,7 @@ const DatePickerField: React.FC<{
 
   return (
     <div className="space-y-2">
-      <div className="flex justify-between items-center">
+      <div className="flex justify-between items-center h-6">
         <Label>{label}</Label>
         {showClearButton && selectedDate && (
           <Button
@@ -397,7 +397,7 @@ export const NewEntryForm: React.FC<NewEntryFormProps> = ({
         ) : null}
       </DialogTrigger>
       <DialogContent className={type === 'note'
-        ? "w-[calc(100vw-400px)] h-[calc(100vh-60px)] max-w-none flex flex-col"
+        ? "w-[calc(100vw-2rem)] h-[calc(100vh-2rem)] sm:w-[calc(100vw-400px)] sm:h-[calc(100vh-60px)] max-w-none flex flex-col"
         : "sm:max-w-[500px] max-h-[90vh] overflow-y-auto"
       }>
         <DialogHeader>

@@ -56,7 +56,7 @@ export function SaveAsNoteDialog({
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[calc(100vw-400px)] h-[calc(100vh-60px)] max-w-none flex flex-col">
+      <DialogContent className="w-[calc(100vw-2rem)] h-[calc(100vh-2rem)] sm:w-[calc(100vw-400px)] sm:h-[calc(100vh-60px)] max-w-none flex flex-col">
         <DialogHeader>
           <DialogTitle>Save as Formal Note</DialogTitle>
           <DialogDescription>
