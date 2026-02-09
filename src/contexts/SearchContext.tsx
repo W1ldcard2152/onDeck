@@ -1,6 +1,6 @@
-import React, { createContext, useContext, useState, useCallback } from 'react';
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
-import type { Database } from '@/types/database.types';
+import React, { createContext, useContext, useState, useCallback, useRef } from 'react';
+import { getSupabaseClient } from '@/lib/supabase-client';
+import { validateSearchQuery } from '@/lib/validate';
 
 interface SearchResult {
   id: string;
@@ -28,28 +28,33 @@ export function SearchProvider({ children }: { children: React.ReactNode }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [showResults, setShowResults] = useState(false);
-  
-  const supabase = createClientComponentClient<Database>();
+
+  const supabaseRef = useRef(getSupabaseClient());
 
   const handleSetSearchQuery = useCallback((query: string) => {
-    console.log('Setting search query:', query);
     setSearchQuery(query);
   }, []);
 
   const performSearch = useCallback(async (query: string) => {
-    console.log('Performing search for:', query);
     if (!query.trim()) {
       setSearchResults([]);
       return;
     }
 
+    const sanitizedQuery = validateSearchQuery(query);
+    if (!sanitizedQuery) {
+      setSearchResults([]);
+      return;
+    }
+
     setIsSearching(true);
+    const supabase = supabaseRef.current;
     try {
       // Search in items table first to get all matching items
       const { data: items, error: itemsError } = await supabase
         .from('items')
         .select('*')
-        .or(`title.ilike.%${query}%`)
+        .or(`title.ilike.%${sanitizedQuery}%`)
         .order('created_at', { ascending: false });
 
       if (itemsError) throw itemsError;
@@ -77,7 +82,7 @@ export function SearchProvider({ children }: { children: React.ReactNode }) {
       const results: SearchResult[] = items.map(item => {
         const task = tasks?.find(t => t.id === item.id);
         const note = notes?.find(n => n.id === item.id);
-        
+
         return {
           id: item.id,
           title: item.title,
@@ -87,7 +92,6 @@ export function SearchProvider({ children }: { children: React.ReactNode }) {
         };
       });
 
-      console.log('Search results:', results);
       setSearchResults(results);
     } catch (error) {
       console.error('Search error:', error);
@@ -95,10 +99,9 @@ export function SearchProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setIsSearching(false);
     }
-  }, [supabase]);
+  }, []);
 
   const clearSearch = useCallback(() => {
-    console.log('Clearing search');
     setSearchQuery('');
     setSearchResults([]);
     setShowResults(false);

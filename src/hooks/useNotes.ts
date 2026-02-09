@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react'
 import type { NoteWithDetails } from '@/lib/types'
 import type { Database } from '@/types/database.types'
 import { getSupabaseClient } from '@/lib/supabase-client'
+import { getPendingItems } from '@/lib/offlineSyncQueue'
 
 export function useNotes(userId: string | undefined, limit: number = 10, includeArchived: boolean = false) {
   const [notes, setNotes] = useState<NoteWithDetails[]>([])
@@ -92,8 +93,32 @@ export function useNotes(userId: string | undefined, limit: number = 10, include
         })
         .filter((note): note is NoteWithDetails => note !== null) as NoteWithDetails[];
 
-      setNotes(combinedNotes);
-      
+      // Merge in any pending offline notes
+      const pendingNotes = getPendingItems('note')
+      const pendingNoteDetails: NoteWithDetails[] = pendingNotes.map(entry => ({
+        id: entry.id,
+        content: entry.fields.content || null,
+        url: entry.fields.url || null,
+        file_path: null,
+        entry_type: entry.fields.entry_type || 'note',
+        note_type: 'note' as const,
+        knowledge_base_id: entry.fields.knowledge_base_id || null,
+        item: {
+          id: entry.id,
+          user_id: userId!,
+          title: entry.title,
+          created_at: entry.createdAt,
+          updated_at: entry.createdAt,
+          item_type: 'note',
+          is_archived: false,
+          archived_at: null,
+          archive_reason: null
+        },
+        _pending: true
+      }))
+
+      setNotes([...pendingNoteDetails, ...combinedNotes]);
+
     } catch (e) {
       console.error('Error in fetchNotes:', e)
       setError(e instanceof Error ? e : new Error('An error occurred while fetching notes'))

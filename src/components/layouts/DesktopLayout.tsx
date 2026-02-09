@@ -140,46 +140,44 @@ const DesktopLayout = () => {
     }
   }, [isActive, isRegistered, error, isInPWA]);
 
-  // Preload non-critical page chunks in the background after initial render
-  // This caches them so navigation is instant when user clicks on those sections
+  // Preload non-critical page chunks after initial render for instant navigation
+  // Skip in development - dev server compiles on demand, preloading just causes 404s
   useEffect(() => {
-    if (!user || loading) return;
+    if (!user || loading || process.env.NODE_ENV === 'development') return;
 
-    // Wait a bit after initial render to ensure critical path is complete
-    const preloadTimer = setTimeout(() => {
-      // Preload all dynamic page components in the background
-      // These will be cached by the browser, making navigation instant
-      const preloadPages = async () => {
-        try {
-          // Stagger the imports slightly to avoid network congestion
-          await Promise.all([
-            import('@/app/notes/page'),
-            import('@/app/projects/page'),
-            import('@/app/habits/page'),
-          ]);
+    // Use requestIdleCallback to preload when browser is idle, falling back to short timeout
+    const schedulePreload = (callback: () => void) => {
+      if ('requestIdleCallback' in window) {
+        return (window as any).requestIdleCallback(callback, { timeout: 3000 });
+      }
+      return setTimeout(callback, 500);
+    };
 
-          // Load second tier after a small delay
-          setTimeout(async () => {
-            await Promise.all([
-              import('@/app/checklists/page'),
-              import('@/app/protocols/page'),
-              import('@/app/quotes/page'),
-              import('@/app/relationships/page'),
-              import('@/app/catalog/page'),
-              import('@/app/train-of-thought/page'),
-              import('@/app/feedback/page'),
-            ]);
-          }, 1000);
-        } catch (err) {
-          // Silently fail - these are just optimizations
-          console.log('Background page preload failed (non-critical):', err);
-        }
-      };
+    const idleId = schedulePreload(() => {
+      // Preload all dynamic pages in a single pass
+      Promise.all([
+        import('@/app/notes/page'),
+        import('@/app/projects/page'),
+        import('@/app/habits/page'),
+        import('@/app/checklists/page'),
+        import('@/app/protocols/page'),
+        import('@/app/quotes/page'),
+        import('@/app/relationships/page'),
+        import('@/app/catalog/page'),
+        import('@/app/train-of-thought/page'),
+        import('@/app/feedback/page'),
+      ]).catch(() => {
+        // Silently fail - these are just optimizations
+      });
+    });
 
-      preloadPages();
-    }, 2000); // Wait 2 seconds after initial render
-
-    return () => clearTimeout(preloadTimer);
+    return () => {
+      if ('cancelIdleCallback' in window) {
+        (window as any).cancelIdleCallback(idleId);
+      } else {
+        clearTimeout(idleId);
+      }
+    };
   }, [user, loading]);
 
   if (loading) {

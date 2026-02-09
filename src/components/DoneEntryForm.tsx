@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { CheckSquare } from 'lucide-react';
 import { useSupabaseAuth } from '@/hooks/useSupabaseAuth';
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import { EntryService } from '@/lib/entryService';
 
 interface DoneEntryFormProps {
   onEntryCreated?: (entry: any) => void;
@@ -22,7 +22,6 @@ export const DoneEntryForm: React.FC<DoneEntryFormProps> = ({
   setOpen: controlledSetOpen
 }) => {
   const { user } = useSupabaseAuth();
-  const supabase = createClientComponentClient();
   const [internalOpen, setInternalOpen] = useState(false);
   const open = controlledOpen !== undefined ? controlledOpen : internalOpen;
   const setOpen = controlledSetOpen || setInternalOpen;
@@ -32,48 +31,30 @@ export const DoneEntryForm: React.FC<DoneEntryFormProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!user || !title.trim()) return;
 
     setIsSubmitting(true);
 
     try {
-      // Create the item first
-      const { data: itemData, error: itemError } = await supabase
-        .from('items')
-        .insert({
-          user_id: user.id,
-          title: title.trim(),
-          item_type: 'task',
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        })
-        .select()
-        .single();
-
-      if (itemError) throw itemError;
-
-      // Create the task with completed status and today's assigned date
       const today = new Date();
       const todayString = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-      
-      const { data: taskData, error: taskError } = await supabase
-        .from('tasks')
-        .insert({
-          id: itemData.id,
-          status: 'completed',
-          description: description.trim() || null,
-          priority: 'normal',
-          assigned_date: todayString
-        });
 
-      if (taskError) throw taskError;
+      const itemData = await EntryService.createEntry({
+        title: title.trim(),
+        type: 'task',
+        user_id: user.id,
+        status: 'completed',
+        description: description.trim() || null,
+        priority: 'normal',
+        assigned_date: todayString
+      });
 
       // Reset form
       setTitle('');
       setDescription('');
       setOpen(false);
-      
+
       // Notify parent
       if (onEntryCreated) {
         onEntryCreated(itemData);
@@ -110,7 +91,7 @@ export const DoneEntryForm: React.FC<DoneEntryFormProps> = ({
               required
             />
           </div>
-          
+
           <div className="space-y-2">
             <Label htmlFor="description">Notes (Optional)</Label>
             <Textarea
@@ -121,18 +102,18 @@ export const DoneEntryForm: React.FC<DoneEntryFormProps> = ({
               rows={3}
             />
           </div>
-          
+
           <div className="flex justify-end gap-2 pt-4">
-            <Button 
-              type="button" 
-              variant="outline" 
+            <Button
+              type="button"
+              variant="outline"
               onClick={() => setOpen(false)}
               disabled={isSubmitting}
             >
               Cancel
             </Button>
-            <Button 
-              type="submit" 
+            <Button
+              type="submit"
               disabled={isSubmitting || !title.trim()}
             >
               {isSubmitting ? 'Adding...' : 'Add Done Task'}

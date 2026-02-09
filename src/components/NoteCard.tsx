@@ -3,14 +3,14 @@
 import React from 'react';
 import { NoteWithDetails } from '@/lib/types';
 import { format } from 'date-fns';
-import { Calendar, FileText } from 'lucide-react';
+import { Calendar, FileText, Clock } from 'lucide-react';
 
 interface NoteCardProps {
   note: NoteWithDetails;
   preview?: boolean;
 }
 
-export const NoteCard: React.FC<NoteCardProps> = ({ note, preview = false }) => {
+export const NoteCard: React.FC<NoteCardProps> = React.memo(({ note, preview = false }) => {
   // Truncate content for preview while preserving words
   const truncateContent = (content: string, maxLength: number) => {
     if (!content) return '';
@@ -26,7 +26,15 @@ export const NoteCard: React.FC<NoteCardProps> = ({ note, preview = false }) => 
   return (
     <div className="p-4 bg-white rounded-lg shadow hover:shadow-md transition-shadow">
       <div className="flex justify-between items-start mb-2">
-        <h3 className="text-sm font-medium text-gray-900">{note.item.title}</h3>
+        <div className="flex items-center gap-2">
+          <h3 className="text-sm font-medium text-gray-900">{note.item.title}</h3>
+          {note._pending && (
+            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-800">
+              <Clock className="w-3 h-3 mr-0.5" />
+              Pending
+            </span>
+          )}
+        </div>
         <div className="flex items-center text-sm text-gray-500">
           <Calendar className="w-4 h-4 mr-1" />
           <span>{format(new Date(note.item.created_at), 'MMM d, yyyy')}</span>
@@ -51,4 +59,6 @@ export const NoteCard: React.FC<NoteCardProps> = ({ note, preview = false }) => 
       )}
     </div>
   );
-};
+});
+
+NoteCard.displayName = 'NoteCard';

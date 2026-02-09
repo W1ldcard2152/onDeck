@@ -1,59 +1,70 @@
 'use client'
 
-import React, { useState, useEffect } from 'react';
-import { WifiOff } from 'lucide-react';
+import React from 'react';
+import { WifiOff, Loader2, Check } from 'lucide-react';
+import { useOfflineSync } from '@/hooks/useOfflineSync';
 
 interface OfflineNotificationProps {
   className?: string;
+  onSyncComplete?: () => void;
 }
 
-const OfflineNotification: React.FC<OfflineNotificationProps> = ({ className }) => {
-  const [isOffline, setIsOffline] = useState(false);
-  const [showNotification, setShowNotification] = useState(false);
+const OfflineNotification: React.FC<OfflineNotificationProps> = ({ className, onSyncComplete }) => {
+  const { isOnline, pendingCount, isSyncing } = useOfflineSync({ onSyncComplete });
+  const [showRestored, setShowRestored] = React.useState(false);
+  const wasOfflineRef = React.useRef(false);
 
-  useEffect(() => {
-    // Check initial state
-    if (typeof window !== 'undefined') {
-      setIsOffline(!navigator.onLine);
+  React.useEffect(() => {
+    if (!isOnline) {
+      wasOfflineRef.current = true;
+    } else if (wasOfflineRef.current && isOnline && !isSyncing && pendingCount === 0) {
+      setShowRestored(true);
+      wasOfflineRef.current = false;
+      const timer = setTimeout(() => setShowRestored(false), 3000);
+      return () => clearTimeout(timer);
     }
+  }, [isOnline, isSyncing, pendingCount]);
 
-    // Add event listeners
-    const handleOffline = () => {
-      setIsOffline(true);
-      setShowNotification(true);
-    };
-
-    const handleOnline = () => {
-      setIsOffline(false);
-      // Keep the notification visible for a moment after reconnecting
-      setTimeout(() => {
-        setShowNotification(false);
-      }, 3000);
-    };
-
-    window.addEventListener('offline', handleOffline);
-    window.addEventListener('online', handleOnline);
-
-    return () => {
-      window.removeEventListener('offline', handleOffline);
-      window.removeEventListener('online', handleOnline);
-    };
-  }, []);
-
-  // Don't render anything if online
-  if (!isOffline && !showNotification) {
+  // Nothing to show
+  if (isOnline && !isSyncing && pendingCount === 0 && !showRestored) {
     return null;
   }
 
   return (
-    <div className={`fixed bottom-0 left-0 right-0 z-50 p-2 bg-yellow-500 text-yellow-900 shadow-lg md:left-64 transition-transform ${className}`}>
+    <div className={`fixed bottom-0 left-0 right-0 z-50 p-2 shadow-lg md:left-64 transition-transform ${
+      isOnline ? (isSyncing ? 'bg-blue-500 text-white' : 'bg-green-500 text-green-900') : 'bg-yellow-500 text-yellow-900'
+    } ${className}`}>
       <div className="flex items-center justify-center py-1">
-        <WifiOff className="w-4 h-4 mr-2" />
-        <span className="font-medium">
-          {isOffline 
-            ? "You are currently offline. Some features may be limited." 
-            : "Connection restored! Your changes will be synced."}
-        </span>
+        {!isOnline && (
+          <>
+            <WifiOff className="w-4 h-4 mr-2" />
+            <span className="font-medium">
+              You're offline.{pendingCount > 0 ? ` ${pendingCount} item${pendingCount !== 1 ? 's' : ''} waiting to sync.` : ' Some features may be limited.'}
+            </span>
+          </>
+        )}
+        {isOnline && isSyncing && (
+          <>
+            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+            <span className="font-medium">
+              Syncing {pendingCount} item{pendingCount !== 1 ? 's' : ''}...
+            </span>
+          </>
+        )}
+        {isOnline && !isSyncing && pendingCount > 0 && (
+          <>
+            <WifiOff className="w-4 h-4 mr-2" />
+            <span className="font-medium">
+              {pendingCount} item{pendingCount !== 1 ? 's' : ''} waiting to sync.
+            </span>
+          </>
+        )}
+        {showRestored && !isSyncing && pendingCount === 0 && (
+          <>
+            <Check className="w-4 h-4 mr-2" />
+            <span className="font-medium">Connection restored! All items synced.</span>
+          </>
+        )}
       </div>
     </div>
   );

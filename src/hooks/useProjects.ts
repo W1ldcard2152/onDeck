@@ -77,7 +77,8 @@ export function useProjects(userId: string | undefined) {
             is_project_converted: task.is_project_converted || false,
             converted_project_id: task.converted_project_id || null,
             sort_order: task.sort_order || 0,
-            daily_context: task.daily_context || null
+            daily_context: task.daily_context || null,
+            checklist_template_id: task.checklist_template_id || null
           })) || [];
 
           const projectSteps: ProjectStep[] = stepsData

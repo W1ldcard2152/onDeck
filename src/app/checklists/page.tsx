@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useSupabaseAuth } from '@/hooks/useSupabaseAuth';
 import { useChecklists } from '@/hooks/useChecklists';
@@ -17,6 +17,14 @@ type ContextTab = ChecklistContext | 'All';
 const CONTEXT_TABS: ContextTab[] = ['Morning', 'Work', 'Family', 'Evening', 'Weekend', 'All'];
 
 export default function ChecklistsPage() {
+  return (
+    <Suspense fallback={<div className="py-6"><div className="text-lg text-gray-500">Loading checklists...</div></div>}>
+      <ChecklistsPageContent />
+    </Suspense>
+  );
+}
+
+function ChecklistsPageContent() {
   const { user } = useSupabaseAuth();
   const { templates, isLoading, error, refetch } = useChecklists(user?.id);
   const searchParams = useSearchParams();
@@ -28,7 +36,7 @@ export default function ChecklistsPage() {
   const [sortBy, setSortBy] = useState<'name' | 'date' | 'streak' | 'context'>('name');
 
   // Auto-open completion modal when navigated with ?complete=<template_id>
-  const completeTemplateId = searchParams.get('complete');
+  const completeTemplateId = searchParams?.get('complete') ?? null;
   useEffect(() => {
     if (completeTemplateId && templates.length > 0 && !completingTemplate) {
       const template = templates.find(t => t.id === completeTemplateId);

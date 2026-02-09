@@ -58,6 +58,7 @@ export interface TaskWithDetails {
   sort_order: number; // Manual sort order within context
   checklist_template_id: string | null;
   item: Item;
+  _pending?: boolean; // true for offline-queued items not yet synced
 }
 
 export interface NoteWithDetails {
@@ -70,6 +71,7 @@ export interface NoteWithDetails {
   knowledge_base_id: string | null;
   item: Item;
   knowledge_base?: KnowledgeBase;
+  _pending?: boolean; // true for offline-queued items not yet synced
 }
 
 export interface ProjectStep {

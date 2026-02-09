@@ -1,6 +1,7 @@
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import type { Database } from '@/types/database.types'
 import type { TaskStatus, Priority, EntryType } from '@/types/database.types'
+import { getSupabaseClient } from '@/lib/supabase-client'
+import { addToQueue } from '@/lib/offlineSyncQueue'
 
 interface CreateEntryParams {
   title: string;
@@ -23,13 +24,56 @@ interface CreateEntryParams {
 
 export class EntryService {
   static async createEntry(entry: CreateEntryParams) {
-    const supabase = createClientComponentClient<Database>()
-    
-    try {
-      if (!entry.title) throw new Error('Title is required');
-      if (!entry.user_id) throw new Error('User ID is required');
-      if (!entry.type) throw new Error('Type is required');
+    if (!entry.title) throw new Error('Title is required');
+    if (!entry.user_id) throw new Error('User ID is required');
+    if (!entry.type) throw new Error('Type is required');
 
+    // Offline path: queue for later sync (tasks and notes only)
+    if (typeof navigator !== 'undefined' && !navigator.onLine && entry.type !== 'quote') {
+      const tempId = crypto.randomUUID()
+      const now = new Date().toISOString()
+
+      const fields: Record<string, any> = {}
+      if (entry.type === 'task') {
+        fields.due_date = entry.due_date || null
+        fields.assigned_date = entry.assigned_date || null
+        fields.reminder_time = entry.reminder_time || null
+        fields.daily_context = entry.daily_context || null
+        fields.status = entry.status || 'on_deck'
+        fields.description = entry.description || null
+        fields.priority = entry.priority || 'normal'
+      } else if (entry.type === 'note') {
+        fields.content = entry.content || null
+        fields.url = entry.url || null
+        fields.knowledge_base_id = entry.knowledge_base_id || null
+        fields.entry_type = entry.entry_type || 'note'
+      }
+
+      addToQueue({
+        id: tempId,
+        type: entry.type as 'task' | 'note',
+        title: entry.title.trim(),
+        fields,
+        createdAt: now
+      })
+
+      // Return a fabricated response matching the online path shape
+      return {
+        id: tempId,
+        title: entry.title.trim(),
+        user_id: entry.user_id,
+        item_type: entry.type,
+        is_archived: false,
+        created_at: now,
+        updated_at: now,
+        _pending: true
+      }
+    }
+
+    // Online path: create in Supabase directly
+    const supabase = getSupabaseClient()
+
+    try {
       const now = new Date().toISOString();
 
       // Create the item first
@@ -71,7 +115,7 @@ export class EntryService {
 
         if (taskError) throw taskError;
       }
-      
+
       // Handle note-specific data
       if (entry.type === 'note') {
         const noteData = {
@@ -118,22 +162,22 @@ export class EntryService {
   }
 
   static async updateTaskStatus(taskId: string, status: TaskStatus) {
-    const supabase = createClientComponentClient<Database>();
-    
+    const supabase = getSupabaseClient();
+
     const { data, error } = await supabase
       .from('tasks')
       .update({ status })
       .eq('id', taskId)
       .select()
       .single();
-    
+
     if (error) throw error;
     return data;
   }
 
   static async updateTaskPriority(taskId: string, priority: Priority) {
-    const supabase = createClientComponentClient<Database>();
-    
+    const supabase = getSupabaseClient();
+
     const { error } = await supabase
       .from('tasks')
       .update({ priority })

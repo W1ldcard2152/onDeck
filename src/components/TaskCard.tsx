@@ -9,7 +9,7 @@ interface TaskCardProps {
   task: TaskWithDetails;
 }
 
-export const TaskCard: React.FC<TaskCardProps> = ({ task }) => {
+export const TaskCard: React.FC<TaskCardProps> = React.memo(({ task }) => {
   const hasAssignedDate = Boolean(task.assigned_date);
   const hasDueDate = Boolean(task.due_date);
 
@@ -59,4 +59,6 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task }) => {
       </div>
     </div>
   );
-};
+});
+
+TaskCard.displayName = 'TaskCard';
