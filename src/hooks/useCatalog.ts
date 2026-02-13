@@ -22,7 +22,7 @@ export function useCatalog(userId: string | undefined) {
       console.log('Fetching catalog entries for user:', userId)
       setIsLoading(true)
 
-      const supabase = createClientComponentClient<Database>()
+      const supabase = createClientComponentClient()
 
       const { data, error: catalogError } = await supabase
         .from('catalog')
@@ -52,7 +52,7 @@ export function useCatalog(userId: string | undefined) {
   }) {
     if (!userId) throw new Error('User not authenticated');
 
-    const supabase = createClientComponentClient<Database>();
+    const supabase = createClientComponentClient();
 
     const { data, error } = await supabase
       .from('catalog')
@@ -78,7 +78,9 @@ export function useCatalog(userId: string | undefined) {
     description?: string;
     resource_type?: ResourceType;
   }) {
-    const supabase = createClientComponentClient<Database>();
+    const supabase = createClientComponentClient();
+
+    if (!userId) throw new Error('User not authenticated');
 
     const { data, error } = await supabase
       .from('catalog')
@@ -87,6 +89,7 @@ export function useCatalog(userId: string | undefined) {
         updated_at: new Date().toISOString()
       })
       .eq('id', id)
+      .eq('user_id', userId)
       .select()
       .single();
 
@@ -97,12 +100,15 @@ export function useCatalog(userId: string | undefined) {
   }
 
   async function deleteCatalogEntry(id: string) {
-    const supabase = createClientComponentClient<Database>();
+    if (!userId) throw new Error('User not authenticated');
+
+    const supabase = createClientComponentClient();
 
     const { error } = await supabase
       .from('catalog')
       .delete()
-      .eq('id', id);
+      .eq('id', id)
+      .eq('user_id', userId);
 
     if (error) throw error;
 

@@ -213,6 +213,7 @@ export function useChecklists(userId: string | undefined) {
         recurrence_rule: recurrenceRule
       })
       .eq('id', templateId)
+      .eq('user_id', userId)
 
     if (templateError) throw templateError
 
@@ -253,17 +254,20 @@ export function useChecklists(userId: string | undefined) {
   }, [userId, fetchTemplates])
 
   const deleteTemplate = useCallback(async (templateId: string) => {
+    if (!userId) throw new Error('User ID required')
+
     const supabase = supabaseRef.current
 
     const { error } = await supabase
       .from('checklist_templates')
       .delete()
       .eq('id', templateId)
+      .eq('user_id', userId)
 
     if (error) throw error
 
     await fetchTemplates()
-  }, [fetchTemplates])
+  }, [userId, fetchTemplates])
 
   const completeChecklist = useCallback(async (
     templateId: string,

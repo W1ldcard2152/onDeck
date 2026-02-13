@@ -42,7 +42,7 @@ const HabitsTable = ({ habits, onHabitUpdate, onEditHabit }: HabitsTableProps) =
   const [nextScheduledDates, setNextScheduledDates] = useState<Record<string, Date | null>>({});
   const { user } = useSupabaseAuth();
 
-  const supabase = createClientComponentClient<Database>();
+  const supabase = createClientComponentClient();
 
   // Sort habits: active first, then alphabetically by title
   const sortedHabits = React.useMemo(() => {

@@ -54,7 +54,7 @@ export function SearchProvider({ children }: { children: React.ReactNode }) {
       const { data: items, error: itemsError } = await supabase
         .from('items')
         .select('*')
-        .or(`title.ilike.%${sanitizedQuery}%`)
+        .ilike('title', `%${sanitizedQuery}%`)
         .order('created_at', { ascending: false });
 
       if (itemsError) throw itemsError;

@@ -21,7 +21,7 @@ export function useKnowledgeBases(userId: string | undefined) {
       console.log('Fetching knowledge bases for user:', userId)
       setIsLoading(true)
       
-      const supabase = createClientComponentClient<Database>()
+      const supabase = createClientComponentClient()
 
       const { data, error: kbError } = await supabase
         .from('knowledge_bases')
@@ -78,7 +78,7 @@ export function useKnowledgeBases(userId: string | undefined) {
   }) {
     if (!userId) throw new Error('User not authenticated');
 
-    const supabase = createClientComponentClient<Database>();
+    const supabase = createClientComponentClient();
     
     const { data, error } = await supabase
       .from('knowledge_bases')
@@ -103,8 +103,10 @@ export function useKnowledgeBases(userId: string | undefined) {
     description?: string;
     keystone_id?: string;
   }) {
-    const supabase = createClientComponentClient<Database>();
+    const supabase = createClientComponentClient();
     
+    if (!userId) throw new Error('User not authenticated');
+
     const { data, error } = await supabase
       .from('knowledge_bases')
       .update({
@@ -112,22 +114,26 @@ export function useKnowledgeBases(userId: string | undefined) {
         updated_at: new Date().toISOString()
       })
       .eq('id', id)
+      .eq('user_id', userId)
       .select()
       .single();
 
     if (error) throw error;
-    
+
     await fetchKnowledgeBases(); // Refresh the list
     return data;
   }
 
   async function deleteKnowledgeBase(id: string) {
-    const supabase = createClientComponentClient<Database>();
-    
+    if (!userId) throw new Error('User not authenticated');
+
+    const supabase = createClientComponentClient();
+
     const { error } = await supabase
       .from('knowledge_bases')
       .delete()
-      .eq('id', id);
+      .eq('id', id)
+      .eq('user_id', userId);
 
     if (error) throw error;
     
@@ -137,7 +143,7 @@ export function useKnowledgeBases(userId: string | undefined) {
   async function getKnowledgeBaseWithEntries(id: string): Promise<KnowledgeBaseWithDetails | null> {
     if (!userId) return null;
 
-    const supabase = createClientComponentClient<Database>();
+    const supabase = createClientComponentClient();
 
     // Get the knowledge base
     const { data: kbData, error: kbError } = await supabase

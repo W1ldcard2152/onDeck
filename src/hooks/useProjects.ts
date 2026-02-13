@@ -17,7 +17,7 @@ export function useProjects(userId: string | undefined) {
 
     try {
       setIsLoading(true);
-      const supabase = createClientComponentClient<Database>();
+      const supabase = createClientComponentClient();
 
       // Get all projects for the user
       const { data: projectsData, error: projectsError } = await supabase

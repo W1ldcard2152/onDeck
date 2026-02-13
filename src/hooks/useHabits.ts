@@ -136,7 +136,7 @@ export function useHabits(userId: string | undefined) {
     if (error) {
       console.error('Error creating habit:', error)
       // Clean up the item if habit creation fails
-      await supabase.from('items').delete().eq('id', itemData.id)
+      await supabase.from('items').delete().eq('id', itemData.id).eq('user_id', userId)
       throw error
     }
 
@@ -168,6 +168,7 @@ export function useHabits(userId: string | undefined) {
       .from('habits')
       .update(updates)
       .eq('id', habitId)
+      .eq('user_id', userId)
       .select()
       .single()
 
@@ -223,12 +224,15 @@ export function useHabits(userId: string | undefined) {
   }, [fetchHabits, userId])
 
   const deleteHabit = useCallback(async (habitId: string) => {
+    if (!userId) throw new Error('User ID required')
+
     const supabase = supabaseRef.current
-    
+
     const { error } = await supabase
       .from('habits')
       .delete()
       .eq('id', habitId)
+      .eq('user_id', userId)
 
     if (error) throw error
 

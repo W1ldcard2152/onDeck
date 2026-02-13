@@ -248,7 +248,7 @@ const QuotesTable = ({ quotes: initialQuotes, onQuoteUpdate }: QuotesTableProps)
   const [sorts, setSorts] = useState<SortState[]>([]);
   const [localQuotes, setLocalQuotes] = useState(initialQuotes);
   const [quoteToEdit, setQuoteToEdit] = useState<QuoteWithDetails | null>(null);
-  const supabase = createClientComponentClient<Database>();
+  const supabase = createClientComponentClient();
 
   useEffect(() => {
     setLocalQuotes(initialQuotes);

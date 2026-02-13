@@ -31,7 +31,7 @@ export const NewQuoteForm: React.FC<NewQuoteFormProps> = ({
   setOpen: controlledSetOpen
 }) => {
   const { user } = useSupabaseAuth();
-  const supabase = createClientComponentClient<Database>();
+  const supabase = createClientComponentClient();
 
   const [internalOpen, setInternalOpen] = useState(false);
   const open = controlledOpen !== undefined ? controlledOpen : internalOpen;

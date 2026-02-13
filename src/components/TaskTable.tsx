@@ -110,7 +110,7 @@ const TaskTableBase: React.FC<TaskTableBaseProps> = ({
   const [selectedTasks, setSelectedTasks] = useState<Set<string>>(new Set());
   const [localTasks, setLocalTasks] = useState<TaskWithDetails[]>(tasks);
   const [completingTemplateId, setCompletingTemplateId] = useState<string | null>(null);
-  const supabase = createClientComponentClient<Database>();
+  const supabase = createClientComponentClient();
   const { user } = useSupabaseAuth();
   const { templates: checklistTemplates } = useChecklists(user?.id);
 
@@ -340,7 +340,8 @@ const TaskTableBase: React.FC<TaskTableBaseProps> = ({
         const { error: taskError } = await supabase
           .from('tasks')
           .delete()
-          .eq('id', taskId);
+          .eq('id', taskId)
+          .eq('user_id', user?.id);
 
         if (taskError) throw taskError;
 
@@ -348,7 +349,8 @@ const TaskTableBase: React.FC<TaskTableBaseProps> = ({
         const { error: itemError } = await supabase
           .from('items')
           .delete()
-          .eq('id', taskId);
+          .eq('id', taskId)
+          .eq('user_id', user?.id);
 
         if (itemError) throw itemError;
       }
@@ -443,18 +445,20 @@ const TaskTableBase: React.FC<TaskTableBaseProps> = ({
       const { error: taskError } = await supabase
         .from('tasks')
         .delete()
-        .eq('id', taskId);
-  
+        .eq('id', taskId)
+        .eq('user_id', user?.id);
+
       if (taskError) throw taskError;
-  
+
       // Delete the item
       const { error: itemError } = await supabase
         .from('items')
         .delete()
-        .eq('id', taskId);
-  
+        .eq('id', taskId)
+        .eq('user_id', user?.id);
+
       if (itemError) throw itemError;
-  
+
       onTaskUpdate();
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Error deleting task';
@@ -516,26 +520,28 @@ const TaskTableBase: React.FC<TaskTableBaseProps> = ({
       // Update the task status
       const { data: updatedTask, error: taskError } = await supabase
         .from('tasks')
-        .update({ 
+        .update({
           status: newStatus,
           updated_at: new Date().toISOString()
         })
         .eq('id', taskId)
+        .eq('user_id', user?.id)
         .select()
         .single();
-  
+
       if (taskError) {
         console.error('Error updating task status:', taskError);
         throw taskError;
       }
-  
+
       console.log('Task updated successfully:', updatedTask);
-  
+
       // Update item timestamps
       const { error: itemError } = await supabase
         .from('items')
         .update({ updated_at: new Date().toISOString() })
-        .eq('id', taskId);
+        .eq('id', taskId)
+        .eq('user_id', user?.id);
   
       if (itemError) throw itemError;
       
@@ -638,7 +644,8 @@ const TaskTableBase: React.FC<TaskTableBaseProps> = ({
       const { error: taskError } = await supabase
         .from('tasks')
         .update({ priority: newPriority })
-        .eq('id', taskId);
+        .eq('id', taskId)
+        .eq('user_id', user?.id);
 
       if (taskError) throw taskError;
 
@@ -646,7 +653,8 @@ const TaskTableBase: React.FC<TaskTableBaseProps> = ({
       const { error: itemError } = await supabase
         .from('items')
         .update({ updated_at: new Date().toISOString() })
-        .eq('id', taskId);
+        .eq('id', taskId)
+        .eq('user_id', user?.id);
 
       if (itemError) throw itemError;
 

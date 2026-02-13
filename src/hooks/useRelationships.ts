@@ -22,7 +22,7 @@ export function useRelationships(userId: string | undefined) {
       console.log('Fetching relationships for user:', userId)
       setIsLoading(true)
 
-      const supabase = createClientComponentClient<Database>()
+      const supabase = createClientComponentClient()
 
       const { data, error: relationshipsError } = await supabase
         .from('relationships')
@@ -53,7 +53,7 @@ export function useRelationships(userId: string | undefined) {
   }) {
     if (!userId) throw new Error('User not authenticated');
 
-    const supabase = createClientComponentClient<Database>();
+    const supabase = createClientComponentClient();
 
     const { data, error } = await supabase
       .from('relationships')
@@ -81,7 +81,9 @@ export function useRelationships(userId: string | undefined) {
     address?: string;
     notes?: string;
   }) {
-    const supabase = createClientComponentClient<Database>();
+    const supabase = createClientComponentClient();
+
+    if (!userId) throw new Error('User not authenticated');
 
     const { data, error } = await supabase
       .from('relationships')
@@ -90,6 +92,7 @@ export function useRelationships(userId: string | undefined) {
         updated_at: new Date().toISOString()
       })
       .eq('id', id)
+      .eq('user_id', userId)
       .select()
       .single();
 
@@ -100,12 +103,15 @@ export function useRelationships(userId: string | undefined) {
   }
 
   async function deleteRelationship(id: string) {
-    const supabase = createClientComponentClient<Database>();
+    if (!userId) throw new Error('User not authenticated');
+
+    const supabase = createClientComponentClient();
 
     const { error } = await supabase
       .from('relationships')
       .delete()
-      .eq('id', id);
+      .eq('id', id)
+      .eq('user_id', userId);
 
     if (error) throw error;
 

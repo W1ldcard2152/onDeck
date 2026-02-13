@@ -13,6 +13,7 @@ import { ProjectEntryForm } from '@/components/ProjectEntryForm';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import type { ProjectWithDetails } from '@/lib/types';
 import { cn } from '@/lib/utils';
+import { useSupabaseAuth } from '@/hooks/useSupabaseAuth';
 
 interface OtherProjectsCardProps {
   onHoldProjects: ProjectWithDetails[];
@@ -29,6 +30,7 @@ const OtherProjectsCard: React.FC<OtherProjectsCardProps> = ({
   const [projectToEdit, setProjectToEdit] = useState<ProjectWithDetails | null>(null);
   const [isDeleting, setIsDeleting] = useState<Record<string, boolean>>({});
   const supabase = createClientComponentClient();
+  const { user } = useSupabaseAuth();
   
   const totalCount = onHoldProjects.length + completedProjects.length;
   
@@ -81,41 +83,45 @@ const OtherProjectsCard: React.FC<OtherProjectsCardProps> = ({
         const { error: tasksDeleteError } = await supabase
           .from('tasks')
           .delete()
-          .in('id', taskIds);
-          
+          .in('id', taskIds)
+          .eq('user_id', user?.id);
+
         if (tasksDeleteError) throw tasksDeleteError;
-        
+
         // Delete task items
         const { error: itemsDeleteError } = await supabase
           .from('items')
           .delete()
-          .in('id', taskIds);
-          
+          .in('id', taskIds)
+          .eq('user_id', user?.id);
+
         if (itemsDeleteError) throw itemsDeleteError;
       }
-      
+
       // Step 4: Delete project steps
       const { error: stepsDeleteError } = await supabase
         .from('project_steps')
         .delete()
         .eq('project_id', projectId);
-        
+
       if (stepsDeleteError) throw stepsDeleteError;
-      
+
       // Step 5: Delete project
       const { error: projectDeleteError } = await supabase
         .from('projects')
         .delete()
-        .eq('id', projectId);
-        
+        .eq('id', projectId)
+        .eq('user_id', user?.id);
+
       if (projectDeleteError) throw projectDeleteError;
-      
+
       // Step 6: Delete project item
       const { error: itemDeleteError } = await supabase
         .from('items')
         .delete()
-        .eq('id', projectId);
-        
+        .eq('id', projectId)
+        .eq('user_id', user?.id);
+
       if (itemDeleteError) throw itemDeleteError;
       
       // Update UI
@@ -228,18 +234,20 @@ const OtherProjectsCard: React.FC<OtherProjectsCardProps> = ({
       const { error: updateError } = await supabase
         .from('projects')
         .update(projectUpdate)
-        .eq('id', projectId);
-        
+        .eq('id', projectId)
+        .eq('user_id', user?.id);
+
       if (updateError) throw updateError;
-      
+
       // Update item
       const { error: itemError } = await supabase
         .from('items')
         .update({
           updated_at: now
         })
-        .eq('id', projectId);
-        
+        .eq('id', projectId)
+        .eq('user_id', user?.id);
+
       if (itemError) throw itemError;
       
       // Update UI
@@ -292,10 +300,10 @@ const OtherProjectsCard: React.FC<OtherProjectsCardProps> = ({
       // Delete tasks
       for (const task of tasks) {
         // Delete the task
-        await supabase.from('tasks').delete().eq('id', task.id);
-        
+        await supabase.from('tasks').delete().eq('id', task.id).eq('user_id', user?.id);
+
         // Delete the item
-        await supabase.from('items').delete().eq('id', task.id);
+        await supabase.from('items').delete().eq('id', task.id).eq('user_id', user?.id);
       }
     } catch (error) {
       console.error('Error cleaning up project tasks:', error);

@@ -170,9 +170,9 @@ const DashboardPage: React.FC = () => {
     setLocalTasks(prev => prev.filter(task => task.id !== taskId));
 
     try {
-      const { error: taskError } = await supabase.from('tasks').delete().eq('id', taskId);
+      const { error: taskError } = await supabase.from('tasks').delete().eq('id', taskId).eq('user_id', user?.id);
       if (taskError) throw taskError;
-      const { error: itemError } = await supabase.from('items').delete().eq('id', taskId);
+      const { error: itemError } = await supabase.from('items').delete().eq('id', taskId).eq('user_id', user?.id);
       if (itemError) throw itemError;
     } catch {
       setLocalTasks(previousTasks);

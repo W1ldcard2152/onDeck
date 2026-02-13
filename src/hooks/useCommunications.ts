@@ -22,7 +22,7 @@ export function useCommunications(userId: string | undefined, relationshipId?: s
       console.log('Fetching communications for user:', userId, 'relationship:', relationshipId)
       setIsLoading(true)
 
-      const supabase = createClientComponentClient<Database>()
+      const supabase = createClientComponentClient()
 
       let query = supabase
         .from('communications')
@@ -61,7 +61,7 @@ export function useCommunications(userId: string | undefined, relationshipId?: s
   }) {
     if (!userId) throw new Error('User not authenticated');
 
-    const supabase = createClientComponentClient<Database>();
+    const supabase = createClientComponentClient();
 
     const { data, error } = await supabase
       .from('communications')
@@ -94,7 +94,9 @@ export function useCommunications(userId: string | undefined, relationshipId?: s
     time_of_day?: TimeOfDay;
     time_of_day_other?: string;
   }) {
-    const supabase = createClientComponentClient<Database>();
+    const supabase = createClientComponentClient();
+
+    if (!userId) throw new Error('User not authenticated');
 
     const { data, error } = await supabase
       .from('communications')
@@ -103,6 +105,7 @@ export function useCommunications(userId: string | undefined, relationshipId?: s
         updated_at: new Date().toISOString()
       })
       .eq('id', id)
+      .eq('user_id', userId)
       .select()
       .single();
 
@@ -113,12 +116,15 @@ export function useCommunications(userId: string | undefined, relationshipId?: s
   }
 
   async function deleteCommunication(id: string) {
-    const supabase = createClientComponentClient<Database>();
+    if (!userId) throw new Error('User not authenticated');
+
+    const supabase = createClientComponentClient();
 
     const { error } = await supabase
       .from('communications')
       .delete()
-      .eq('id', id);
+      .eq('id', id)
+      .eq('user_id', userId);
 
     if (error) throw error;
 

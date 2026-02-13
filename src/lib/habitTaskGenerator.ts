@@ -1,10 +1,9 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import type { Database } from '@/types/database.types'
 import type { Habit, RecurrenceRule } from '@/hooks/useHabits'
 
 export class HabitTaskGenerator {
   constructor(
-    private supabase: SupabaseClient<Database>,
+    private supabase: SupabaseClient,
     private userId: string
   ) {}
 

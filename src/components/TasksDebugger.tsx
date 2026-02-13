@@ -16,6 +16,8 @@ interface TasksDebuggerProps {
 }
 
 export const TasksDebugger: React.FC<TasksDebuggerProps> = ({ tasks }) => {
+  if (process.env.NODE_ENV !== 'development') return null;
+
   const [projectInfo, setProjectInfo] = useState<Record<string, any>>({});
   const [isLoading, setIsLoading] = useState(false);
   

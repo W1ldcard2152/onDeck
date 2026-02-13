@@ -18,7 +18,7 @@ const ProjectWorkflow: React.FC<ProjectWorkflowProps> = ({ onProjectCreated }) =
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const supabase = createClientComponentClient<Database>();
+  const supabase = createClientComponentClient();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

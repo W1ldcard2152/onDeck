@@ -56,7 +56,7 @@ function generateSeed(): number {
 
 export async function GET(request: NextRequest) {
   try {
-    const supabase = createRouteHandlerClient<Database>({ cookies });
+    const supabase = createRouteHandlerClient({ cookies });
 
     // Get the current user
     const { data: { user }, error: authError } = await supabase.auth.getUser();

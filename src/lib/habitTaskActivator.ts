@@ -1,9 +1,8 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import type { Database } from '@/types/database.types'
 
 export class HabitTaskActivator {
   constructor(
-    private supabase: SupabaseClient<Database>,
+    private supabase: SupabaseClient,
     private userId: string
   ) {}
 

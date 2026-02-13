@@ -375,7 +375,7 @@ const NotesTable = ({ notes: initialNotes, onNoteUpdate }: NotesTableProps) => {
   const [showArchived, setShowArchived] = useState(false);
   const [sorts, setSorts] = useState<SortState[]>([]);
   const [localNotes, setLocalNotes] = useState(initialNotes);
-  const supabase = createClientComponentClient<Database>();
+  const supabase = createClientComponentClient();
 
   useEffect(() => {
     setLocalNotes(initialNotes);

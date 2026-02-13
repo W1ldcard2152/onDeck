@@ -21,7 +21,7 @@ export function useKeystones(userId: string | undefined) {
       console.log('Fetching keystones for user:', userId)
       setIsLoading(true)
       
-      const supabase = createClientComponentClient<Database>()
+      const supabase = createClientComponentClient()
 
       const { data, error: keystonesError } = await supabase
         .from('keystones')
@@ -50,7 +50,7 @@ export function useKeystones(userId: string | undefined) {
   }) {
     if (!userId) throw new Error('User not authenticated');
 
-    const supabase = createClientComponentClient<Database>();
+    const supabase = createClientComponentClient();
     
     const { data, error } = await supabase
       .from('keystones')
@@ -74,8 +74,10 @@ export function useKeystones(userId: string | undefined) {
     description?: string;
     color?: string;
   }) {
-    const supabase = createClientComponentClient<Database>();
+    const supabase = createClientComponentClient();
     
+    if (!userId) throw new Error('User not authenticated');
+
     const { data, error } = await supabase
       .from('keystones')
       .update({
@@ -83,22 +85,26 @@ export function useKeystones(userId: string | undefined) {
         updated_at: new Date().toISOString()
       })
       .eq('id', id)
+      .eq('user_id', userId)
       .select()
       .single();
 
     if (error) throw error;
-    
+
     await fetchKeystones(); // Refresh the list
     return data;
   }
 
   async function deleteKeystone(id: string) {
-    const supabase = createClientComponentClient<Database>();
-    
+    if (!userId) throw new Error('User not authenticated');
+
+    const supabase = createClientComponentClient();
+
     const { error } = await supabase
       .from('keystones')
       .delete()
-      .eq('id', id);
+      .eq('id', id)
+      .eq('user_id', userId);
 
     if (error) throw error;
     
