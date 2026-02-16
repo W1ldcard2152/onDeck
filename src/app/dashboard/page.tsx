@@ -196,7 +196,7 @@ const DashboardPage: React.FC = () => {
     const todayStart = startOfDay(new Date());
 
     const contextOrder: Record<string, number> = {
-      'all_day': 0, 'morning': 1, 'work': 2, 'family': 3, 'evening': 4, 'none': 5
+      'none': 0, 'all_day': 0, 'morning': 1, 'work': 2, 'family': 3, 'evening': 4
     };
 
     const filtered = tasks.filter(task => {
