@@ -7,7 +7,7 @@ const Textarea = React.forwardRef<
   HTMLTextAreaElement,
   React.ComponentProps<"textarea">
 >(({ className, onKeyDown, ...props }, ref) => {
-  const internalRef = React.useRef<HTMLTextAreaElement>(null);
+  const internalRef = React.useRef<HTMLTextAreaElement | null>(null);
 
   const mergedRef = React.useCallback(
     (node: HTMLTextAreaElement | null) => {
