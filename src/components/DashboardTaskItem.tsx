@@ -2,8 +2,8 @@
 
 import React from 'react';
 import { CheckCircle2, ChevronUp, ChevronDown, MoreVertical, Link, CheckSquare } from 'lucide-react';
-import { format, parseISO } from 'date-fns';
 import { Button } from '@/components/ui/button';
+import { formatDate, formatTime } from '@/lib/timezone';
 import { Badge } from '@/components/ui/badge';
 import {
   Popover,
@@ -64,7 +64,7 @@ export const DashboardTaskItem: React.FC<DashboardTaskItemProps> = React.memo(({
       ? JSON.parse(habit.recurrence_rule)
       : habit.recurrence_rule;
     if (!rule?.time_of_day) return null;
-    return format(new Date(`2000-01-01T${rule.time_of_day}`), 'h:mm a');
+    return formatTime(rule.time_of_day);
   }, [task.reminder_time, task.habit_id, habits]);
 
   return (
@@ -134,10 +134,10 @@ export const DashboardTaskItem: React.FC<DashboardTaskItemProps> = React.memo(({
                   </span>
                 )}
                 {task.assigned_date && (
-                  <span className="whitespace-nowrap">Assigned: {format(parseISO(task.assigned_date), 'MMM d, yyyy')}</span>
+                  <span className="whitespace-nowrap">Assigned: {formatDate(task.assigned_date)}</span>
                 )}
                 {task.due_date && (
-                  <span className="text-orange-600 font-medium whitespace-nowrap">Due: {format(parseISO(task.due_date), 'MMM d, yyyy')}</span>
+                  <span className="text-orange-600 font-medium whitespace-nowrap">Due: {formatDate(task.due_date)}</span>
                 )}
                 {task.reminder_time && (
                   <span className="flex items-center text-blue-600 font-medium whitespace-nowrap">

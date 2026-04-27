@@ -1,8 +1,8 @@
 import { useSupabaseAuth } from '@/hooks/useSupabaseAuth';
 import React, { useState, useEffect } from 'react';
 import TruncatedCell from './TruncatedCell';
-import { format } from 'date-fns';
 import { Check, MoreHorizontal, Link, ChevronDown, ChevronUp, ChevronRight, ChevronLeft, AlertCircle, Repeat, Trash2, CheckSquare } from 'lucide-react';
+import { formatDate, nowISO } from '@/lib/timezone';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import { NewEntryForm } from '@/components/NewEntryForm';
 import {
@@ -62,24 +62,6 @@ interface ProjectInfo {
   title: string;
   status: string;
   stepTitle?: string;
-}
-
-function parseDateForDisplay(dateString: string | null): Date | null {
-  if (!dateString) return null;
-  
-  try {
-    // For dates stored as YYYY-MM-DD
-    if (dateString.includes('-') && dateString.length <= 10) {
-      const [year, month, day] = dateString.split('-').map(Number);
-      return new Date(year, month - 1, day);
-    }
-    
-    // For ISO dates, create a new Date object
-    return new Date(dateString);
-  } catch (e) {
-    console.error('Error parsing date:', e);
-    return null;
-  }
 }
 
 function formatContextsForDisplay(dailyContext: string | null): string {
@@ -522,7 +504,7 @@ const TaskTableBase: React.FC<TaskTableBaseProps> = ({
         .from('tasks')
         .update({
           status: newStatus,
-          updated_at: new Date().toISOString()
+          updated_at: nowISO()
         })
         .eq('id', taskId)
         .eq('user_id', user?.id)
@@ -539,7 +521,7 @@ const TaskTableBase: React.FC<TaskTableBaseProps> = ({
       // Update item timestamps
       const { error: itemError } = await supabase
         .from('items')
-        .update({ updated_at: new Date().toISOString() })
+        .update({ updated_at: nowISO() })
         .eq('id', taskId)
         .eq('user_id', user?.id);
   
@@ -652,7 +634,7 @@ const TaskTableBase: React.FC<TaskTableBaseProps> = ({
       // Update item timestamp
       const { error: itemError } = await supabase
         .from('items')
-        .update({ updated_at: new Date().toISOString() })
+        .update({ updated_at: nowISO() })
         .eq('id', taskId)
         .eq('user_id', user?.id);
 
@@ -1055,7 +1037,7 @@ const TaskTableBase: React.FC<TaskTableBaseProps> = ({
                     </TableCell>
                     
                     <TableCell>
-                      {task.assigned_date ? format(parseDateForDisplay(task.assigned_date)!, 'MMM d, yyyy') : '-'}
+                      {task.assigned_date ? formatDate(task.assigned_date) : '-'}
                     </TableCell>
                     
                     <TableCell className="max-w-[12rem] truncate">
@@ -1063,7 +1045,7 @@ const TaskTableBase: React.FC<TaskTableBaseProps> = ({
                     </TableCell>
                     
                     <TableCell>
-                      {task.due_date ? format(parseDateForDisplay(task.due_date)!, 'MMM d, yyyy') : '-'}
+                      {task.due_date ? formatDate(task.due_date) : '-'}
                     </TableCell>
                     
                     <TableCell className="bg-blue-50">

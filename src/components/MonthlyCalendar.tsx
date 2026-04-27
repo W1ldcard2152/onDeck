@@ -3,6 +3,7 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react'
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, startOfWeek, endOfWeek, addMonths, subMonths, isToday, isSameDay, isSameMonth, parseISO } from 'date-fns'
 import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, CheckCircle2, Circle } from 'lucide-react'
+import { formatDate, formatTime } from '@/lib/timezone'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -87,7 +88,7 @@ function HabitDetailDialog({ habit, isOpen, onClose }: HabitDetailDialogProps) {
           </div>
 
           <div className="text-xs text-muted-foreground">
-            Created {format(parseISO(habit.created_at), 'MMM d, yyyy')}
+            Created {formatDate(habit.created_at)}
           </div>
         </div>
       </DialogContent>
@@ -201,18 +202,13 @@ export function MonthlyCalendar({
         
         // Check for reminder time first, then due date time
         if (task.reminder_time) {
-          try {
-            const reminderDate = new Date(task.reminder_time)
-            time = reminderDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-          } catch (e) {
-            // If reminder_time parsing fails, continue without time
-          }
+          time = formatTime(task.reminder_time)
         } else if (task.due_date) {
           try {
             const dueDate = new Date(task.due_date)
             // Only show time if it's not midnight (meaning a specific time was set)
             if (dueDate.getHours() !== 0 || dueDate.getMinutes() !== 0) {
-              time = dueDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+              time = formatTime(task.due_date)
             }
           } catch (e) {
             // If due_date parsing fails, continue without time

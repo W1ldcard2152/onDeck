@@ -28,6 +28,7 @@ import type { TaskStatus } from '@/types/database.types';
 import { HabitTaskGenerator } from '@/lib/habitTaskGenerator';
 import { getSupabaseClient } from '@/lib/supabase-client';
 import { startOfDay, parseISO, isBefore } from 'date-fns';
+import { nowISO } from '@/lib/timezone';
 import { useChecklists } from '@/hooks/useChecklists';
 import { ChecklistCompletion } from '@/components/ChecklistCompletion';
 import {
@@ -138,7 +139,7 @@ const DashboardPage: React.FC = () => {
       const { error: itemError } = await supabase
         .from('items')
         // @ts-ignore - Supabase type inference issue
-        .update({ updated_at: new Date().toISOString() })
+        .update({ updated_at: nowISO() })
         .eq('id', taskId);
 
       if (itemError) throw itemError;

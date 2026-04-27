@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { Search, Bell, Settings, MessageSquare } from 'lucide-react';
-import { cn } from "@/lib/utils";
 import { BottomNav } from './BottomNav';
 import { DesktopNav } from './DesktopNav';
 import { MobileHeader } from './MobileHeader';
@@ -15,8 +14,8 @@ const Layout = () => {
     <div className="min-h-screen bg-gray-50">
       {/* Desktop Navigation - hidden on mobile */}
       <div className="hidden md:block fixed left-0 top-0 h-full">
-        <DesktopNav 
-          activeSection={activeSection} 
+        <DesktopNav
+          activeSection={activeSection}
           onSectionChange={setActiveSection}
         />
       </div>

@@ -2,6 +2,7 @@
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import type { Database } from '@/types/database.types';
 import type { Priority, ProjectStatus, StepStatus } from '@/lib/types';
+import { nowISO } from '@/lib/timezone';
 
 export interface ProjectStep {
   id: string;
@@ -56,7 +57,7 @@ export class ProjectTaskManager {
         }
       }
 
-      const now = new Date().toISOString();
+      const now = nowISO();
       
       // Calculate a sensible due date (7 days from now by default)
       const dueDate = step.due_date || null;
@@ -118,7 +119,7 @@ export class ProjectTaskManager {
    */
   async handleTaskCompletion(taskId: string, projectId: string): Promise<void> {
     try {
-      const now = new Date().toISOString();
+      const now = nowISO();
       
       // Update project step
       const { data: updatedStep, error: stepError } = await this.supabase
@@ -210,7 +211,7 @@ export class ProjectTaskManager {
    */
   async handleTaskUncomplete(taskId: string): Promise<void> {
     try {
-      const now = new Date().toISOString();
+      const now = nowISO();
       
       // Update project step
       const { data: updatedStep, error: stepError } = await this.supabase
@@ -318,7 +319,7 @@ export class ProjectTaskManager {
                 is_converted: false,
                 converted_task_id: null,
                 status: 'pending',
-                updated_at: new Date().toISOString()
+                updated_at: nowISO()
               })
               .eq('id', step.id);
           } else if (task) {
@@ -329,7 +330,7 @@ export class ProjectTaskManager {
                 .from('project_steps')
                 .update({
                   status: 'completed',
-                  completed_at: new Date().toISOString()
+                  completed_at: nowISO()
                 })
                 .eq('id', step.id);
                 
@@ -340,7 +341,7 @@ export class ProjectTaskManager {
                 .from('tasks')
                 .update({
                   status: 'completed',
-                  updated_at: new Date().toISOString()
+                  updated_at: nowISO()
                 })
                 .eq('id', step.converted_task_id);
                 
@@ -414,7 +415,7 @@ export class ProjectTaskManager {
           is_converted: false,
           converted_task_id: null,
           // If step was completed, keep it completed even if the task is deleted
-          updated_at: new Date().toISOString()
+          updated_at: nowISO()
         })
         .eq('converted_task_id', taskId)
         .select()

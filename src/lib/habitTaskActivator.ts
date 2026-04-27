@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { todayDateString, nowISO } from '@/lib/timezone'
 
 export class HabitTaskActivator {
   constructor(
@@ -10,8 +11,7 @@ export class HabitTaskActivator {
    * Activate all habit tasks that are assigned for today and still on_deck
    */
   async activateTodaysTasks(): Promise<void> {
-    const today = new Date()
-    const todayStr = today.toISOString().split('T')[0] // YYYY-MM-DD format
+    const todayStr = todayDateString() // YYYY-MM-DD format
     
     console.log(`=== HABIT ACTIVATION DEBUG ===`)
     console.log(`Today's date: ${todayStr}`)
@@ -68,7 +68,7 @@ export class HabitTaskActivator {
         .from('tasks')
         .update({ 
           status: 'active',
-          updated_at: new Date().toISOString()
+          updated_at: nowISO()
         })
         .in('id', taskIds)
 
@@ -81,7 +81,7 @@ export class HabitTaskActivator {
       const { error: itemUpdateError } = await this.supabase
         .from('items')
         .update({ 
-          updated_at: new Date().toISOString()
+          updated_at: nowISO()
         })
         .in('id', taskIds)
 

@@ -2,8 +2,8 @@
 
 import React from 'react';
 import { TaskWithDetails, DailyContext } from '@/lib/types';
-import { format } from 'date-fns';
 import { Calendar, Clock } from 'lucide-react';
+import { formatDate } from '@/lib/timezone';
 
 interface TaskCardProps {
   task: TaskWithDetails;
@@ -40,7 +40,7 @@ export const TaskCard: React.FC<TaskCardProps> = React.memo(({ task }) => {
         {hasAssignedDate && task.assigned_date && (
           <div className="flex items-center text-sm text-gray-600">
             <Calendar className="w-4 h-4 mr-1" />
-            <span>Assigned: {format(new Date(task.assigned_date), 'MMM d, yyyy')}</span>
+            <span>Assigned: {formatDate(task.assigned_date)}</span>
           </div>
         )}
 
@@ -53,7 +53,7 @@ export const TaskCard: React.FC<TaskCardProps> = React.memo(({ task }) => {
         {hasDueDate && task.due_date && (
           <div className="flex items-center text-sm text-gray-600">
             <Clock className="w-4 h-4 mr-1" />
-            <span>Due: {format(new Date(task.due_date), 'MMM d, yyyy')}</span>
+            <span>Due: {formatDate(task.due_date)}</span>
           </div>
         )}
       </div>

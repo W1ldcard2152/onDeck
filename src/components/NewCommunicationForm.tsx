@@ -9,6 +9,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { MessageSquare, UserPlus, X } from 'lucide-react';
 import { useSupabaseAuth } from '@/hooks/useSupabaseAuth';
+import { todayDateString } from '@/lib/timezone';
 import { useCommunications } from '@/hooks/useCommunications';
 import { useRelationships } from '@/hooks/useRelationships';
 import type { CommunicationMedium, TimeOfDay } from '@/types/database.types';
@@ -40,7 +41,7 @@ export const NewCommunicationForm: React.FC<NewCommunicationFormProps> = ({
   const [medium, setMedium] = useState<CommunicationMedium>('Phone Call');
   const [mediumOther, setMediumOther] = useState('');
   const [summary, setSummary] = useState('');
-  const [communicationDate, setCommunicationDate] = useState(new Date().toISOString().split('T')[0]);
+  const [communicationDate, setCommunicationDate] = useState(todayDateString());
   const [timeOfDay, setTimeOfDay] = useState<TimeOfDay>('Morning');
   const [timeOfDayOther, setTimeOfDayOther] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -63,7 +64,7 @@ export const NewCommunicationForm: React.FC<NewCommunicationFormProps> = ({
     setMedium('Phone Call');
     setMediumOther('');
     setSummary('');
-    setCommunicationDate(new Date().toISOString().split('T')[0]);
+    setCommunicationDate(todayDateString());
     setTimeOfDay('Morning');
     setTimeOfDayOther('');
     setError(null);

@@ -17,6 +17,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Edit2, Trash2, Archive, ArchiveRestore, Plus } from 'lucide-react';
 import { getSupabaseClient } from '@/lib/supabase-client';
 import { Database } from '@/types/database.types';
+import { formatDateTime, nowISO } from '@/lib/timezone';
 
 type FeedbackItem = Database['public']['Tables']['feedback']['Row'];
 
@@ -112,7 +113,7 @@ export default function FeedbackPage() {
         // @ts-ignore - Supabase type inference issue
         .update({
           is_archived: !isArchived,
-          archived_at: !isArchived ? new Date().toISOString() : null
+          archived_at: !isArchived ? nowISO() : null
         })
         .eq('id', id);
 
@@ -150,15 +151,9 @@ export default function FeedbackPage() {
     }
   };
 
-  const formatDate = (dateString: string | null) => {
+  const formatFeedbackDate = (dateString: string | null) => {
     if (!dateString) return 'N/A';
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
+    return formatDateTime(dateString);
   };
 
   if (authLoading || isLoading) {
@@ -257,9 +252,9 @@ export default function FeedbackPage() {
                   <div className="flex-1">
                     <p className="text-gray-800 mb-2">{item.message}</p>
                     <p className="text-xs text-gray-400">
-                      Created: {formatDate(item.created_at)}
+                      Created: {formatFeedbackDate(item.created_at)}
                       {item.is_archived && item.archived_at && (
-                        <> • Archived: {formatDate(item.archived_at)}</>
+                        <> • Archived: {formatFeedbackDate(item.archived_at)}</>
                       )}
                     </p>
                   </div>

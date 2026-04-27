@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
 import { cookies } from 'next/headers';
 import type { Database } from '@/types/database.types';
+import { todayDateString } from '@/lib/timezone';
 
 export const dynamic = 'force-dynamic';
 
@@ -40,7 +41,7 @@ function getBlockExpiry(): string {
 // Generate a deterministic seed based on date and time block
 function generateSeed(): number {
   const now = new Date();
-  const dateString = now.toISOString().split('T')[0]; // YYYY-MM-DD
+  const dateString = todayDateString(); // YYYY-MM-DD
   const timeBlock = getCurrentTimeBlock();
 
   // Simple hash function to convert date+block to a number

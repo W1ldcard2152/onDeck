@@ -1,8 +1,9 @@
 'use client'
 
 import React, { useState, useEffect } from 'react';
-import { format, addDays, addWeeks, addMonths, startOfDay, isAfter, isSameDay } from 'date-fns';
+import { addDays, addWeeks, addMonths, startOfDay, isAfter, isSameDay } from 'date-fns';
 import { MoreHorizontal, Play, Pause, Trash2, Edit, RotateCcw } from 'lucide-react';
+import { todayDateString, dateToDateString, formatDateShort, formatTime, formatDate } from '@/lib/timezone';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
@@ -62,8 +63,7 @@ const HabitsTable = ({ habits, onHabitUpdate, onEditHabit }: HabitsTableProps) =
 
     try {
       // Get today's date in local timezone (YYYY-MM-DD)
-      const todayDate = new Date();
-      const today = `${todayDate.getFullYear()}-${String(todayDate.getMonth() + 1).padStart(2, '0')}-${String(todayDate.getDate()).padStart(2, '0')}`;
+      const today = todayDateString();
 
       const { data: tasks, error } = await supabase
         .from('tasks')
@@ -220,13 +220,13 @@ const HabitsTable = ({ habits, onHabitUpdate, onEditHabit }: HabitsTableProps) =
 
   const formatNextScheduled = (habit: Habit): string => {
     if (!habit.is_active) return 'Inactive';
-    
+
     const nextDate = nextScheduledDates[habit.id];
     if (!nextDate) return 'No tasks scheduled';
 
-    const dateStr = format(nextDate, 'MMM d');
-    const timeStr = habit.recurrence_rule?.time_of_day 
-      ? format(new Date(`2000-01-01T${habit.recurrence_rule.time_of_day}`), 'h:mm a')
+    const dateStr = formatDateShort(dateToDateString(nextDate));
+    const timeStr = habit.recurrence_rule?.time_of_day
+      ? formatTime(habit.recurrence_rule.time_of_day)
       : null;
 
     return timeStr ? `${dateStr} at ${timeStr}` : dateStr;
@@ -419,7 +419,7 @@ const HabitsTable = ({ habits, onHabitUpdate, onEditHabit }: HabitsTableProps) =
                   </TableCell>
                   
                   <TableCell>
-                    {format(new Date(habit.created_at), 'MMM d, yyyy')}
+                    {formatDate(habit.created_at)}
                   </TableCell>
                   
                   <TableCell className="max-w-[12rem] truncate">

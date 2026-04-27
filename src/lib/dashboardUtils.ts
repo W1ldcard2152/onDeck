@@ -1,20 +1,13 @@
-import { isToday, isTomorrow, isPast, isFuture, isWithinInterval, addDays, format } from 'date-fns';
+import { isToday, isTomorrow, isPast, isFuture, isWithinInterval, addDays } from 'date-fns';
 import type { TaskWithDetails, DailyContext } from '@/lib/types';
 import type { TaskStatus } from '@/types/database.types';
+import { toDate, formatDateShort, formatDateWithWeekday, formatTime } from '@/lib/timezone';
 
 // --- Date parsing ---
 
 export function parseDateForDisplay(dateString: string | null): Date | null {
   if (!dateString) return null;
-  try {
-    if (dateString.includes('-') && dateString.length <= 10) {
-      const [year, month, day] = dateString.split('-').map(Number);
-      return new Date(year, month - 1, day);
-    }
-    return new Date(dateString);
-  } catch {
-    return null;
-  }
+  return toDate(dateString);
 }
 
 export function isDateToday(dateString: string | null): boolean {
@@ -54,18 +47,13 @@ export function formatDateDisplay(dateString: string): string {
   if (isToday(date)) return 'Today';
   if (isTomorrow(date)) return 'Tomorrow';
   if (isWithinInterval(date, { start: tomorrow, end: threeDaysLater })) {
-    return format(date, 'EEE, MMM d');
+    return formatDateWithWeekday(dateString);
   }
-  return format(date, 'MMM d');
+  return formatDateShort(dateString);
 }
 
 export function formatReminderTime(reminderTimeString: string): string {
-  try {
-    const date = new Date(reminderTimeString);
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  } catch {
-    return '';
-  }
+  return formatTime(reminderTimeString);
 }
 
 // --- Context helpers ---

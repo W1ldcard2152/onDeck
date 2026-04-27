@@ -3,6 +3,7 @@
 import React, { useMemo, useState } from 'react'
 import { format, startOfWeek, endOfWeek, eachDayOfInterval, isToday, isSameDay, parseISO, addWeeks, subWeeks } from 'date-fns'
 import { ChevronLeft, ChevronRight, Calendar, CheckCircle2, Circle, Clock, Edit } from 'lucide-react'
+import { formatDate } from '@/lib/timezone'
 import { Button } from '@/components/ui/button'
 import { NewEntryForm } from '@/components/NewEntryForm'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -110,19 +111,19 @@ function TaskPopover({ task, habit, onEdit }: TaskPopoverProps) {
         {task.due_date && (
           <div className="flex items-center gap-2 text-sm">
             <Clock className="h-4 w-4 text-muted-foreground" />
-            <span>Due: {format(parseISO(task.due_date), 'MMM d, yyyy')}</span>
+            <span>Due: {formatDate(task.due_date)}</span>
           </div>
         )}
         {task.assigned_date && (
           <div className="flex items-center gap-2 text-sm">
             <Calendar className="h-4 w-4 text-muted-foreground" />
-            <span>Assigned: {format(parseISO(task.assigned_date), 'MMM d, yyyy')}</span>
+            <span>Assigned: {formatDate(task.assigned_date)}</span>
           </div>
         )}
       </div>
 
       <div className="text-xs text-muted-foreground pt-2 border-t">
-        Created {format(parseISO(task.created_at), 'MMM d, yyyy')}
+        Created {formatDate(task.created_at)}
       </div>
     </div>
   )

@@ -3,6 +3,13 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import dynamic from 'next/dynamic';
 import { Bell, Settings, MessageSquare } from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { settingsTabs } from '@/components/settings/settingsTabs';
 import { BottomNav } from './responsiveNav/BottomNav';
 import { DesktopNav } from './responsiveNav/DesktopNav';
 import { MobileHeader } from './responsiveNav/MobileHeader';
@@ -10,6 +17,7 @@ import AuthUI from '@/components/Auth';
 import { useSupabaseAuth } from '@/hooks/useSupabaseAuth';
 import { useServiceWorker } from '@/hooks/useServiceWorker';
 import type { SectionType } from './responsiveNav/types';
+import { defaultSettingsTab } from '@/components/settings/settingsTabs';
 import UserMenu from '../UserMenu';
 import IntegratedSearch from '../IntegratedSearch';
 import ClientLayout from './ClientLayout';
@@ -53,11 +61,16 @@ const CatalogPage = dynamic(() => import('@/app/catalog/page'), {
 const ProtocolsPage = dynamic(() => import('@/app/protocols/page'), {
   loading: () => <div className="flex items-center justify-center h-32"><div className="text-lg text-gray-500">Loading...</div></div>
 });
+const SettingsPage = dynamic<{ activeTab: string; onTabChange: (tab: string) => void }>(
+  () => import('@/components/settings/SettingsPage'),
+  { loading: () => <div className="flex items-center justify-center h-32"><div className="text-lg text-gray-500">Loading...</div></div> }
+);
 
 const DesktopLayout = () => {
   const { user, loading } = useSupabaseAuth();
   const [isFeedbackModalOpen, setIsFeedbackModalOpen] = useState(false);
   const [isInPWA, setIsInPWA] = useState(false);
+  const [settingsTab, setSettingsTab] = useState(defaultSettingsTab);
 
   // Initialize active section from sessionStorage (persists on minimize) or default to dashboard
   const [activeSection, setActiveSection] = useState<SectionType>(() => {
@@ -68,6 +81,11 @@ const DesktopLayout = () => {
     return 'dashboard';
   });
   
+  const navigateToSettings = (tab: string) => {
+    setSettingsTab(tab);
+    setActiveSection('settings');
+  };
+
   // Memoize service worker options to prevent re-registration
   const serviceWorkerOptions = useMemo(() => ({
     onSuccess: (registration: ServiceWorkerRegistration) => {
@@ -218,6 +236,8 @@ const DesktopLayout = () => {
         return <ProtocolsPage />;
       case 'feedback':
         return <FeedbackPage />;
+      case 'settings':
+        return <SettingsPage activeTab={settingsTab} onTabChange={setSettingsTab} />;
       default:
         return <DashboardPage />;
     }
@@ -231,8 +251,8 @@ const DesktopLayout = () => {
         
         {/* Desktop Navigation - hidden on mobile, adjust for PWA nav bar */}
         <div className={`hidden md:block fixed left-0 h-full ${isInPWA ? 'top-12' : 'top-0'}`}>
-          <DesktopNav 
-            activeSection={activeSection} 
+          <DesktopNav
+            activeSection={activeSection}
             onSectionChange={setActiveSection}
           />
         </div>
@@ -279,12 +299,24 @@ const DesktopLayout = () => {
               >
                 <Bell size={20} className="text-gray-600" />
               </button>
-              <button 
-                type="button"
-                className="p-2 hover:bg-gray-100 rounded-lg"
-              >
-                <Settings size={20} className="text-gray-600" />
-              </button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button type="button" className="p-2 hover:bg-gray-100 rounded-lg">
+                    <Settings size={20} className="text-gray-600" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-52">
+                  {settingsTabs.map(tab => {
+                    const Icon = tab.icon;
+                    return (
+                      <DropdownMenuItem key={tab.id} onClick={() => navigateToSettings(tab.id)}>
+                        <Icon className="h-4 w-4 mr-2" />
+                        {tab.label}
+                      </DropdownMenuItem>
+                    );
+                  })}
+                </DropdownMenuContent>
+              </DropdownMenu>
               <UserMenu />
             </div>
           </header>
