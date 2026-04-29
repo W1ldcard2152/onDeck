@@ -5,7 +5,24 @@ export type KnowledgeEntryType = 'article' | 'video' | 'document' | 'resource' |
 export type NoteType = 'note' | 'thought';
 export type ProjectStatus = 'active' | 'completed' | 'on_hold';
 export type StepStatus = 'pending' | 'in_progress' | 'completed';
+/** @deprecated Legacy string-name contexts. daily_context now stores context UUIDs. */
 export type DailyContext = 'all_day' | 'morning' | 'work' | 'family' | 'evening';
+
+export const CONTEXT_COLORS = [
+  'orange', 'red', 'green', 'purple', 'blue',
+  'yellow', 'pink', 'sky', 'indigo', 'teal',
+] as const;
+export type ContextColor = typeof CONTEXT_COLORS[number];
+
+export interface Context {
+  id: string;
+  user_id: string;
+  name: string;
+  emoji: string;
+  color: ContextColor;
+  sort_order: number;
+  created_at: string;
+}
 
 export interface Item {
   id: string;
@@ -31,7 +48,7 @@ export interface Task {
   habit_id: string | null;
   is_project_converted: boolean;
   converted_project_id: string | null;
-  daily_context?: string | null; // JSON array of DailyContext values, or null for all-day
+  daily_context?: string | null; // JSON array of context UUIDs, or null for all-day
   sort_order: number; // Manual sort order within context
   checklist_template_id: string | null;
 }
@@ -54,7 +71,7 @@ export interface TaskWithDetails {
   habit_id: string | null;
   is_project_converted: boolean;
   converted_project_id: string | null;
-  daily_context?: string | null; // JSON array of DailyContext values, or null for all-day
+  daily_context?: string | null; // JSON array of context UUIDs, or null for all-day
   sort_order: number; // Manual sort order within context
   checklist_template_id: string | null;
   item: Item;
@@ -90,7 +107,7 @@ export interface ProjectStep {
   assigned_date: string | null;
   is_converted: boolean;
   converted_task_id: string | null;
-  daily_context?: string | null; // JSON array of DailyContext values, or null for all-day
+  daily_context?: string | null; // JSON array of context UUIDs, or null for all-day
 }
 
 export interface StepData {

@@ -23,7 +23,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import type { Database } from '@/types/database.types';
-import type { TaskWithDetails } from '@/lib/types';
+import type { TaskWithDetails, Context } from '@/lib/types';
+import { useContexts } from '@/hooks/useContexts';
 import type { Priority, TaskStatus } from '@/types/database.types';
 import ScrollableTableWrapper from './layouts/responsiveNav/ScrollableTableWrapper';
 import { ProjectTaskManager } from '@/lib/projectTaskManager';
@@ -64,15 +65,17 @@ interface ProjectInfo {
   stepTitle?: string;
 }
 
-function formatContextsForDisplay(dailyContext: string | null): string {
+function formatContextsForDisplay(dailyContext: string | null, contexts: Context[]): string {
   if (!dailyContext) return '';
-
   try {
-    const contexts = JSON.parse(dailyContext);
-    if (!Array.isArray(contexts) || contexts.length === 0) return '';
-    return contexts.map((c: string) => c.charAt(0).toUpperCase() + c.slice(1)).join(', ');
-  } catch (e) {
-    console.error('Error parsing contexts:', e);
+    const ids: string[] = JSON.parse(dailyContext);
+    if (!Array.isArray(ids) || ids.length === 0) return '';
+    return ids
+      .map(id => contexts.find(c => c.id === id))
+      .filter(Boolean)
+      .map(c => `${c!.emoji} ${c!.name}`)
+      .join(', ');
+  } catch {
     return '';
   }
 }
@@ -95,6 +98,7 @@ const TaskTableBase: React.FC<TaskTableBaseProps> = ({
   const supabase = createClientComponentClient();
   const { user } = useSupabaseAuth();
   const { templates: checklistTemplates } = useChecklists(user?.id);
+  const { contexts } = useContexts();
 
   // Update local tasks when tasks prop changes
   useEffect(() => {
@@ -1050,9 +1054,9 @@ const TaskTableBase: React.FC<TaskTableBaseProps> = ({
                     
                     <TableCell className="bg-blue-50">
                       <div className="space-y-1">
-                        {task.daily_context && formatContextsForDisplay(task.daily_context) ? (
+                        {task.daily_context && formatContextsForDisplay(task.daily_context ?? null, contexts) ? (
                           <div className="text-sm font-medium text-blue-700">
-                            📅 {formatContextsForDisplay(task.daily_context)}
+                            📅 {formatContextsForDisplay(task.daily_context ?? null, contexts)}
                           </div>
                         ) : (
                           <div className="text-gray-400 text-sm">All day</div>
@@ -1127,6 +1131,8 @@ const TaskTable: React.FC<TaskTableProps> = ({
   title,
   showCompletedSection = true
 }) => {
+  const { contexts } = useContexts();
+
   const [showCompleted, setShowCompleted] = useState(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('taskTable_showCompleted');
@@ -1255,8 +1261,8 @@ const TaskTable: React.FC<TaskTableProps> = ({
             break;
           }
           case 'daily_context': {
-            const aContext = a.daily_context || '';
-            const bContext = b.daily_context || '';
+            const aContext = formatContextsForDisplay(a.daily_context ?? null, contexts);
+            const bContext = formatContextsForDisplay(b.daily_context ?? null, contexts);
             comparison = aContext.localeCompare(bContext);
             break;
           }

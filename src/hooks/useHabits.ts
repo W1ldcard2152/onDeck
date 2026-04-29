@@ -22,7 +22,7 @@ export interface RecurrenceRule {
   after_completion?: boolean;
   delay_after_completion?: string;
   skip_conditions?: string[];
-  daily_context?: ('morning' | 'work' | 'family' | 'evening' | 'all_day')[];
+  daily_context?: string[];
   custom_exclusions?: string[];
   custom_inclusions?: string[];
   offset_days?: number;

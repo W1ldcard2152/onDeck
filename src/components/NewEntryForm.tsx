@@ -16,7 +16,8 @@ import { useSupabaseAuth } from '@/hooks/useSupabaseAuth';
 import { useKnowledgeBases } from '@/hooks/useKnowledgeBases';
 import { EntryService } from '@/lib/entryService';
 import type { TaskStatus, Priority, EntryType as KnowledgeEntryType } from '@/types/database.types';
-import type { TaskWithDetails, NoteWithDetails, DailyContext } from '@/lib/types';
+import type { TaskWithDetails, NoteWithDetails } from '@/lib/types';
+import { useContexts } from '@/hooks/useContexts';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import { DayPicker } from "react-day-picker";
 import "react-day-picker/dist/style.css";
@@ -144,7 +145,8 @@ export const NewEntryForm: React.FC<NewEntryFormProps> = ({
     // Default to today's date for new tasks only
     !isEditing && defaultType === 'task' ? new Date() : undefined
   );
-  const [dailyContexts, setDailyContexts] = useState<DailyContext[]>([]);
+  const [dailyContexts, setDailyContexts] = useState<string[]>([]);
+  const { contexts } = useContexts();
   const [priority, setPriority] = useState<Priority>('normal');
   const [status, setStatus] = useState<TaskStatus>('active');
   const [description, setDescription] = useState('');
@@ -477,24 +479,24 @@ export const NewEntryForm: React.FC<NewEntryFormProps> = ({
                 <div className="text-xs text-blue-600">Choose when you'd like to work on this task</div>
 
                 <div className="grid grid-cols-2 gap-4">
-                  {(['morning', 'work', 'family', 'evening'] as const).map((context) => (
-                    <div key={context} className="flex items-center space-x-2">
+                  {contexts.map((context) => (
+                    <div key={context.id} className="flex items-center space-x-2">
                       <Checkbox
-                        id={`context-${context}`}
-                        checked={dailyContexts.includes(context)}
+                        id={`context-${context.id}`}
+                        checked={dailyContexts.includes(context.id)}
                         onCheckedChange={(checked) => {
                           if (checked) {
-                            setDailyContexts([...dailyContexts, context]);
+                            setDailyContexts([...dailyContexts, context.id]);
                           } else {
-                            setDailyContexts(dailyContexts.filter(c => c !== context));
+                            setDailyContexts(dailyContexts.filter(c => c !== context.id));
                           }
                         }}
                       />
                       <Label
-                        htmlFor={`context-${context}`}
+                        htmlFor={`context-${context.id}`}
                         className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
                       >
-                        {context.charAt(0).toUpperCase() + context.slice(1)}
+                        {context.emoji} {context.name}
                       </Label>
                     </div>
                   ))}

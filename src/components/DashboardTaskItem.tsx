@@ -24,6 +24,7 @@ import {
   formatReminderTime,
   type Habit,
 } from '@/lib/dashboardUtils';
+import { useContexts } from '@/hooks/useContexts';
 
 interface DashboardTaskItemProps {
   task: TaskWithDetails;
@@ -56,6 +57,8 @@ export const DashboardTaskItem: React.FC<DashboardTaskItemProps> = React.memo(({
   onChecklistRun,
   showMoveControls = false,
 }) => {
+  const { contexts } = useContexts();
+
   const habitTimeDisplay = React.useMemo(() => {
     if (task.reminder_time || !task.habit_id) return null;
     const habit = habits.find(h => h.id === task.habit_id);
@@ -70,7 +73,7 @@ export const DashboardTaskItem: React.FC<DashboardTaskItemProps> = React.memo(({
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <div className={`p-3 md:p-4 rounded-lg border hover:shadow-sm transition-shadow cursor-pointer ${getContextColor(task)}`}>
+        <div className={`p-3 md:p-4 rounded-lg border hover:shadow-sm transition-shadow cursor-pointer ${getContextColor(task, contexts)}`}>
           <div className="flex items-start gap-2 md:gap-3">
             {showMoveControls && (
               <div className="flex flex-col gap-0.5 flex-shrink-0" onClick={(e) => e.stopPropagation()}>

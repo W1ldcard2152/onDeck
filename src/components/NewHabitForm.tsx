@@ -23,7 +23,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Plus } from 'lucide-react';
 import { useHabits, type RecurrenceRule, type Habit } from '@/hooks/useHabits';
 import { useSupabaseAuth } from '@/hooks/useSupabaseAuth';
-import type { DailyContext } from '@/lib/types';
+import { useContexts } from '@/hooks/useContexts';
 
 interface NewHabitFormProps {
   onHabitCreated: () => void;
@@ -43,13 +43,14 @@ const NewHabitForm = ({ onHabitCreated, editingHabit, onHabitUpdated, checklistT
   const [interval, setInterval] = useState(1);
   const [selectedDays, setSelectedDays] = useState<string[]>([]);
   const [selectedDaysOfMonth, setSelectedDaysOfMonth] = useState<number[]>([]);
-  const [dailyContexts, setDailyContexts] = useState<DailyContext[]>([]);
+  const [dailyContexts, setDailyContexts] = useState<string[]>([]);
   const [startDate, setStartDate] = useState('');
   const [offsetDays, setOffsetDays] = useState(0);
   const [checklistTemplateId, setChecklistTemplateId] = useState<string | null>(null);
   
   const { user } = useSupabaseAuth();
   const { createHabit, updateHabit } = useHabits(user?.id);
+  const { contexts } = useContexts();
 
   const dayOptions = [
     'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'
@@ -68,7 +69,14 @@ const NewHabitForm = ({ onHabitCreated, editingHabit, onHabitUpdated, checklistT
       setInterval(rule.interval || 1);
       setSelectedDays(rule.days_of_week || []);
       setSelectedDaysOfMonth(rule.days_of_month || []);
-      setDailyContexts(rule.daily_context || []);
+      const rawContexts = rule.daily_context || [];
+      // Migrate old string-name values to UUIDs if needed
+      const resolvedContexts = rawContexts.map((val: string) => {
+        if (contexts.find(c => c.id === val)) return val;
+        const match = contexts.find(c => c.name.toLowerCase() === val.toLowerCase());
+        return match ? match.id : null;
+      }).filter(Boolean) as string[];
+      setDailyContexts(resolvedContexts);
       setStartDate(getLocalDateString());
       setOffsetDays(rule.offset_days || 0);
       setChecklistTemplateId(editingHabit.checklist_template_id || null);
@@ -268,24 +276,24 @@ const NewHabitForm = ({ onHabitCreated, editingHabit, onHabitUpdated, checklistT
               <div className="text-xs text-blue-600">Choose when you'd like to work on this habit</div>
 
               <div className="grid grid-cols-2 gap-4">
-                {(['morning', 'work', 'family', 'evening'] as const).map((context) => (
-                  <div key={context} className="flex items-center space-x-2">
+                {contexts.map((context) => (
+                  <div key={context.id} className="flex items-center space-x-2">
                     <Checkbox
-                      id={`context-${context}`}
-                      checked={dailyContexts.includes(context)}
+                      id={`context-${context.id}`}
+                      checked={dailyContexts.includes(context.id)}
                       onCheckedChange={(checked) => {
                         if (checked) {
-                          setDailyContexts([...dailyContexts, context]);
+                          setDailyContexts([...dailyContexts, context.id]);
                         } else {
-                          setDailyContexts(dailyContexts.filter(c => c !== context));
+                          setDailyContexts(dailyContexts.filter(c => c !== context.id));
                         }
                       }}
                     />
                     <Label
-                      htmlFor={`context-${context}`}
+                      htmlFor={`context-${context.id}`}
                       className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
                     >
-                      {context.charAt(0).toUpperCase() + context.slice(1)}
+                      {context.emoji} {context.name}
                     </Label>
                   </div>
                 ))}

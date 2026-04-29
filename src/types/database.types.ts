@@ -153,6 +153,35 @@ export interface Database {
           updated_at?: string;
         };
       };
+      contexts: {
+        Row: {
+          id: string;
+          user_id: string;
+          name: string;
+          emoji: string;
+          color: string;
+          sort_order: number;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          name: string;
+          emoji?: string;
+          color?: string;
+          sort_order: number;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          name?: string;
+          emoji?: string;
+          color?: string;
+          sort_order?: number;
+          created_at?: string;
+        };
+      };
       tasks: {
         Row: {
           id: string;

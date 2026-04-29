@@ -1,7 +1,41 @@
 import { isToday, isTomorrow, isPast, isFuture, isWithinInterval, addDays } from 'date-fns';
-import type { TaskWithDetails, DailyContext } from '@/lib/types';
+import type { TaskWithDetails, Context } from '@/lib/types';
 import type { TaskStatus } from '@/types/database.types';
 import { toDate, formatDateShort, formatDateWithWeekday, formatTime } from '@/lib/timezone';
+
+// Maps a context color name to Tailwind card classes.
+export function contextColorToClasses(color: string): string {
+  const map: Record<string, string> = {
+    orange: 'bg-orange-50 border-orange-200',
+    red:    'bg-red-50 border-red-200',
+    green:  'bg-green-50 border-green-200',
+    purple: 'bg-purple-50 border-purple-200',
+    blue:   'bg-blue-50 border-blue-200',
+    yellow: 'bg-yellow-50 border-yellow-200',
+    pink:   'bg-pink-50 border-pink-200',
+    sky:    'bg-sky-50 border-sky-200',
+    indigo: 'bg-indigo-50 border-indigo-200',
+    teal:   'bg-teal-50 border-teal-200',
+  };
+  return map[color] ?? 'bg-white border-gray-200';
+}
+
+// Maps a context color name to Tailwind badge classes.
+export function contextColorToBadgeClasses(color: string): string {
+  const map: Record<string, string> = {
+    orange: 'bg-orange-100 text-orange-700',
+    red:    'bg-red-100 text-red-700',
+    green:  'bg-green-100 text-green-700',
+    purple: 'bg-purple-100 text-purple-700',
+    blue:   'bg-blue-100 text-blue-700',
+    yellow: 'bg-yellow-100 text-yellow-700',
+    pink:   'bg-pink-100 text-pink-700',
+    sky:    'bg-sky-100 text-sky-700',
+    indigo: 'bg-indigo-100 text-indigo-700',
+    teal:   'bg-teal-100 text-teal-700',
+  };
+  return map[color] ?? 'bg-gray-100 text-gray-700';
+}
 
 // --- Date parsing ---
 
@@ -58,28 +92,30 @@ export function formatReminderTime(reminderTimeString: string): string {
 
 // --- Context helpers ---
 
-export function taskMatchesContext(task: TaskWithDetails, context: DailyContext | 'all' | 'past'): boolean {
-  let taskContexts: DailyContext[] = [];
-  if (task.daily_context) {
-    try {
-      taskContexts = JSON.parse(task.daily_context);
-    } catch {
-      taskContexts = [];
-    }
-  }
-  const isAllDay = !task.daily_context || taskContexts.length === 0;
-  if (context === 'all' || context === 'past') return true;
-  return isAllDay || taskContexts.includes(context);
+function parseContextIds(daily_context: string | null | undefined): string[] {
+  if (!daily_context) return [];
+  try { return JSON.parse(daily_context) as string[]; }
+  catch { return []; }
 }
 
-export function getPrimaryContext(task: TaskWithDetails): DailyContext | 'none' {
-  if (!task.daily_context) return 'none';
-  try {
-    const contexts: DailyContext[] = JSON.parse(task.daily_context);
-    return contexts[0] || 'none';
-  } catch {
-    return 'none';
+/** Returns true if the task belongs to the given context ID (or is all-day when contextId is 'all_day'). */
+export function taskMatchesContext(task: TaskWithDetails, contextId: string | 'all' | 'past'): boolean {
+  const ids = parseContextIds(task.daily_context);
+  const isAllDay = ids.length === 0;
+  if (contextId === 'all' || contextId === 'past') return true;
+  if (contextId === 'all_day') return isAllDay;
+  return isAllDay || ids.includes(contextId);
+}
+
+/** Returns the primary context object for a task (first in sort order), or null. */
+export function getPrimaryContext(task: TaskWithDetails, contexts: Context[]): Context | null {
+  const ids = parseContextIds(task.daily_context);
+  if (ids.length === 0) return null;
+  // Return whichever listed ID appears earliest in the contexts sort order
+  for (const ctx of contexts) {
+    if (ids.includes(ctx.id)) return ctx;
   }
+  return null;
 }
 
 // --- Color helpers ---
@@ -104,26 +140,14 @@ export function getStatusBadgeColor(status: TaskStatus): string {
   }
 }
 
-export function getContextColor(task: TaskWithDetails): string {
+export function getContextColor(task: TaskWithDetails, contexts: Context[]): string {
   if (task.due_date) {
     const isDueToday = isDateToday(task.due_date);
     const isDuePast = isDatePast(task.due_date);
     if (isDueToday || isDuePast) return 'bg-red-100 border-red-400';
   }
-
-  const dailyContexts: DailyContext[] = task.daily_context
-    ? (() => { try { return JSON.parse(task.daily_context); } catch { return []; } })()
-    : [];
-
-  const primaryContext = dailyContexts[0];
-  switch (primaryContext) {
-    case 'all_day': return 'bg-white border-gray-200';
-    case 'morning': return 'bg-orange-50 border-orange-200';
-    case 'work': return 'bg-red-50 border-red-200';
-    case 'family': return 'bg-green-50 border-green-200';
-    case 'evening': return 'bg-purple-50 border-purple-200';
-    default: return 'bg-white border-gray-200';
-  }
+  const primary = getPrimaryContext(task, contexts);
+  return primary ? contextColorToClasses(primary.color) : 'bg-white border-gray-200';
 }
 
 export interface Habit {

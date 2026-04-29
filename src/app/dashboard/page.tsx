@@ -23,7 +23,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import type { TaskWithDetails, DailyContext } from '@/lib/types';
+import type { TaskWithDetails, Context } from '@/lib/types';
+import { useContexts } from '@/hooks/useContexts';
 import type { TaskStatus } from '@/types/database.types';
 import { HabitTaskGenerator } from '@/lib/habitTaskGenerator';
 import { getSupabaseClient } from '@/lib/supabase-client';
@@ -54,6 +55,7 @@ const DashboardPage: React.FC = () => {
   const { notes, isLoading: notesLoading, refetch: refetchNotes } = useNotes(user?.id);
   const { habits, isLoading: habitsLoading } = useHabits(user?.id);
   const { templates: checklistTemplates } = useChecklists(user?.id);
+  const { contexts } = useContexts();
   const [completingTemplateId, setCompletingTemplateId] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [taskToEdit, setTaskToEdit] = useState<TaskWithDetails | null>(null);
@@ -193,35 +195,32 @@ const DashboardPage: React.FC = () => {
 
   const { today, tomorrow, threeDaysLater, activeTasks } = dashboardData;
 
-  const getFilteredTasks = useCallback((context: DailyContext | 'all' | 'past') => {
+  const getFilteredTasks = useCallback((contextId: string | 'all' | 'past') => {
     const todayStart = startOfDay(new Date());
-
-    const contextOrder: Record<string, number> = {
-      'none': 0, 'all_day': 0, 'morning': 1, 'work': 2, 'family': 3, 'evening': 4
-    };
 
     const filtered = tasks.filter(task => {
       if (task.status === 'completed') return false;
       const assignedDate = task.assigned_date ? startOfDay(parseISO(task.assigned_date)) : null;
       const dueDate = task.due_date ? startOfDay(parseISO(task.due_date)) : null;
 
-      if (context === 'past') {
+      if (contextId === 'past') {
         const hasRelevantAssignedDate = assignedDate && isBefore(assignedDate, todayStart);
         const hasRelevantDueDate = dueDate && isBefore(dueDate, todayStart);
-        return (hasRelevantAssignedDate || hasRelevantDueDate) && taskMatchesContext(task, context);
+        return (hasRelevantAssignedDate || hasRelevantDueDate) && taskMatchesContext(task, contextId);
       }
 
       const hasRelevantAssignedDate = assignedDate && (isToday(assignedDate) || isBefore(assignedDate, todayStart));
       const hasRelevantDueDate = dueDate && (isToday(dueDate) || isBefore(dueDate, todayStart));
-      return (hasRelevantAssignedDate || hasRelevantDueDate) && taskMatchesContext(task, context);
+      return (hasRelevantAssignedDate || hasRelevantDueDate) && taskMatchesContext(task, contextId);
     });
 
     return filtered.sort((a, b) => {
-      if (context === 'all' || context === 'past') {
-        const contextA = getPrimaryContext(a);
-        const contextB = getPrimaryContext(b);
-        const contextDiff = contextOrder[contextA] - contextOrder[contextB];
-        if (contextDiff !== 0) return contextDiff;
+      if (contextId === 'all' || contextId === 'past') {
+        const ctxA = getPrimaryContext(a, contexts);
+        const ctxB = getPrimaryContext(b, contexts);
+        const orderA = ctxA ? ctxA.sort_order : 0;
+        const orderB = ctxB ? ctxB.sort_order : 0;
+        if (orderA !== orderB) return orderA - orderB;
       }
       const hasDueA = !!a.due_date;
       const hasDueB = !!b.due_date;
@@ -234,7 +233,7 @@ const DashboardPage: React.FC = () => {
       }
       return a.sort_order - b.sort_order;
     });
-  }, [tasks]);
+  }, [tasks, contexts]);
 
   const taskSections = useMemo(() => {
     const priorityOrder: Record<string, number> = { high: 0, normal: 1, low: 2 };
@@ -358,18 +357,11 @@ const DashboardPage: React.FC = () => {
     );
   }, [habits, moveTask, updateTaskStatus, deleteTask]);
 
-  const renderContextTaskList = useCallback((context: DailyContext | 'all' | 'past') => {
-    const filteredTasks = getFilteredTasks(context);
-    const getContextTitle = (ctx: typeof context) => {
-      if (ctx === 'all') return 'All';
-      if (ctx === 'past') return 'Past';
-      if (ctx === 'all_day') return 'All Day';
-      return ctx.charAt(0).toUpperCase() + ctx.slice(1);
-    };
-
+  const renderContextTaskList = useCallback((contextId: string | 'all' | 'past', label: string) => {
+    const filteredTasks = getFilteredTasks(contextId);
     return (
       <DashboardCard
-        title={`${getContextTitle(context)} Tasks (${filteredTasks.length})`}
+        title={`${label} Tasks (${filteredTasks.length})`}
         content={
           <div className="space-y-3">
             {filteredTasks.length === 0 ? (
@@ -378,8 +370,8 @@ const DashboardPage: React.FC = () => {
               filteredTasks.map((task, index) => {
                 const isPastDue = task.due_date && isDatePast(task.due_date);
                 const isPastAssigned = task.assigned_date && isDatePast(task.assigned_date);
-                const label = isPastDue ? "OVERDUE" : isPastAssigned ? "PAST ASSIGNED" : undefined;
-                return renderTaskItem(task, label, filteredTasks, index);
+                const taskLabel = isPastDue ? "OVERDUE" : isPastAssigned ? "PAST ASSIGNED" : undefined;
+                return renderTaskItem(task, taskLabel, filteredTasks, index);
               })
             )}
           </div>
@@ -483,23 +475,25 @@ const DashboardPage: React.FC = () => {
 
       {/* Context-based task tabs */}
       <Tabs defaultValue="all" className="w-full">
-        <TabsList className="grid w-full grid-cols-4 md:grid-cols-7 gap-1">
+        <TabsList className="flex flex-wrap w-full gap-1 h-auto">
           <TabsTrigger value="all" className="text-xs md:text-sm">All</TabsTrigger>
           <TabsTrigger value="past" className="text-xs md:text-sm">Past</TabsTrigger>
           <TabsTrigger value="all_day" className="text-xs md:text-sm">All Day</TabsTrigger>
-          <TabsTrigger value="morning" className="text-xs md:text-sm">Morning</TabsTrigger>
-          <TabsTrigger value="work" className="text-xs md:text-sm">Work</TabsTrigger>
-          <TabsTrigger value="family" className="text-xs md:text-sm">Family</TabsTrigger>
-          <TabsTrigger value="evening" className="text-xs md:text-sm">Evening</TabsTrigger>
+          {contexts.map(ctx => (
+            <TabsTrigger key={ctx.id} value={ctx.id} className="text-xs md:text-sm">
+              {ctx.emoji} {ctx.name}
+            </TabsTrigger>
+          ))}
         </TabsList>
 
-        <TabsContent value="all">{renderContextTaskList('all')}</TabsContent>
-        <TabsContent value="past">{renderContextTaskList('past')}</TabsContent>
-        <TabsContent value="all_day">{renderContextTaskList('all_day')}</TabsContent>
-        <TabsContent value="morning">{renderContextTaskList('morning')}</TabsContent>
-        <TabsContent value="work">{renderContextTaskList('work')}</TabsContent>
-        <TabsContent value="family">{renderContextTaskList('family')}</TabsContent>
-        <TabsContent value="evening">{renderContextTaskList('evening')}</TabsContent>
+        <TabsContent value="all">{renderContextTaskList('all', 'All')}</TabsContent>
+        <TabsContent value="past">{renderContextTaskList('past', 'Past')}</TabsContent>
+        <TabsContent value="all_day">{renderContextTaskList('all_day', 'All Day')}</TabsContent>
+        {contexts.map(ctx => (
+          <TabsContent key={ctx.id} value={ctx.id}>
+            {renderContextTaskList(ctx.id, ctx.name)}
+          </TabsContent>
+        ))}
       </Tabs>
 
       <WeeklyCalendar tasks={tasks} habits={habits} />
