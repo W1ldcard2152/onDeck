@@ -9,7 +9,7 @@ export interface SettingsTab {
 
 export const settingsTabs: SettingsTab[] = [
   { id: 'contexts', label: 'Contexts', icon: Tag },
-  { id: 'calendar-sync', label: 'Google Calendar Sync', icon: Calendar },
+  { id: 'google-sync', label: 'Google Sync', icon: Calendar },
 ];
 
 export const defaultSettingsTab = settingsTabs[0].id;

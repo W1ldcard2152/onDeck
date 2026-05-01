@@ -120,6 +120,22 @@ const DesktopLayout = () => {
     }
   }, [activeSection]);
 
+  // Handle navigation params from external redirects (e.g., OAuth callback).
+  // Reads ?section=...&tab=... once on mount and routes accordingly.
+  // Does not strip the URL — child tab components consume their own params (e.g., ?connected, ?error)
+  // before clearing.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    const section = params.get('section');
+    const tab = params.get('tab');
+    if (section === 'settings') {
+      setSettingsTab(tab || defaultSettingsTab);
+      setActiveSection('settings');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Check if running as PWA
   useEffect(() => {
     const checkPWAStatus = () => {
@@ -260,10 +276,11 @@ const DesktopLayout = () => {
         {/* Main Content Area - adjust padding for PWA nav bar */}
         <div className={`md:pl-64 flex-1 flex flex-col min-w-0 ${isInPWA ? 'pt-12' : ''}`}>
           {/* Mobile Header */}
-          <MobileHeader 
-            className="md:hidden" 
+          <MobileHeader
+            className="md:hidden"
             onSectionChange={setActiveSection}
             onFeedbackClick={() => setIsFeedbackModalOpen(true)}
+            onSettingsClick={() => navigateToSettings(defaultSettingsTab)}
           />
           
           {/* Install PWA Prompt - Only visible on mobile */}
@@ -317,7 +334,7 @@ const DesktopLayout = () => {
                   })}
                 </DropdownMenuContent>
               </DropdownMenu>
-              <UserMenu />
+              <UserMenu onSettingsClick={() => navigateToSettings(defaultSettingsTab)} />
             </div>
           </header>
 

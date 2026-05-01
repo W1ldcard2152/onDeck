@@ -3,14 +3,18 @@ import { Settings } from 'lucide-react';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import { useRouter } from 'next/navigation';
 import { useSupabaseAuth } from '@/hooks/useSupabaseAuth';
-import { 
-  DropdownMenu, 
-  DropdownMenuContent, 
-  DropdownMenuItem, 
-  DropdownMenuTrigger 
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu';
 
-const UserMenu = () => {
+interface UserMenuProps {
+  onSettingsClick?: () => void;
+}
+
+const UserMenu = ({ onSettingsClick }: UserMenuProps = {}) => {
   const supabase = createClientComponentClient();
   const router = useRouter();
   const { user } = useSupabaseAuth();
@@ -52,10 +56,12 @@ const UserMenu = () => {
             {user.email}
           </div>
         )}
-        <DropdownMenuItem onSelect={() => router.push('/settings')}>
-          <Settings className="mr-2 h-4 w-4" />
-          <span>Settings</span>
-        </DropdownMenuItem>
+        {onSettingsClick && (
+          <DropdownMenuItem onSelect={onSettingsClick}>
+            <Settings className="mr-2 h-4 w-4" />
+            <span>Settings</span>
+          </DropdownMenuItem>
+        )}
         <DropdownMenuItem onSelect={handleSignOut}>
           Sign out
         </DropdownMenuItem>

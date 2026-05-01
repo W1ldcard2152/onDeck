@@ -8,7 +8,7 @@ import CalendarSyncTab from './CalendarSyncTab';
 
 const tabComponents: Record<string, React.ComponentType> = {
   contexts: ContextsTab,
-  'calendar-sync': CalendarSyncTab,
+  'google-sync': CalendarSyncTab,
 };
 
 interface SettingsPageProps {
@@ -19,10 +19,10 @@ interface SettingsPageProps {
 export default function SettingsPage({ activeTab, onTabChange }: SettingsPageProps) {
   return (
     <div>
-      <h1 className="text-2xl font-bold text-gray-900 mb-6">Settings</h1>
+      <h1 className="text-2xl font-bold text-gray-900 mb-4 md:mb-6">Settings</h1>
       <div className="rounded-xl border bg-white shadow-sm overflow-hidden">
         <Tabs value={activeTab} onValueChange={onTabChange}>
-          <div className="border-b bg-gray-50 px-6">
+          <div className="border-b bg-gray-50 px-2 sm:px-6 overflow-x-auto">
             <TabsList className="h-auto bg-transparent p-0 gap-0 justify-start">
               {settingsTabs.map(tab => {
                 const Icon = tab.icon;
@@ -30,7 +30,7 @@ export default function SettingsPage({ activeTab, onTabChange }: SettingsPagePro
                   <TabsTrigger
                     key={tab.id}
                     value={tab.id}
-                    className="flex items-center gap-2 rounded-none border-b-2 border-transparent px-4 py-3 text-sm font-medium text-gray-500 shadow-none data-[state=active]:border-gray-900 data-[state=active]:text-gray-900 data-[state=active]:bg-transparent data-[state=active]:shadow-none"
+                    className="flex items-center gap-2 rounded-none border-b-2 border-transparent px-3 sm:px-4 py-3 text-sm font-medium text-gray-500 shadow-none whitespace-nowrap data-[state=active]:border-gray-900 data-[state=active]:text-gray-900 data-[state=active]:bg-transparent data-[state=active]:shadow-none"
                   >
                     <Icon className="h-4 w-4" />
                     {tab.label}
@@ -39,7 +39,7 @@ export default function SettingsPage({ activeTab, onTabChange }: SettingsPagePro
               })}
             </TabsList>
           </div>
-          <div className="p-6">
+          <div className="p-4 sm:p-6">
             {settingsTabs.map(tab => {
               const TabComponent = tabComponents[tab.id];
               return (
