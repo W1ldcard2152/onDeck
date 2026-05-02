@@ -4,8 +4,19 @@
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js'
+import * as taskService from '@/lib/taskService'
 
 const STORAGE_KEY = 'sophia_offline_queue'
+
+function parseDailyContextString(value: string | null | undefined): string[] | null {
+  if (!value) return null
+  try {
+    const parsed = JSON.parse(value)
+    return Array.isArray(parsed) ? parsed : null
+  } catch {
+    return null
+  }
+}
 
 export interface QueueEntry {
   id: string
@@ -77,45 +88,40 @@ export async function processQueue(
 
   for (const entry of updatedQueue) {
     try {
-      const now = new Date().toISOString()
-
-      // Create the item record
-      const { data: itemData, error: itemError } = await supabase
-        .from('items')
-        .insert({
-          title: entry.title.trim(),
-          user_id: userId,
-          item_type: entry.type,
-          is_archived: false,
-          created_at: entry.createdAt,
-          updated_at: now
-        })
-        .select()
-        .single()
-
-      if (itemError) throw itemError
-      if (!itemData) throw new Error('Failed to create item')
-
-      // Create the type-specific record
       if (entry.type === 'task') {
-        const { error: taskError } = await supabase
-          .from('tasks')
+        // Tasks go through the centralized service (handles items + tasks insert + rollback).
+        await taskService.createTask(supabase, {
+          userId,
+          title: entry.title,
+          due_date: entry.fields.due_date || null,
+          assigned_date: entry.fields.assigned_date || null,
+          reminder_time: entry.fields.reminder_time || null,
+          daily_context: parseDailyContextString(entry.fields.daily_context),
+          status: entry.fields.status || 'on_deck',
+          description: entry.fields.description || null,
+          is_project_converted: false,
+          priority: entry.fields.priority || 'normal',
+        })
+      } else if (entry.type === 'note') {
+        const now = new Date().toISOString()
+
+        // Notes still use the direct two-table insert pattern.
+        const { data: itemData, error: itemError } = await supabase
+          .from('items')
           .insert({
-            id: itemData.id,
-            due_date: entry.fields.due_date || null,
-            assigned_date: entry.fields.assigned_date || null,
-            reminder_time: entry.fields.reminder_time || null,
-            daily_context: entry.fields.daily_context || null,
-            status: entry.fields.status || 'on_deck',
-            description: entry.fields.description || null,
-            is_project_converted: false,
-            priority: entry.fields.priority || 'normal'
+            title: entry.title.trim(),
+            user_id: userId,
+            item_type: entry.type,
+            is_archived: false,
+            created_at: entry.createdAt,
+            updated_at: now
           })
           .select()
           .single()
 
-        if (taskError) throw taskError
-      } else if (entry.type === 'note') {
+        if (itemError) throw itemError
+        if (!itemData) throw new Error('Failed to create item')
+
         const { error: noteError } = await supabase
           .from('notes')
           .insert({

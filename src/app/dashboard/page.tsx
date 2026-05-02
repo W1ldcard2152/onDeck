@@ -1,9 +1,23 @@
 'use client'
 
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
 import { NoteCard } from '@/components/NoteCard';
 import { DashboardCard } from '@/components/DashboardCard';
 import { DashboardTaskItem } from '@/components/DashboardTaskItem';
+import { SortableDashboardTaskItem } from '@/components/SortableDashboardTaskItem';
 import { NewEntryForm } from '@/components/NewEntryForm';
 import { NewEntryDropdown } from '@/components/NewEntryDropdown';
 import { QuoteOfTheDay } from '@/components/QuoteOfTheDay';
@@ -23,7 +37,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import type { TaskWithDetails, Context } from '@/lib/types';
+import type { TaskWithDetails } from '@/lib/types';
 import { useContexts } from '@/hooks/useContexts';
 import type { TaskStatus } from '@/types/database.types';
 import { HabitTaskGenerator } from '@/lib/habitTaskGenerator';
@@ -81,37 +95,49 @@ const DashboardPage: React.FC = () => {
     setRefreshKey(prev => prev + 1);
   }, [refetchTasks, refetchNotes]);
 
-  const moveTask = useCallback(async (taskId: string, direction: 'up' | 'down', filteredTasks: TaskWithDetails[]) => {
-    const currentIndex = filteredTasks.findIndex(t => t.id === taskId);
-    if (currentIndex === -1) return;
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
+  );
 
-    const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
-    if (targetIndex < 0 || targetIndex >= filteredTasks.length) return;
+  const reorderTasks = useCallback(async (groupTasks: TaskWithDetails[], oldIndex: number, newIndex: number) => {
+    if (oldIndex === newIndex || groupTasks.length < 2) return;
 
-    const currentTask = filteredTasks[currentIndex];
-    const targetTask = filteredTasks[targetIndex];
+    const reordered = arrayMove(groupTasks, oldIndex, newIndex);
 
-    if (!currentTask.due_date && targetTask.due_date) return;
+    // Reuse the existing sort_orders from the group, but renormalize when any
+    // are 0 (DB default) or duplicated, so dragging is stable from then on.
+    const sortedExisting = groupTasks.map(t => t.sort_order ?? 0).sort((a, b) => a - b);
+    const needsNormalize = sortedExisting[0] === 0 || new Set(sortedExisting).size !== sortedExisting.length;
+    const STEP = 100;
+    const newSortOrders = needsNormalize
+      ? Array.from({ length: groupTasks.length }, (_, i) => (i + 1) * STEP)
+      : sortedExisting;
 
-    const newCurrentSortOrder = targetTask.sort_order;
-    const newTargetSortOrder = currentTask.sort_order;
+    const updates: { id: string; sort_order: number }[] = [];
+    const newSortOrderById = new Map<string, number>();
+    reordered.forEach((task, i) => {
+      const next = newSortOrders[i];
+      newSortOrderById.set(task.id, next);
+      if ((task.sort_order ?? 0) !== next) {
+        updates.push({ id: task.id, sort_order: next });
+      }
+    });
 
-    const previousTasks = [...localTasks];
+    if (updates.length === 0) return;
 
-    setLocalTasks(prev => prev.map(task => {
-      if (task.id === currentTask.id) return { ...task, sort_order: newCurrentSortOrder };
-      if (task.id === targetTask.id) return { ...task, sort_order: newTargetSortOrder };
-      return task;
+    const previousTasks = localTasks;
+    setLocalTasks(prev => prev.map(t => {
+      const next = newSortOrderById.get(t.id);
+      return next !== undefined ? { ...t, sort_order: next } : t;
     }));
 
     try {
-      const results = await Promise.all([
-        supabase.from('tasks').update({ sort_order: newCurrentSortOrder }).eq('id', currentTask.id),
-        supabase.from('tasks').update({ sort_order: newTargetSortOrder }).eq('id', targetTask.id)
-      ]);
-
-      const errors = results.filter(r => r.error);
-      if (errors.length > 0) {
+      const results = await Promise.all(
+        updates.map(u =>
+          supabase.from('tasks').update({ sort_order: u.sort_order }).eq('id', u.id)
+        )
+      );
+      if (results.some(r => r.error)) {
         setLocalTasks(previousTasks);
         refetchTasks();
       }
@@ -214,6 +240,8 @@ const DashboardPage: React.FC = () => {
       return (hasRelevantAssignedDate || hasRelevantDueDate) && taskMatchesContext(task, contextId);
     });
 
+    // Sort by primary context first (so contexts stay grouped), then by manual
+    // sort_order within a context (drag-and-drop sets this). Tiebreak by id.
     return filtered.sort((a, b) => {
       if (contextId === 'all' || contextId === 'past') {
         const ctxA = getPrimaryContext(a, contexts);
@@ -222,16 +250,7 @@ const DashboardPage: React.FC = () => {
         const orderB = ctxB ? ctxB.sort_order : 0;
         if (orderA !== orderB) return orderA - orderB;
       }
-      const hasDueA = !!a.due_date;
-      const hasDueB = !!b.due_date;
-      if (hasDueA && !hasDueB) return -1;
-      if (!hasDueA && hasDueB) return 1;
-      if (hasDueA && hasDueB) {
-        const dateA = new Date(a.due_date!).getTime();
-        const dateB = new Date(b.due_date!).getTime();
-        if (dateA !== dateB) return dateA - dateB;
-      }
-      return a.sort_order - b.sort_order;
+      return ((a.sort_order ?? 0) - (b.sort_order ?? 0)) || a.id.localeCompare(b.id);
     });
   }, [tasks, contexts]);
 
@@ -335,19 +354,15 @@ const DashboardPage: React.FC = () => {
 
   // --- Rendering helpers ---
 
-  const renderTaskItem = useCallback((task: TaskWithDetails, contextLabel?: string, filteredTasks?: TaskWithDetails[], index?: number) => {
-    const showMoveControls = filteredTasks !== undefined && index !== undefined;
+  const renderTaskItem = useCallback((task: TaskWithDetails, contextLabel?: string, sortable: boolean = false) => {
+    const Component = sortable ? SortableDashboardTaskItem : DashboardTaskItem;
     return (
-      <DashboardTaskItem
+      <Component
         key={task.id}
         task={task}
         habits={habits}
         contextLabel={contextLabel}
-        showMoveControls={showMoveControls}
-        canMoveUp={showMoveControls && index > 0}
-        canMoveDown={showMoveControls && index < (filteredTasks?.length ?? 0) - 1}
-        onMoveUp={() => filteredTasks && moveTask(task.id, 'up', filteredTasks)}
-        onMoveDown={() => filteredTasks && moveTask(task.id, 'down', filteredTasks)}
+        showMoveControls={sortable}
         onComplete={(id) => updateTaskStatus(id, 'completed')}
         onEdit={setTaskToEdit}
         onDelete={deleteTask}
@@ -355,10 +370,59 @@ const DashboardPage: React.FC = () => {
         onChecklistRun={setCompletingTemplateId}
       />
     );
-  }, [habits, moveTask, updateTaskStatus, deleteTask]);
+  }, [habits, updateTaskStatus, deleteTask]);
 
   const renderContextTaskList = useCallback((contextId: string | 'all' | 'past', label: string) => {
     const filteredTasks = getFilteredTasks(contextId);
+
+    const renderGroup = (group: TaskWithDetails[], groupKey: string) => {
+      const handleDragEnd = (event: DragEndEvent) => {
+        const { active, over } = event;
+        if (!over || active.id === over.id) return;
+        const oldIndex = group.findIndex(t => t.id === active.id);
+        const newIndex = group.findIndex(t => t.id === over.id);
+        if (oldIndex === -1 || newIndex === -1) return;
+        reorderTasks(group, oldIndex, newIndex);
+      };
+
+      return (
+        <DndContext key={groupKey} sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+          <SortableContext items={group.map(t => t.id)} strategy={verticalListSortingStrategy}>
+            {group.map(task => {
+              const isPastDue = task.due_date && isDatePast(task.due_date);
+              const isPastAssigned = task.assigned_date && isDatePast(task.assigned_date);
+              const taskLabel = isPastDue ? "OVERDUE" : isPastAssigned ? "PAST ASSIGNED" : undefined;
+              return renderTaskItem(task, taskLabel, true);
+            })}
+          </SortableContext>
+        </DndContext>
+      );
+    };
+
+    // For 'all' and 'past', drag must stay within a primary-context group.
+    // Split the (already context-sorted) list into runs that share a primary context.
+    const isAggregateView = contextId === 'all' || contextId === 'past';
+    const groups: { key: string; tasks: TaskWithDetails[] }[] = [];
+    if (isAggregateView) {
+      let currentKey: string | null = null;
+      let currentRun: TaskWithDetails[] = [];
+      for (const task of filteredTasks) {
+        const primary = getPrimaryContext(task, contexts);
+        const key = primary?.id ?? 'all-day';
+        if (key !== currentKey && currentRun.length > 0) {
+          groups.push({ key: currentKey!, tasks: currentRun });
+          currentRun = [];
+        }
+        currentKey = key;
+        currentRun.push(task);
+      }
+      if (currentRun.length > 0 && currentKey !== null) {
+        groups.push({ key: currentKey, tasks: currentRun });
+      }
+    } else {
+      groups.push({ key: contextId, tasks: filteredTasks });
+    }
+
     return (
       <DashboardCard
         title={`${label} Tasks (${filteredTasks.length})`}
@@ -367,18 +431,13 @@ const DashboardPage: React.FC = () => {
             {filteredTasks.length === 0 ? (
               <div className="text-gray-500 text-center py-4">No tasks</div>
             ) : (
-              filteredTasks.map((task, index) => {
-                const isPastDue = task.due_date && isDatePast(task.due_date);
-                const isPastAssigned = task.assigned_date && isDatePast(task.assigned_date);
-                const taskLabel = isPastDue ? "OVERDUE" : isPastAssigned ? "PAST ASSIGNED" : undefined;
-                return renderTaskItem(task, taskLabel, filteredTasks, index);
-              })
+              groups.map(g => renderGroup(g.tasks, g.key))
             )}
           </div>
         }
       />
     );
-  }, [getFilteredTasks, renderTaskItem]);
+  }, [getFilteredTasks, renderTaskItem, sensors, reorderTasks, contexts]);
 
   // --- Loading state ---
 

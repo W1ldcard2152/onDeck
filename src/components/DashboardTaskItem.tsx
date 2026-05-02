@@ -1,7 +1,9 @@
 'use client'
 
 import React from 'react';
-import { CheckCircle2, ChevronUp, ChevronDown, MoreVertical, Link, CheckSquare } from 'lucide-react';
+import { CheckCircle2, GripVertical, MoreVertical, Link, CheckSquare } from 'lucide-react';
+import type { DraggableAttributes } from '@dnd-kit/core';
+import type { SyntheticListenerMap } from '@dnd-kit/core/dist/hooks/utilities';
 import { Button } from '@/components/ui/button';
 import { formatDate, formatTime } from '@/lib/timezone';
 import { Badge } from '@/components/ui/badge';
@@ -30,32 +32,29 @@ interface DashboardTaskItemProps {
   task: TaskWithDetails;
   habits: Habit[];
   contextLabel?: string;
-  canMoveUp?: boolean;
-  canMoveDown?: boolean;
-  onMoveUp?: () => void;
-  onMoveDown?: () => void;
   onComplete: (taskId: string) => void;
   onEdit: (task: TaskWithDetails) => void;
   onDelete: (taskId: string) => void;
   onStatusToggle: (taskId: string, newStatus: TaskStatus) => void;
   onChecklistRun?: (templateId: string) => void;
   showMoveControls?: boolean;
+  dragHandleProps?: {
+    attributes: DraggableAttributes;
+    listeners: SyntheticListenerMap | undefined;
+  };
 }
 
 export const DashboardTaskItem: React.FC<DashboardTaskItemProps> = React.memo(({
   task,
   habits,
   contextLabel,
-  canMoveUp = false,
-  canMoveDown = false,
-  onMoveUp,
-  onMoveDown,
   onComplete,
   onEdit,
   onDelete,
   onStatusToggle,
   onChecklistRun,
   showMoveControls = false,
+  dragHandleProps,
 }) => {
   const { contexts } = useContexts();
 
@@ -75,25 +74,17 @@ export const DashboardTaskItem: React.FC<DashboardTaskItemProps> = React.memo(({
       <PopoverTrigger asChild>
         <div className={`p-3 md:p-4 rounded-lg border hover:shadow-sm transition-shadow cursor-pointer ${getContextColor(task, contexts)}`}>
           <div className="flex items-start gap-2 md:gap-3">
-            {showMoveControls && (
-              <div className="flex flex-col gap-0.5 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
-                <button
-                  onClick={onMoveUp}
-                  disabled={!canMoveUp}
-                  className={`p-0.5 rounded hover:bg-gray-200 transition-colors ${!canMoveUp ? 'opacity-30 cursor-not-allowed' : ''}`}
-                  title="Move up"
-                >
-                  <ChevronUp className="h-4 w-4 text-gray-600" />
-                </button>
-                <button
-                  onClick={onMoveDown}
-                  disabled={!canMoveDown}
-                  className={`p-0.5 rounded hover:bg-gray-200 transition-colors ${!canMoveDown ? 'opacity-30 cursor-not-allowed' : ''}`}
-                  title="Move down"
-                >
-                  <ChevronDown className="h-4 w-4 text-gray-600" />
-                </button>
-              </div>
+            {showMoveControls && dragHandleProps && (
+              <button
+                type="button"
+                className="hidden md:flex items-center self-stretch px-1 -ml-1 cursor-grab active:cursor-grabbing text-gray-300 hover:text-gray-500 touch-none flex-shrink-0"
+                title="Drag to reorder"
+                onClick={(e) => e.stopPropagation()}
+                {...dragHandleProps.attributes}
+                {...dragHandleProps.listeners}
+              >
+                <GripVertical className="h-5 w-5" />
+              </button>
             )}
             <div onClick={(e) => e.stopPropagation()}>
               <DropdownMenu>

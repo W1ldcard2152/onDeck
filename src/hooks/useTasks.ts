@@ -5,6 +5,9 @@ import type { TaskWithDetails, TaskStatus } from '@/lib/types'
 import type { Database } from '@/types/database.types'
 import { getSupabaseClient } from '@/lib/supabase-client'
 import { getPendingItems } from '@/lib/offlineSyncQueue'
+import * as taskService from '@/lib/taskService'
+
+export type { CreateTaskInput, UpdateTaskInput, TaskRow } from '@/lib/taskService'
 
 export function useTasks(
   userId: string | undefined,
@@ -218,10 +221,138 @@ export function useTasks(
     }
   }, [userId, fetchTasks])
 
+  // ---- Mutation methods (Phase 3a.4) ----
+  // Pessimistic: each method calls the service, then refetches. Components handle their
+  // own optimistic UI. Errors are thrown — they do NOT set the hook's `error` state
+  // (that's reserved for the read path).
+
+  const createTask = useCallback(
+    async (input: taskService.CreateTaskInput): Promise<taskService.TaskRow> => {
+      if (!userId) throw new Error('useTasks: cannot mutate without authenticated user')
+      const result = await taskService.createTask(supabaseRef.current, input)
+      await fetchTasks()
+      return result
+    },
+    [userId, fetchTasks]
+  )
+
+  const deleteTask = useCallback(
+    async (taskId: string): Promise<void> => {
+      if (!userId) throw new Error('useTasks: cannot mutate without authenticated user')
+      await taskService.deleteTask(supabaseRef.current, userId, taskId)
+      await fetchTasks()
+    },
+    [userId, fetchTasks]
+  )
+
+  const deleteTasks = useCallback(
+    async (taskIds: string[]): Promise<void> => {
+      if (!userId) throw new Error('useTasks: cannot mutate without authenticated user')
+      await taskService.deleteTasks(supabaseRef.current, userId, taskIds)
+      await fetchTasks()
+    },
+    [userId, fetchTasks]
+  )
+
+  const updateTask = useCallback(
+    async (
+      taskId: string,
+      updates: taskService.UpdateTaskInput
+    ): Promise<taskService.TaskRow> => {
+      if (!userId) throw new Error('useTasks: cannot mutate without authenticated user')
+      const result = await taskService.updateTask(supabaseRef.current, userId, taskId, updates)
+      await fetchTasks()
+      return result
+    },
+    [userId, fetchTasks]
+  )
+
+  const updateTaskStatus = useCallback(
+    async (taskId: string, status: string): Promise<taskService.TaskRow> => {
+      if (!userId) throw new Error('useTasks: cannot mutate without authenticated user')
+      const result = await taskService.updateTaskStatus(supabaseRef.current, userId, taskId, status)
+      await fetchTasks()
+      return result
+    },
+    [userId, fetchTasks]
+  )
+
+  const updateTaskPriority = useCallback(
+    async (taskId: string, priority: string): Promise<taskService.TaskRow> => {
+      if (!userId) throw new Error('useTasks: cannot mutate without authenticated user')
+      const result = await taskService.updateTaskPriority(supabaseRef.current, userId, taskId, priority)
+      await fetchTasks()
+      return result
+    },
+    [userId, fetchTasks]
+  )
+
+  const swapTaskOrder = useCallback(
+    async (
+      taskA: { id: string; sort_order: number },
+      taskB: { id: string; sort_order: number }
+    ): Promise<void> => {
+      if (!userId) throw new Error('useTasks: cannot mutate without authenticated user')
+      await taskService.swapTaskOrder(supabaseRef.current, userId, taskA, taskB)
+      await fetchTasks()
+    },
+    [userId, fetchTasks]
+  )
+
+  const updateHabitTasksField = useCallback(
+    async (
+      habitId: string,
+      field: 'checklist_template_id',
+      value: string | null
+    ): Promise<void> => {
+      if (!userId) throw new Error('useTasks: cannot mutate without authenticated user')
+      await taskService.updateHabitTasksField(supabaseRef.current, userId, habitId, field, value)
+      await fetchTasks()
+    },
+    [userId, fetchTasks]
+  )
+
+  const deleteIncompleteHabitTasks = useCallback(
+    async (habitId: string): Promise<void> => {
+      if (!userId) throw new Error('useTasks: cannot mutate without authenticated user')
+      await taskService.deleteIncompleteHabitTasks(supabaseRef.current, userId, habitId)
+      await fetchTasks()
+    },
+    [userId, fetchTasks]
+  )
+
+  const deleteIncompleteProjectTasks = useCallback(
+    async (projectId: string): Promise<void> => {
+      if (!userId) throw new Error('useTasks: cannot mutate without authenticated user')
+      await taskService.deleteIncompleteProjectTasks(supabaseRef.current, userId, projectId)
+      await fetchTasks()
+    },
+    [userId, fetchTasks]
+  )
+
+  const countTasksByContext = useCallback(
+    async (contextId: string): Promise<number> => {
+      if (!userId) throw new Error('useTasks: cannot mutate without authenticated user')
+      return taskService.countTasksByContext(supabaseRef.current, userId, contextId)
+    },
+    [userId]
+  )
+
   return {
     tasks,
     isLoading,
     error,
-    refetch: fetchTasks
+    refetch: fetchTasks,
+    createTask,
+    deleteTask,
+    deleteTasks,
+    updateTask,
+    updateTaskStatus,
+    updateTaskPriority,
+    swapTaskOrder,
+    updateHabitTasksField,
+    deleteIncompleteHabitTasks,
+    deleteIncompleteProjectTasks,
+    countTasksByContext,
   }
 }

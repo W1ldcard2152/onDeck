@@ -14,6 +14,7 @@ import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import type { ProjectWithDetails } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { useSupabaseAuth } from '@/hooks/useSupabaseAuth';
+import { useTasks } from '@/hooks/useTasks';
 
 interface OtherProjectsCardProps {
   onHoldProjects: ProjectWithDetails[];
@@ -31,7 +32,8 @@ const OtherProjectsCard: React.FC<OtherProjectsCardProps> = ({
   const [isDeleting, setIsDeleting] = useState<Record<string, boolean>>({});
   const supabase = createClientComponentClient();
   const { user } = useSupabaseAuth();
-  
+  const { deleteTasks, deleteIncompleteProjectTasks } = useTasks(user?.id);
+
   const totalCount = onHoldProjects.length + completedProjects.length;
   
   // Sort combined projects: on-hold first, then completed
@@ -79,23 +81,8 @@ const OtherProjectsCard: React.FC<OtherProjectsCardProps> = ({
       const taskIds = steps?.map(step => step.converted_task_id).filter(Boolean) || [];
       
       if (taskIds.length > 0) {
-        // Delete tasks records
-        const { error: tasksDeleteError } = await supabase
-          .from('tasks')
-          .delete()
-          .in('id', taskIds)
-          .eq('user_id', user?.id);
-
-        if (tasksDeleteError) throw tasksDeleteError;
-
-        // Delete task items
-        const { error: itemsDeleteError } = await supabase
-          .from('items')
-          .delete()
-          .in('id', taskIds)
-          .eq('user_id', user?.id);
-
-        if (itemsDeleteError) throw itemsDeleteError;
+        // Hook handles tasks + items + user_id scoping
+        await deleteTasks(taskIds);
       }
 
       // Step 4: Delete project steps
@@ -264,24 +251,7 @@ const OtherProjectsCard: React.FC<OtherProjectsCardProps> = ({
   // Helper function to clean up non-completed tasks for a project
   const cleanupNonCompletedTasks = async (projectId: string) => {
     try {
-      // First, get all project steps with tasks
-      const { data: stepsWithTasks } = await supabase
-        .from('project_steps')
-        .select('id, converted_task_id, is_converted')
-        .eq('project_id', projectId)
-        .eq('is_converted', true)
-        .not('converted_task_id', 'is', null);
-        
-      // Get all non-completed tasks for the project
-      const { data: tasks } = await supabase
-        .from('tasks')
-        .select('id, status')
-        .eq('project_id', projectId)
-        .neq('status', 'completed');
-      
-      if (!tasks || tasks.length === 0) return;
-      
-      // Reset steps
+      // Reset steps that are converted-but-not-completed back to pending
       const { error: resetStepsError } = await supabase
         .from('project_steps')
         .update({
@@ -292,19 +262,13 @@ const OtherProjectsCard: React.FC<OtherProjectsCardProps> = ({
         .eq('project_id', projectId)
         .in('is_converted', [true])
         .neq('status', 'completed');
-      
+
       if (resetStepsError) {
         console.error('Error resetting steps:', resetStepsError);
       }
-      
-      // Delete tasks
-      for (const task of tasks) {
-        // Delete the task
-        await supabase.from('tasks').delete().eq('id', task.id).eq('user_id', user?.id);
 
-        // Delete the item
-        await supabase.from('items').delete().eq('id', task.id).eq('user_id', user?.id);
-      }
+      // Hook handles select + tasks + items + user_id scoping
+      await deleteIncompleteProjectTasks(projectId);
     } catch (error) {
       console.error('Error cleaning up project tasks:', error);
       throw error;

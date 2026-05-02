@@ -3,6 +3,7 @@ import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import type { Database } from '@/types/database.types';
 import type { Priority, ProjectStatus, StepStatus } from '@/lib/types';
 import { nowISO } from '@/lib/timezone';
+import * as taskService from '@/lib/taskService';
 
 export interface ProjectStep {
   id: string;
@@ -58,56 +59,37 @@ export class ProjectTaskManager {
       }
 
       const now = nowISO();
-      
+
       // Calculate a sensible due date (7 days from now by default)
       const dueDate = step.due_date || null;
 
-      // Create the task item
-      const { data: taskItemData, error: taskItemError } = await this.supabase
-        .from('items')
-        .insert([{
-          title: step.title.trim(),
-          user_id: this.userId,
-          item_type: 'task',
-          created_at: now,
-          updated_at: now,
-          is_archived: false
-        }])
-        .select()
-        .single();
-
-      if (taskItemError) throw taskItemError;
-
-      // Create the task
-      const { error: taskError } = await this.supabase
-        .from('tasks')
-        .insert([{
-          id: taskItemData.id,
-          status: step.status === 'completed' ? 'completed' : 'on_deck',
-          description: step.description?.trim() || null,
-          priority: step.priority || 'normal',
-          due_date: dueDate,
-          assigned_date: step.assigned_date || now,
-          project_id: projectId,
-          is_project_converted: true
-        }]);
-
-      if (taskError) throw taskError;
+      // Create the items + tasks pair via the service (handles rollback on failure)
+      const created = await taskService.createTask(this.supabase, {
+        userId: this.userId,
+        title: step.title,
+        status: step.status === 'completed' ? 'completed' : 'on_deck',
+        description: step.description?.trim() || null,
+        priority: (step.priority || 'normal') as string,
+        due_date: dueDate,
+        assigned_date: step.assigned_date || now,
+        project_id: projectId,
+        is_project_converted: true,
+      });
 
       // Update the step
       const { error: updateStepError } = await this.supabase
         .from('project_steps')
         .update({
           is_converted: true,
-          converted_task_id: taskItemData.id,
+          converted_task_id: created.id,
           updated_at: now
         })
         .eq('id', step.id);
 
       if (updateStepError) throw updateStepError;
 
-      console.log(`Created task ${taskItemData.id} for step ${step.id}`);
-      return taskItemData.id;
+      console.log(`Created task ${created.id} for step ${step.id}`);
+      return created.id;
     } catch (error) {
       console.error('Error creating task for step:', error);
       throw error;
@@ -337,15 +319,19 @@ export class ProjectTaskManager {
               console.log(`Synced completed task ${task.id} status to step ${step.id}`);
             } else if (task.status !== 'completed' && step.status === 'completed') {
               // Step is completed but task isn't, sync them
-              await this.supabase
-                .from('tasks')
-                .update({
-                  status: 'completed',
-                  updated_at: nowISO()
-                })
-                .eq('id', step.converted_task_id);
-                
-              console.log(`Synced completed step ${step.id} status to task ${task.id}`);
+              if (this.userId) {
+                await taskService.updateTaskStatus(
+                  this.supabase,
+                  this.userId,
+                  step.converted_task_id,
+                  'completed'
+                );
+                console.log(`Synced completed step ${step.id} status to task ${task.id}`);
+              } else {
+                console.warn(
+                  `Skipping task-status sync for step ${step.id}: no userId on ProjectTaskManager`
+                );
+              }
             }
           }
         }
@@ -432,57 +418,14 @@ export class ProjectTaskManager {
       throw error;
     }
   }
-  
+
   /**
-   * Get all tasks associated with a project
+   * Delete all non-completed tasks for a project. Thin wrapper over taskService
+   * so UI components have a single ProjectTaskManager-level entry point for the
+   * cascade (used by project-deletion and put-on-hold flows).
    */
-  async getProjectTasks(projectId: string) {
-    try {
-      // Get all steps with task associations
-      const { data: steps, error: stepsError } = await this.supabase
-        .from('project_steps')
-        .select('*')
-        .eq('project_id', projectId)
-        .eq('is_converted', true)
-        .order('order_number', { ascending: true });
-        
-      if (stepsError) throw stepsError;
-      if (!steps || steps.length === 0) return [];
-      
-      // Get the tasks
-      const { data: tasks, error: tasksError } = await this.supabase
-        .from('tasks')
-        .select(`
-          *,
-          items:id (*)
-        `)
-        .in('id', steps.map((step: ProjectStep) => step.converted_task_id).filter(Boolean));
-        
-      if (tasksError) throw tasksError;
-      
-      // Combine step and task data
-      return steps
-        .filter((step: ProjectStep) => step.converted_task_id)
-        .map((step: ProjectStep) => {
-          const matchingTask = tasks?.find((task: any) => task.id === step.converted_task_id);
-          if (!matchingTask) return null;
-          
-          return {
-            ...matchingTask,
-            step: {
-              id: step.id,
-              title: step.title,
-              description: step.description,
-              status: step.status,
-              order_number: step.order_number
-            }
-          };
-        })
-        .filter(Boolean);
-    } catch (error) {
-      console.error('Error getting project tasks:', error);
-      throw error;
-    }
+  async deleteProjectIncompleteTasks(userId: string, projectId: string): Promise<void> {
+    await taskService.deleteIncompleteProjectTasks(this.supabase, userId, projectId);
   }
 }
 

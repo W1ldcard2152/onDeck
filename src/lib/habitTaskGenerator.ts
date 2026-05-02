@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Habit, RecurrenceRule } from '@/hooks/useHabits'
 import { dateToDateString } from '@/lib/timezone'
+import * as taskService from '@/lib/taskService'
 
 export class HabitTaskGenerator {
   constructor(
@@ -211,170 +212,26 @@ export class HabitTaskGenerator {
       ? JSON.parse(habit.recurrence_rule)
       : habit.recurrence_rule
 
-    // Get daily_context from recurrence rule (if specified)
-    const daily_context = recurrenceRule?.daily_context
-      ? JSON.stringify(recurrenceRule.daily_context)
+    // Get daily_context array from recurrence rule (taskService handles serialization)
+    const dailyContext: string[] | null = Array.isArray(recurrenceRule?.daily_context)
+      ? recurrenceRule.daily_context
       : null
 
-    // Create item first
-    const { data: item, error: itemError } = await this.supabase
-      .from('items')
-      .insert({
-        user_id: this.userId,
-        title: habit.title,
-        item_type: 'task',
-        is_archived: false
-      })
-      .select()
-      .single()
-
-    if (itemError) throw itemError
-
-    // Create task with status 'habit'
-    const { error: taskError } = await this.supabase
-      .from('tasks')
-      .insert({
-        id: item.id,
-        assigned_date: dateStr,
-        due_date: null,
-        daily_context: daily_context,
-        status: 'habit',
-        description: habit.description,
-        priority: habit.priority,
-        habit_id: habit.id,
-        checklist_template_id: habit.checklist_template_id || null
-      })
-
-    if (taskError) {
-      // Clean up item if task creation fails
-      await this.supabase.from('items').delete().eq('id', item.id)
-      throw taskError
-    }
+    // Create the items + tasks pair via the service (handles rollback on failure)
+    await taskService.createTask(this.supabase, {
+      userId: this.userId,
+      title: habit.title,
+      assigned_date: dateStr,
+      due_date: null,
+      daily_context: dailyContext,
+      status: 'habit',
+      description: habit.description ?? null,
+      priority: (habit.priority as string) ?? 'normal',
+      habit_id: habit.id,
+      checklist_template_id: habit.checklist_template_id || null,
+    })
 
     console.log(`Successfully created habit task for "${habit.title}" on ${dateStr}`)
-  }
-
-  /**
-   * Calculate completion rate for a habit over a given period
-   * Returns a number between 0 and 1 (e.g., 0.66 = 66%)
-   */
-  async getCompletionRate(habitId: string, days: number = 30): Promise<{ rate: number; completed: number; expected: number }> {
-    // Get the habit
-    const { data: habit, error: habitError } = await this.supabase
-      .from('habits')
-      .select('*')
-      .eq('id', habitId)
-      .single()
-
-    if (habitError || !habit) {
-      console.error('Error fetching habit:', habitError)
-      return { rate: 0, completed: 0, expected: 0 }
-    }
-
-    const startDate = new Date()
-    startDate.setDate(startDate.getDate() - days)
-    startDate.setHours(0, 0, 0, 0)
-
-    const endDate = new Date()
-    endDate.setHours(23, 59, 59, 999)
-
-    // Calculate expected occurrences using the recurrence rule
-    const expectedCount = this.calculateExpectedOccurrences(habit.recurrence_rule, startDate, endDate)
-
-    // Count actual completions in this period
-    const { data: completions, error: completionsError } = await this.supabase
-      .from('tasks')
-      .select('id, completed_at')
-      .eq('habit_id', habitId)
-      .eq('status', 'completed')
-      .gte('completed_at', startDate.toISOString())
-      .lte('completed_at', endDate.toISOString())
-
-    if (completionsError) {
-      console.error('Error fetching completions:', completionsError)
-      return { rate: 0, completed: 0, expected: expectedCount }
-    }
-
-    const completedCount = completions?.length || 0
-    const rate = expectedCount > 0 ? completedCount / expectedCount : 0
-
-    return {
-      rate,
-      completed: completedCount,
-      expected: expectedCount
-    }
-  }
-
-  /**
-   * Calculate how many times a habit should have occurred in a given period
-   */
-  private calculateExpectedOccurrences(recurrenceRule: RecurrenceRule, startDate: Date, endDate: Date): number {
-    const rule = typeof recurrenceRule === 'string'
-      ? JSON.parse(recurrenceRule)
-      : recurrenceRule
-
-    const dates: Date[] = []
-    const current = new Date(startDate)
-    current.setHours(0, 0, 0, 0)
-
-    const end = new Date(endDate)
-    end.setHours(0, 0, 0, 0)
-
-    switch (rule.type) {
-      case 'daily':
-        const interval = rule.interval || 1
-        while (current <= end) {
-          dates.push(new Date(current))
-          current.setDate(current.getDate() + interval)
-        }
-        break
-
-      case 'weekly':
-        const dayMap: Record<string, number> = {
-          'Sunday': 0, 'Monday': 1, 'Tuesday': 2, 'Wednesday': 3,
-          'Thursday': 4, 'Friday': 5, 'Saturday': 6
-        }
-        const daysOfWeek = rule.days_of_week || []
-        const targetDays = daysOfWeek.map((day: string) => dayMap[day]).filter((d: number | undefined) => d !== undefined)
-
-        while (current <= end) {
-          if (targetDays.includes(current.getDay())) {
-            dates.push(new Date(current))
-          }
-          current.setDate(current.getDate() + 1)
-        }
-        break
-
-      case 'monthly':
-        const daysOfMonth = rule.days_of_month || []
-        const monthStart = new Date(startDate)
-        monthStart.setDate(1)
-
-        while (monthStart <= end) {
-          for (const dayOfMonth of daysOfMonth) {
-            let targetDate: Date
-
-            // Handle negative days (from end of month)
-            if (dayOfMonth < 0) {
-              targetDate = new Date(monthStart.getFullYear(), monthStart.getMonth() + 1, 0)
-              targetDate.setDate(targetDate.getDate() + dayOfMonth + 1)
-            } else {
-              // For positive days, cap at the last day of the month
-              const lastDayOfMonth = new Date(monthStart.getFullYear(), monthStart.getMonth() + 1, 0).getDate()
-              const cappedDay = Math.min(dayOfMonth, lastDayOfMonth)
-              targetDate = new Date(monthStart.getFullYear(), monthStart.getMonth(), cappedDay)
-            }
-
-            if (targetDate >= startDate && targetDate <= end) {
-              dates.push(new Date(targetDate))
-            }
-          }
-          monthStart.setMonth(monthStart.getMonth() + 1)
-        }
-        break
-    }
-
-    return dates.length
   }
 
   /**
@@ -383,46 +240,12 @@ export class HabitTaskGenerator {
    */
   async deleteIncompleteHabitTasks(habitId: string): Promise<void> {
     console.log(`Deleting incomplete tasks for habit ${habitId}`)
-
-    const { data: incompleteTasks, error: findError } = await this.supabase
-      .from('tasks')
-      .select('id')
-      .eq('habit_id', habitId)
-      .neq('status', 'completed')
-
-    if (findError) {
-      console.error('Error finding incomplete tasks:', findError)
-      return
-    }
-
-    if (!incompleteTasks || incompleteTasks.length === 0) {
-      console.log('No incomplete tasks to delete')
-      return
-    }
-
-    const taskIds = incompleteTasks.map(t => t.id)
-
-    // Delete from tasks table
-    const { error: taskDeleteError } = await this.supabase
-      .from('tasks')
-      .delete()
-      .in('id', taskIds)
-
-    if (taskDeleteError) {
-      console.error('Error deleting tasks:', taskDeleteError)
-      return
-    }
-
-    // Delete corresponding items
-    const { error: itemDeleteError } = await this.supabase
-      .from('items')
-      .delete()
-      .in('id', taskIds)
-
-    if (itemDeleteError) {
-      console.error('Error deleting items:', itemDeleteError)
-    } else {
-      console.log(`Successfully deleted ${taskIds.length} incomplete habit tasks`)
+    try {
+      await taskService.deleteIncompleteHabitTasks(this.supabase, this.userId, habitId)
+      console.log(`Successfully deleted incomplete habit tasks for habit ${habitId}`)
+    } catch (error) {
+      // Preserve original behavior: log and swallow rather than propagate.
+      console.error('Error deleting incomplete habit tasks:', error)
     }
   }
 }

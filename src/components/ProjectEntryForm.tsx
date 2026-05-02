@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Plus, GripVertical, Trash2, ArrowUp, ArrowDown, AlertCircle, CheckCircle2, Clock, } from 'lucide-react';
 import { useSupabaseAuth } from '@/hooks/useSupabaseAuth';
+import { useTasks } from '@/hooks/useTasks';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
@@ -49,6 +50,7 @@ export const ProjectEntryForm: React.FC<ProjectEntryFormProps> = ({
 }) => {
   const { user } = useSupabaseAuth();
   const supabase = createClientComponentClient();
+  const { deleteTask, deleteIncompleteProjectTasks } = useTasks(user?.id);
 
   // State
   const [open, setOpen] = useState(isEditing);
@@ -86,33 +88,7 @@ export const ProjectEntryForm: React.FC<ProjectEntryFormProps> = ({
   // Function to clean up non-completed tasks for a project - DEFINE THIS FIRST
   const cleanupNonCompletedTasks = async (projectId: string) => {
     try {
-      // First, get all project steps with tasks
-      const { data: stepsWithTasks, error: stepsError } = await supabase
-        .from('project_steps')
-        .select('id, converted_task_id, is_converted')
-        .eq('project_id', projectId)
-        .eq('is_converted', true)
-        .not('converted_task_id', 'is', null);
-        
-      if (stepsError) throw stepsError;
-      
-      // Get all non-completed tasks for the project
-      const { data: tasks, error: tasksError } = await supabase
-        .from('tasks')
-        .select('id, status')
-        .eq('project_id', projectId)
-        .neq('status', 'completed');
-      
-      if (tasksError) throw tasksError;
-      if (!tasks || tasks.length === 0) return;
-      
-      console.log(`Found ${tasks.length} non-completed tasks to delete for project ${projectId}`);
-      
-      // For each task and step with a task, reset and clean up
-      const stepIds = stepsWithTasks?.map(step => step.id) || [];
-      
-      // 1. Reset ALL steps for this project (not just the ones with completed tasks)
-      // This ensures we don't have any lingering task references
+      // Reset ALL converted steps for this project so they don't reference deleted tasks
       const { error: resetStepsError } = await supabase
         .from('project_steps')
         .update({
@@ -122,35 +98,14 @@ export const ProjectEntryForm: React.FC<ProjectEntryFormProps> = ({
         })
         .eq('project_id', projectId)
         .in('is_converted', [true])
-      
+
       if (resetStepsError) {
         console.error(`Error resetting steps for project ${projectId}:`, resetStepsError);
       }
-      
-      // 2. Delete all non-completed tasks
-      for (const task of tasks) {
-        // Delete the task from the tasks table
-        const { error: taskError } = await supabase
-          .from('tasks')
-          .delete()
-          .eq('id', task.id);
-        
-        if (taskError) {
-          console.error(`Error deleting task ${task.id}:`, taskError);
-          continue; // Skip item deletion if task deletion fails
-        }
-        
-        // Delete the item from the items table
-        const { error: itemError } = await supabase
-          .from('items')
-          .delete()
-          .eq('id', task.id);
-        
-        if (itemError) {
-          console.error(`Error deleting item for task ${task.id}:`, itemError);
-        }
-      }
-      
+
+      // Hook handles select + tasks + items + user_id scoping
+      await deleteIncompleteProjectTasks(projectId);
+
       console.log(`Successfully cleaned up tasks for project ${projectId}`);
     } catch (error) {
       console.error('Error cleaning up project tasks:', error);
@@ -642,18 +597,10 @@ export const ProjectEntryForm: React.FC<ProjectEntryFormProps> = ({
           throw new Error('Operation cancelled');
         }
         
-        // Delete associated tasks first
+        // Delete associated tasks first (hook handles tasks + items + user_id scoping)
         for (const step of stepsWithTasks) {
           if (step.converted_task_id) {
-            await supabase
-              .from('tasks')
-              .delete()
-              .eq('id', step.converted_task_id);
-              
-            await supabase
-              .from('items')
-              .delete()
-              .eq('id', step.converted_task_id);
+            await deleteTask(step.converted_task_id);
           }
         }
         

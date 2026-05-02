@@ -2,6 +2,17 @@ import type { Database } from '@/types/database.types'
 import type { TaskStatus, Priority, EntryType } from '@/types/database.types'
 import { getSupabaseClient } from '@/lib/supabase-client'
 import { addToQueue } from '@/lib/offlineSyncQueue'
+import * as taskService from '@/lib/taskService'
+
+function parseDailyContextString(value: string | null | undefined): string[] | null {
+  if (!value) return null
+  try {
+    const parsed = JSON.parse(value)
+    return Array.isArray(parsed) ? parsed : null
+  } catch {
+    return null
+  }
+}
 
 interface CreateEntryParams {
   title: string;
@@ -76,7 +87,24 @@ export class EntryService {
     try {
       const now = new Date().toISOString();
 
-      // Create the item first
+      // Tasks go through the centralized service (handles items + tasks insert + rollback).
+      if (entry.type === 'task') {
+        const created = await taskService.createTask(supabase, {
+          userId: entry.user_id,
+          title: entry.title,
+          description: entry.description ?? null,
+          due_date: entry.due_date ?? null,
+          assigned_date: entry.assigned_date ?? null,
+          reminder_time: entry.reminder_time ?? null,
+          daily_context: parseDailyContextString(entry.daily_context),
+          status: entry.status || 'on_deck',
+          priority: entry.priority || 'normal',
+          is_project_converted: false,
+        })
+        return created.item
+      }
+
+      // Notes and quotes: still insert items directly, then the type-specific row.
       const { data: itemData, error: itemError } = await supabase
         .from('items')
         .insert([{
@@ -92,29 +120,6 @@ export class EntryService {
 
       if (itemError) throw itemError;
       if (!itemData) throw new Error('Failed to create item');
-
-      // Handle task-specific data
-      if (entry.type === 'task') {
-        const taskData = {
-          id: itemData.id,
-          due_date: entry.due_date || null,
-          assigned_date: entry.assigned_date || null,
-          reminder_time: entry.reminder_time || null,
-          daily_context: entry.daily_context || null,
-          status: entry.status || 'on_deck',
-          description: entry.description || null,
-          is_project_converted: false,
-          priority: entry.priority || 'normal'
-        };
-
-        const { error: taskError } = await supabase
-          .from('tasks')
-          .insert([taskData])
-          .select()
-          .single();
-
-        if (taskError) throw taskError;
-      }
 
       // Handle note-specific data
       if (entry.type === 'note') {
@@ -159,32 +164,5 @@ export class EntryService {
       console.error('EntryService createEntry error:', error);
       throw error;
     }
-  }
-
-  static async updateTaskStatus(taskId: string, status: TaskStatus) {
-    const supabase = getSupabaseClient();
-
-    const { data, error } = await supabase
-      .from('tasks')
-      .update({ status })
-      .eq('id', taskId)
-      .select()
-      .single();
-
-    if (error) throw error;
-    return data;
-  }
-
-  static async updateTaskPriority(taskId: string, priority: Priority) {
-    const supabase = getSupabaseClient();
-
-    const { error } = await supabase
-      .from('tasks')
-      .update({ priority })
-      .eq('id', taskId)
-      .select()
-      .single();
-
-    if (error) throw error;
   }
 }
