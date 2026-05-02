@@ -17,20 +17,24 @@
 
 import { createCipheriv, createDecipheriv, randomBytes } from 'crypto'
 
-const KEY_HEX = process.env.INTEGRATION_ENCRYPTION_KEY
+let cachedKey: Buffer | null = null
 
-if (!KEY_HEX || KEY_HEX.length !== 64) {
-  throw new Error(
-    'INTEGRATION_ENCRYPTION_KEY must be set to a 64-character hex string (32 bytes). ' +
-    'Generate one with: openssl rand -hex 32'
-  )
+function getKey(): Buffer {
+  if (cachedKey) return cachedKey
+  const keyHex = process.env.INTEGRATION_ENCRYPTION_KEY
+  if (!keyHex || keyHex.length !== 64) {
+    throw new Error(
+      'INTEGRATION_ENCRYPTION_KEY must be set to a 64-character hex string (32 bytes). ' +
+      'Generate one with: openssl rand -hex 32'
+    )
+  }
+  cachedKey = Buffer.from(keyHex, 'hex')
+  return cachedKey
 }
-
-const KEY = Buffer.from(KEY_HEX, 'hex')
 
 export function encryptToken(plaintext: string): string {
   const iv = randomBytes(12)
-  const cipher = createCipheriv('aes-256-gcm', KEY, iv)
+  const cipher = createCipheriv('aes-256-gcm', getKey(), iv)
   const encrypted = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()])
   const authTag = cipher.getAuthTag()
   return `${iv.toString('base64')}:${authTag.toString('base64')}:${encrypted.toString('base64')}`
@@ -46,7 +50,7 @@ export function decryptToken(ciphertext: string): string {
   const authTag = Buffer.from(authTagB64, 'base64')
   const data = Buffer.from(dataB64, 'base64')
 
-  const decipher = createDecipheriv('aes-256-gcm', KEY, iv)
+  const decipher = createDecipheriv('aes-256-gcm', getKey(), iv)
   decipher.setAuthTag(authTag)
   try {
     const decrypted = Buffer.concat([decipher.update(data), decipher.final()])
