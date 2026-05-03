@@ -18,6 +18,7 @@ import { EntryService } from '@/lib/entryService';
 import type { TaskStatus, Priority, EntryType as KnowledgeEntryType } from '@/types/database.types';
 import type { TaskWithDetails, NoteWithDetails } from '@/lib/types';
 import { useContexts } from '@/hooks/useContexts';
+import { useTasks } from '@/hooks/useTasks';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import { DayPicker } from "react-day-picker";
 import "react-day-picker/dist/style.css";
@@ -134,6 +135,7 @@ export const NewEntryForm: React.FC<NewEntryFormProps> = ({
   const { user } = useSupabaseAuth();
   const { knowledgeBases } = useKnowledgeBases(user?.id);
   const supabase = createClientComponentClient();
+  const { updateTask } = useTasks(user?.id);
   const [internalOpen, setInternalOpen] = useState(isEditing);
   const open = externalOpen !== undefined ? externalOpen : internalOpen;
   const setOpen = externalSetOpen || setInternalOpen;
@@ -292,30 +294,17 @@ export const NewEntryForm: React.FC<NewEntryFormProps> = ({
     try {
       if (isEditing && initialData) {
         if (isEditingTask) {
-          // Update existing task
-          const { error: taskError } = await supabase
-            .from('tasks')
-            .update({
-              due_date: preserveLocalDate(dueDate),
-              assigned_date: preserveLocalDate(assignedDate),
-              daily_context: dailyContexts.length > 0 ? JSON.stringify(dailyContexts) : null,
-              status: status,
-              description: description.trim() || null,
-              priority: priority
-            })
-            .eq('id', initialData.id);
-
-          if (taskError) throw taskError;
-
-          const { error: itemError } = await supabase
-            .from('items')
-            .update({
-              title: title.trim(),
-              updated_at: new Date().toISOString()
-            })
-            .eq('id', initialData.id);
-
-          if (itemError) throw itemError;
+          // Hook handles tasks update + items title + items.updated_at in one call.
+          // daily_context goes through as an array; the service serializes it.
+          await updateTask(initialData.id, {
+            title: title.trim(),
+            description: description.trim() || null,
+            due_date: preserveLocalDate(dueDate),
+            assigned_date: preserveLocalDate(assignedDate),
+            daily_context: dailyContexts.length > 0 ? dailyContexts : null,
+            status,
+            priority,
+          });
         } else if (isEditingNote) {
           // Update existing note
           const { error: noteError } = await supabase
