@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react'
 import type { Database } from '@/types/database.types'
 import { getSupabaseClient } from '@/lib/supabase-client'
 import { HabitTaskGenerator } from '@/lib/habitTaskGenerator'
+import * as taskService from '@/lib/taskService'
 
 export interface RecurrenceRule {
   type: 'daily' | 'weekly' | 'monthly' | 'yearly' | 'custom';
@@ -204,14 +205,18 @@ export function useHabits(userId: string | undefined) {
       }
     }
 
-    // If checklist_template_id changed, propagate to existing incomplete tasks
+    // If checklist_template_id changed, propagate to existing incomplete tasks.
+    // Calls taskService directly (Option B) — useHabits doesn't consume useTasks
+    // state, so going through the React hook layer would just add a wasted fetch.
     if (updates.checklist_template_id !== undefined) {
       try {
-        await supabase
-          .from('tasks')
-          .update({ checklist_template_id: data.checklist_template_id })
-          .eq('habit_id', habitId)
-          .neq('status', 'completed')
+        await taskService.updateHabitTasksField(
+          supabase,
+          userId,
+          habitId,
+          'checklist_template_id',
+          data.checklist_template_id
+        )
       } catch (propagateError) {
         console.error('Error propagating checklist_template_id to tasks:', propagateError)
       }

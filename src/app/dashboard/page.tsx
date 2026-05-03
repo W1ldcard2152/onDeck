@@ -60,7 +60,14 @@ import {
 
 const DashboardPage: React.FC = () => {
   const { user } = useSupabaseAuth();
-  const { tasks: fetchedTasks, isLoading: tasksLoading, refetch: refetchTasks } = useTasks(
+  const {
+    tasks: fetchedTasks,
+    isLoading: tasksLoading,
+    refetch: refetchTasks,
+    reorderTasks: reorderTasksMutation,
+    updateTaskStatus: updateTaskStatusMutation,
+    deleteTask: deleteTaskMutation,
+  } = useTasks(
     user?.id,
     50,
     true,
@@ -132,20 +139,13 @@ const DashboardPage: React.FC = () => {
     }));
 
     try {
-      const results = await Promise.all(
-        updates.map(u =>
-          supabase.from('tasks').update({ sort_order: u.sort_order }).eq('id', u.id)
-        )
-      );
-      if (results.some(r => r.error)) {
-        setLocalTasks(previousTasks);
-        refetchTasks();
-      }
+      // Hook handles tasks updates + items.updated_at bump
+      await reorderTasksMutation(updates);
     } catch {
       setLocalTasks(previousTasks);
       refetchTasks();
     }
-  }, [localTasks, supabase, refetchTasks]);
+  }, [localTasks, reorderTasksMutation, refetchTasks]);
 
   const updateTaskStatus = useCallback(async (taskId: string, newStatus: TaskStatus): Promise<void> => {
     const task = localTasks.find(t => t.id === taskId);
@@ -156,21 +156,8 @@ const DashboardPage: React.FC = () => {
     ));
 
     try {
-      const { error: taskError } = await supabase
-        .from('tasks')
-        // @ts-ignore - Supabase type inference issue
-        .update({ status: newStatus })
-        .eq('id', taskId);
-
-      if (taskError) throw taskError;
-
-      const { error: itemError } = await supabase
-        .from('items')
-        // @ts-ignore - Supabase type inference issue
-        .update({ updated_at: nowISO() })
-        .eq('id', taskId);
-
-      if (itemError) throw itemError;
+      // Hook handles tasks update + items.updated_at bump
+      await updateTaskStatusMutation(taskId, newStatus);
 
       // If completing a habit task, generate the next occurrence
       if (newStatus === 'completed' && task?.habit_id && user?.id) {
@@ -188,7 +175,7 @@ const DashboardPage: React.FC = () => {
     } catch {
       setLocalTasks(previousTasks);
     }
-  }, [localTasks, supabase, user?.id, habits, refetchTasks]);
+  }, [localTasks, updateTaskStatusMutation, supabase, user?.id, habits, refetchTasks]);
 
   const deleteTask = useCallback(async (taskId: string): Promise<void> => {
     if (!window.confirm("Are you sure you want to delete this task? This cannot be undone.")) {
@@ -199,14 +186,14 @@ const DashboardPage: React.FC = () => {
     setLocalTasks(prev => prev.filter(task => task.id !== taskId));
 
     try {
-      const { error: taskError } = await supabase.from('tasks').delete().eq('id', taskId).eq('user_id', user?.id);
-      if (taskError) throw taskError;
-      const { error: itemError } = await supabase.from('items').delete().eq('id', taskId).eq('user_id', user?.id);
-      if (itemError) throw itemError;
+      // Hook handles tasks + items + correct (items-only) user_id scoping.
+      // Pre-migration this site had a tasks.user_id filter that 400'd silently
+      // because tasks has no user_id column.
+      await deleteTaskMutation(taskId);
     } catch {
       setLocalTasks(previousTasks);
     }
-  }, [localTasks, supabase]);
+  }, [localTasks, deleteTaskMutation]);
 
   // --- Memoized data ---
 

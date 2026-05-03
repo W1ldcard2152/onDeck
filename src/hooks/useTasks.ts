@@ -299,6 +299,15 @@ export function useTasks(
     [userId, fetchTasks]
   )
 
+  const reorderTasks = useCallback(
+    async (updates: Array<{ id: string; sort_order: number }>): Promise<void> => {
+      if (!userId) throw new Error('useTasks: cannot mutate without authenticated user')
+      await taskService.reorderTasks(supabaseRef.current, userId, updates)
+      await fetchTasks()
+    },
+    [userId, fetchTasks]
+  )
+
   const updateHabitTasksField = useCallback(
     async (
       habitId: string,
@@ -350,6 +359,7 @@ export function useTasks(
     updateTaskStatus,
     updateTaskPriority,
     swapTaskOrder,
+    reorderTasks,
     updateHabitTasksField,
     deleteIncompleteHabitTasks,
     deleteIncompleteProjectTasks,

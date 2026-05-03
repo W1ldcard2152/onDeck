@@ -308,6 +308,56 @@ export async function swapTaskOrder(
   }
 }
 
+/**
+ * Bulk update sort_order across multiple tasks. Used by drag-and-drop reorder
+ * flows where many rows shift at once.
+ *
+ * Each row needs its own sort_order, so this is N parallel UPDATEs (no .in()
+ * batch path). Per-row failures are aggregated; partial success can leave
+ * inconsistent ordering. Like swapTaskOrder, non-transactional — a future
+ * Postgres function could make this atomic; documented as a known limitation.
+ *
+ * The items.updated_at bump is one IN-clause UPDATE for all affected ids
+ * (mirrors the per-write convention in updateTask).
+ */
+export async function reorderTasks(
+  supabase: SupabaseClient,
+  userId: string,
+  updates: Array<{ id: string; sort_order: number }>
+): Promise<void> {
+  if (updates.length === 0) return
+
+  const results = await Promise.allSettled(
+    updates.map(u =>
+      supabase.from('tasks').update({ sort_order: u.sort_order }).eq('id', u.id)
+    )
+  )
+
+  const errors: string[] = []
+  results.forEach((res, i) => {
+    const id = updates[i].id
+    if (res.status === 'rejected') {
+      errors.push(`${id} threw: ${String(res.reason)}`)
+    } else if (res.value.error) {
+      errors.push(`${id}: ${res.value.error.message}`)
+    }
+  })
+
+  const ids = updates.map(u => u.id)
+  const { error: itemsError } = await supabase
+    .from('items')
+    .update({ updated_at: nowISO() })
+    .in('id', ids)
+    .eq('user_id', userId)
+  if (itemsError) {
+    errors.push(`items updated_at bump failed: ${itemsError.message}`)
+  }
+
+  if (errors.length > 0) {
+    throw new Error(`reorderTasks(${updates.length} updates): ${errors.join('; ')}`)
+  }
+}
+
 // ---- Specialized bulk operations ----
 
 /**
