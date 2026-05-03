@@ -25,6 +25,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import type { Database } from '@/types/database.types';
 import type { TaskWithDetails, Context } from '@/lib/types';
 import { useContexts } from '@/hooks/useContexts';
+import { useTasks } from '@/hooks/useTasks';
 import type { Priority, TaskStatus } from '@/types/database.types';
 import ScrollableTableWrapper from './layouts/responsiveNav/ScrollableTableWrapper';
 import { ProjectTaskManager } from '@/lib/projectTaskManager';
@@ -99,6 +100,13 @@ const TaskTableBase: React.FC<TaskTableBaseProps> = ({
   const { user } = useSupabaseAuth();
   const { templates: checklistTemplates } = useChecklists(user?.id);
   const { contexts } = useContexts();
+  const {
+    swapTaskOrder,
+    updateTaskStatus: updateTaskStatusMutation,
+    updateTaskPriority: updateTaskPriorityMutation,
+    deleteTask: deleteTaskMutation,
+    deleteTasks: deleteTasksMutation,
+  } = useTasks(user?.id);
 
   // Update local tasks when tasks prop changes
   useEffect(() => {
@@ -246,22 +254,11 @@ const TaskTableBase: React.FC<TaskTableBaseProps> = ({
     }));
 
     try {
-      // Update both tasks in the database
-      const results = await Promise.all([
-        supabase.from('tasks').update({ sort_order: newCurrentSortOrder }).eq('id', currentTask.id),
-        supabase.from('tasks').update({ sort_order: newTargetSortOrder }).eq('id', targetTask.id)
-      ]);
-
-      // Check for errors in the responses
-      const errors = results.filter(r => r.error);
-      if (errors.length > 0) {
-        console.error('Database update errors:', errors);
-        // Revert to previous state
-        setLocalTasks(previousTasks);
-        onTaskUpdate();
-      } else {
-        console.log('TaskTable: Database updates successful');
-      }
+      await swapTaskOrder(
+        { id: currentTask.id, sort_order: newCurrentSortOrder },
+        { id: targetTask.id, sort_order: newTargetSortOrder }
+      );
+      console.log('TaskTable: Database updates successful');
       // On success, the subscription will automatically update with the correct order
     } catch (error) {
       console.error('Error moving task:', error);
@@ -301,19 +298,15 @@ const TaskTableBase: React.FC<TaskTableBaseProps> = ({
     const tasksToDelete = Array.from(selectedTasks);
 
     try {
+      // Per-task project-deletion side effects (must run before tasks are deleted
+      // so handleTaskDeletion can read project_id from the still-existing row).
       for (const taskId of tasksToDelete) {
         setLoading(prev => ({ ...prev, [taskId]: true }));
 
-        // Get the task to check if it's project-related
-        const { data: taskData, error: fetchError } = await supabase
-          .from('tasks')
-          .select('*')
-          .eq('id', taskId)
-          .single();
+        // Look up project_id from local state — these tasks are visible in the
+        // table being acted on, so localTasks reliably has the row.
+        const taskData = localTasks.find(t => t.id === taskId);
 
-        if (fetchError) throw fetchError;
-
-        // If task is part of a project, notify the ProjectTaskManager
         if (taskData?.project_id) {
           const projectTaskManager = new ProjectTaskManager({
             supabase,
@@ -321,25 +314,10 @@ const TaskTableBase: React.FC<TaskTableBaseProps> = ({
           });
           await projectTaskManager.handleTaskDeletion(taskId);
         }
-
-        // Delete the task
-        const { error: taskError } = await supabase
-          .from('tasks')
-          .delete()
-          .eq('id', taskId)
-          .eq('user_id', user?.id);
-
-        if (taskError) throw taskError;
-
-        // Delete the item
-        const { error: itemError } = await supabase
-          .from('items')
-          .delete()
-          .eq('id', taskId)
-          .eq('user_id', user?.id);
-
-        if (itemError) throw itemError;
       }
+
+      // Single bulk delete (hook handles tasks + items + sequencing)
+      await deleteTasksMutation(tasksToDelete);
 
       setSelectedTasks(new Set());
       onTaskUpdate();
@@ -359,39 +337,34 @@ const TaskTableBase: React.FC<TaskTableBaseProps> = ({
     setError(null);
 
     try {
-      // Get the task to check if it's project-related
-      const { data: taskData, error: fetchError } = await supabase
-        .from('tasks')
-        .select('*')
-        .eq('id', taskId)
-        .single();
+      // Look up the task from local state — it's the row currently visible in
+      // the table being acted on, so localTasks reliably has it.
+      const taskData = localTasks.find(t => t.id === taskId);
 
-      if (fetchError) throw fetchError;
-      
       // If task is part of a project, check if it should be allowed to be deleted
       if (taskData?.project_id) {
-        const projectTaskManager = new ProjectTaskManager({ 
-          supabase, 
+        const projectTaskManager = new ProjectTaskManager({
+          supabase,
           userId: user ? user.id : null
         });
-        
+
         // Get project info
         const projectInfo = projectInfoMap[taskData.project_id];
-        
+
         // Get project steps to check if this is a critical task
         const { data: steps } = await supabase
           .from('project_steps')
           .select('*')
           .eq('project_id', taskData.project_id)
           .order('order_number', { ascending: true });
-          
+
         const thisStep = steps?.find(step => step.converted_task_id === taskId);
-        
+
         if (thisStep) {
           // Check if this task is for a completed step with incomplete steps before it
           const stepIndex = steps?.findIndex(step => step.id === thisStep.id) || 0;
           const hasIncompletePriorSteps = steps?.slice(0, stepIndex).some(step => step.status !== 'completed');
-          
+
           if (hasIncompletePriorSteps) {
             if (!window.confirm(
               `This task is part of the project "${projectInfo?.title}" and is associated with step "${thisStep.title}". ` +
@@ -402,10 +375,10 @@ const TaskTableBase: React.FC<TaskTableBaseProps> = ({
               return;
             }
           }
-          
+
           // Check if there are later converted steps dependent on this one
           const hasConvertedLaterSteps = steps?.slice(stepIndex + 1).some(step => step.is_converted);
-          
+
           if (hasConvertedLaterSteps && thisStep.status !== 'completed') {
             if (!window.confirm(
               `This task is part of the project "${projectInfo?.title}" workflow with follow-up tasks already created. ` +
@@ -416,8 +389,9 @@ const TaskTableBase: React.FC<TaskTableBaseProps> = ({
             }
           }
         }
-        
-        // Notify the ProjectTaskManager about the task deletion
+
+        // Notify the ProjectTaskManager about the task deletion (must run
+        // before the task row is deleted so it can read project_id).
         await projectTaskManager.handleTaskDeletion(taskId);
       } else {
         // Regular confirmation for non-project tasks
@@ -426,24 +400,9 @@ const TaskTableBase: React.FC<TaskTableBaseProps> = ({
           return;
         }
       }
-      
-      // Delete the task
-      const { error: taskError } = await supabase
-        .from('tasks')
-        .delete()
-        .eq('id', taskId)
-        .eq('user_id', user?.id);
 
-      if (taskError) throw taskError;
-
-      // Delete the item
-      const { error: itemError } = await supabase
-        .from('items')
-        .delete()
-        .eq('id', taskId)
-        .eq('user_id', user?.id);
-
-      if (itemError) throw itemError;
+      // Hook handles tasks + items + sequencing
+      await deleteTaskMutation(taskId);
 
       onTaskUpdate();
     } catch (err) {
@@ -460,32 +419,27 @@ const TaskTableBase: React.FC<TaskTableBaseProps> = ({
     setError(null);
     
     try {
-      // Get the current task data first
-      const { data: currentTask, error: fetchError } = await supabase
-        .from('tasks')
-        .select('*')
-        .eq('id', taskId)
-        .single();
-        
-      if (fetchError) throw fetchError;
-      
+      // Look up current task from local state (avoids a round-trip; the row is
+      // visible in the table being acted on).
+      const currentTask = localTasks.find(t => t.id === taskId);
+
       console.log(`Updating task ${taskId} from ${currentTask?.status} to ${newStatus}`);
-      
+
       // Check for project-related task logic
-      const isProjectTask = currentTask?.project_id;
+      const projectId = currentTask?.project_id ?? null;
       const isCompletingTask = newStatus === 'completed' && currentTask?.status !== 'completed';
       const isUncompletingTask = newStatus !== 'completed' && currentTask?.status === 'completed';
-      
-      if (isProjectTask) {
-        const projectInfo = projectInfoMap[currentTask.project_id];
-        
+
+      if (projectId) {
+        const projectInfo = projectInfoMap[projectId];
+
         // Special handling for project tasks based on status
         if (isCompletingTask) {
           const confirmComplete = window.confirm(
             `This task is part of project "${projectInfo?.title}". ` +
             "Marking it as completed will advance the project workflow. Continue?"
           );
-          
+
           if (!confirmComplete) {
             setLoading(prev => ({ ...prev, [taskId]: false }));
             return;
@@ -495,44 +449,20 @@ const TaskTableBase: React.FC<TaskTableBaseProps> = ({
             `This task is part of project "${projectInfo?.title}". ` +
             "Unmarking it as completed may affect the project workflow. Continue?"
           );
-          
+
           if (!confirmUncomplete) {
             setLoading(prev => ({ ...prev, [taskId]: false }));
             return;
           }
         }
       }
-      
-      // Update the task status
-      const { data: updatedTask, error: taskError } = await supabase
-        .from('tasks')
-        .update({
-          status: newStatus,
-          updated_at: nowISO()
-        })
-        .eq('id', taskId)
-        .eq('user_id', user?.id)
-        .select()
-        .single();
 
-      if (taskError) {
-        console.error('Error updating task status:', taskError);
-        throw taskError;
-      }
-
+      // Hook handles tasks update + items.updated_at bump
+      const updatedTask = await updateTaskStatusMutation(taskId, newStatus);
       console.log('Task updated successfully:', updatedTask);
 
-      // Update item timestamps
-      const { error: itemError } = await supabase
-        .from('items')
-        .update({ updated_at: nowISO() })
-        .eq('id', taskId)
-        .eq('user_id', user?.id);
-  
-      if (itemError) throw itemError;
-      
       // Handle project-related task logic with ProjectTaskManager
-      if (isProjectTask) {
+      if (projectId) {
         const projectTaskManager = new ProjectTaskManager({
           supabase,
           userId: user ? user.id : null
@@ -540,7 +470,7 @@ const TaskTableBase: React.FC<TaskTableBaseProps> = ({
 
         if (isCompletingTask) {
           // When marking a task as completed
-          await projectTaskManager.handleTaskCompletion(taskId, currentTask.project_id);
+          await projectTaskManager.handleTaskCompletion(taskId, projectId);
           console.log('Project task marked complete and next step processed');
         } else if (isUncompletingTask) {
           // When unmarking a completed task
@@ -596,53 +526,32 @@ const TaskTableBase: React.FC<TaskTableBaseProps> = ({
     setError(null);
     
     try {
-      // Get the task to check if it's project-related
-      const { data: taskData, error: fetchError } = await supabase
-        .from('tasks')
-        .select('project_id')
-        .eq('id', taskId)
-        .single();
-        
-      if (fetchError) throw fetchError;
+      // Look up the task from local state to find project_id.
+      const taskData = localTasks.find(t => t.id === taskId);
 
-      // If it's a project task, also update the corresponding step's priority
+      // If it's a project task, also update the corresponding step's priority.
+      // project_steps is out of taskService's scope, so it stays direct.
       if (taskData?.project_id) {
         const { data: stepData, error: stepFetchError } = await supabase
           .from('project_steps')
           .select('id')
           .eq('converted_task_id', taskId)
           .single();
-          
+
         if (!stepFetchError && stepData) {
-          // Update step priority
           const { error: stepUpdateError } = await supabase
             .from('project_steps')
             .update({ priority: newPriority })
             .eq('id', stepData.id);
-            
+
           if (stepUpdateError) {
             console.error('Error updating step priority:', stepUpdateError);
           }
         }
       }
-      
-      // Update task priority
-      const { error: taskError } = await supabase
-        .from('tasks')
-        .update({ priority: newPriority })
-        .eq('id', taskId)
-        .eq('user_id', user?.id);
 
-      if (taskError) throw taskError;
-
-      // Update item timestamp
-      const { error: itemError } = await supabase
-        .from('items')
-        .update({ updated_at: nowISO() })
-        .eq('id', taskId)
-        .eq('user_id', user?.id);
-
-      if (itemError) throw itemError;
+      // Hook handles tasks update + items.updated_at bump
+      await updateTaskPriorityMutation(taskId, newPriority);
 
       onTaskUpdate();
     } catch (err) {
