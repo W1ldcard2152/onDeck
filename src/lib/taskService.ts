@@ -165,7 +165,6 @@ export async function deleteTask(
     .from('tasks')
     .delete()
     .eq('id', taskId)
-    .eq('user_id', userId)
   if (taskError) throw taskError
 
   const { error: itemError } = await supabase
@@ -183,21 +182,19 @@ export async function deleteTasks(
 ): Promise<void> {
   if (taskIds.length === 0) return
 
-  const [tasksRes, itemsRes] = await Promise.allSettled([
-    supabase.from('tasks').delete().in('id', taskIds).eq('user_id', userId),
-    supabase.from('items').delete().in('id', taskIds).eq('user_id', userId),
-  ])
-
   const errors: string[] = []
-  if (tasksRes.status === 'rejected') {
-    errors.push(`tasks delete threw: ${String(tasksRes.reason)}`)
-  } else if (tasksRes.value.error) {
-    errors.push(`tasks delete failed: ${tasksRes.value.error.message}`)
+
+  // Sequential: tasks first, then items. If tasks → items has any FK, the parent
+  // (items) must outlive the child (tasks). Even if tasks delete fails, still
+  // attempt items and aggregate errors so the caller sees the full picture.
+  const tasksRes = await supabase.from('tasks').delete().in('id', taskIds)
+  if (tasksRes.error) {
+    errors.push(`tasks delete failed: ${tasksRes.error.message}`)
   }
-  if (itemsRes.status === 'rejected') {
-    errors.push(`items delete threw: ${String(itemsRes.reason)}`)
-  } else if (itemsRes.value.error) {
-    errors.push(`items delete failed: ${itemsRes.value.error.message}`)
+
+  const itemsRes = await supabase.from('items').delete().in('id', taskIds).eq('user_id', userId)
+  if (itemsRes.error) {
+    errors.push(`items delete failed: ${itemsRes.error.message}`)
   }
 
   if (errors.length > 0) {
@@ -243,7 +240,6 @@ export async function updateTask(
       .from('tasks')
       .update(taskPatch)
       .eq('id', taskId)
-      .eq('user_id', userId)
     if (taskError) throw taskError
   }
 
@@ -297,13 +293,11 @@ export async function swapTaskOrder(
     supabase
       .from('tasks')
       .update({ sort_order: taskB.sort_order })
-      .eq('id', taskA.id)
-      .eq('user_id', userId),
+      .eq('id', taskA.id),
     supabase
       .from('tasks')
       .update({ sort_order: taskA.sort_order })
-      .eq('id', taskB.id)
-      .eq('user_id', userId),
+      .eq('id', taskB.id),
   ])
 
   const errors: string[] = []
@@ -332,7 +326,6 @@ export async function updateHabitTasksField(
     .from('tasks')
     .update({ [field]: value })
     .eq('habit_id', habitId)
-    .eq('user_id', userId)
     .neq('status', 'completed')
   if (error) throw error
 }
@@ -350,7 +343,6 @@ export async function deleteIncompleteHabitTasks(
     .from('tasks')
     .select('id')
     .eq('habit_id', habitId)
-    .eq('user_id', userId)
     .neq('status', 'completed')
   if (findError) throw findError
   if (!rows || rows.length === 0) return
@@ -371,7 +363,6 @@ export async function deleteIncompleteProjectTasks(
     .from('tasks')
     .select('id')
     .eq('project_id', projectId)
-    .eq('user_id', userId)
     .neq('status', 'completed')
   if (findError) throw findError
   if (!rows || rows.length === 0) return
@@ -394,7 +385,6 @@ export async function countTasksByContext(
   const { data, error } = await supabase
     .from('tasks')
     .select('id, daily_context')
-    .eq('user_id', userId)
     .not('daily_context', 'is', null)
   if (error) throw error
   if (!data) return 0
