@@ -133,11 +133,14 @@ function assignedDateFromGoogleDue(googleDue: string | undefined | null): string
  * If the task has a google_task_id: PATCH the Google task. Update local
  *   google_etag / last_synced_at on success.
  *
+ * If the update gets a 404 (Google twin deleted in Google's UI): clears the
+ *   stale google_task_id link and, when the task is still active, re-inserts
+ *   it into Google as a new task. Counts as a successful push.
+ *
  * Returns:
- *   true  — push succeeded.
- *   false — auth-related failure (not_connected / auth_expired) OR Google task
- *           was not found on update (caller decides; pull cycle can pick up the
- *           deletion). Caller should NOT retry; surface UI as appropriate.
+ *   true  — push succeeded (including the 404-recovery path).
+ *   false — auth-related failure (not_connected / auth_expired). Caller
+ *           should NOT retry; surface UI as appropriate.
  *
  * Throws GoogleTasksApiError on transient failures (network / server_error /
  *   rate_limited / unknown) so the caller can decide whether to retry.
@@ -188,7 +191,18 @@ export async function pushTask(
     }
 
     // Update path
-    const updated = await googleUpdateTask(supabase, userId, listId, task.google_task_id, input)
+    let updated: GoogleTask
+    try {
+      updated = await googleUpdateTask(supabase, userId, listId, task.google_task_id, input)
+    } catch (err) {
+      if (err instanceof GoogleTasksApiError && err.code === 'not_found') {
+        // The task's Google twin was deleted on the Google side. Without
+        // recovery this row 404s on every future push, permanently. Clear the
+        // stale link and (if still active) re-insert as a new Google task.
+        return await recoverFromGoogleDeletion(supabase, userId, listId, task, input)
+      }
+      throw err
+    }
     const { error: updateError } = await supabase
       .from('tasks')
       .update({
@@ -212,6 +226,66 @@ export async function pushTask(
     }
     throw err
   }
+}
+
+/**
+ * Recovery for an update push that got a 404 from Google (the Google twin was
+ * deleted in Google's UI). Counts as a successful push (A2 'ok' status).
+ *
+ * - Always: clear google_task_id / google_etag / last_synced_at on the local
+ *   row. The row id alone is the correct filter — `tasks` has no user_id
+ *   column; security lives on the paired items row + RLS.
+ * - Local task completed (this was a completion push): treat Google's
+ *   deletion as authoritative-enough — don't resurrect; link cleared, done.
+ * - Local task active: re-insert into Google as a new task and store the new
+ *   google_task_id / google_etag.
+ *
+ * Thrown errors propagate to pushTask's catch (recordSyncError handles them).
+ */
+async function recoverFromGoogleDeletion(
+  supabase: SupabaseClient,
+  userId: string,
+  listId: string,
+  task: TaskRow,
+  input: GoogleTaskInput
+): Promise<boolean> {
+  const staleGoogleTaskId = task.google_task_id
+  const { error: clearError } = await supabase
+    .from('tasks')
+    .update({
+      google_task_id: null,
+      google_etag: null,
+      last_synced_at: null,
+    })
+    .eq('id', task.id)
+  if (clearError) {
+    throw new Error(
+      `pushTask: Google task ${staleGoogleTaskId} gone (404) but failed to clear stale link on local row ${task.id}: ${clearError.message}`
+    )
+  }
+
+  if (task.status === 'completed') {
+    await writeOkAfterPush(supabase, userId)
+    return true
+  }
+
+  const created = await googleInsertTask(supabase, userId, listId, input)
+  const { error: relinkError } = await supabase
+    .from('tasks')
+    .update({
+      google_task_id: created.id,
+      google_etag: created.etag,
+      last_synced_at: new Date().toISOString(),
+    })
+    .eq('id', task.id)
+  if (relinkError) {
+    throw new Error(
+      `pushTask: re-created Google task ${created.id} after 404 but failed to write back to local row ${task.id}: ${relinkError.message}`
+    )
+  }
+
+  await writeOkAfterPush(supabase, userId)
+  return true
 }
 
 /**
