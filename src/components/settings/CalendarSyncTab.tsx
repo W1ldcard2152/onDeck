@@ -3,7 +3,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Calendar, RefreshCw, ArrowRight, ArrowLeft, ArrowLeftRight, CheckCircle2, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { useGoogleTasksIntegration } from '@/hooks/useGoogleTasksIntegration';
+import { useGoogleSync } from '@/contexts/GoogleSyncContext';
+import { STATUS_WORD, BADGE_CLASSES } from '@/components/sync/SyncStatusIndicator';
 import { formatDateTime } from '@/lib/timezone';
 
 const ERROR_MESSAGES: Record<string, string> = {
@@ -26,7 +27,17 @@ const contextCalendarRows = [
 ];
 
 export default function CalendarSyncTab() {
-  const { integration, loading, refresh } = useGoogleTasksIntegration();
+  const {
+    integration,
+    integrationLoaded,
+    isSyncing,
+    lastSyncResult,
+    lastClientError,
+    state,
+    syncNow,
+    refreshStatus,
+  } = useGoogleSync();
+  const loading = !integrationLoaded;
   const [disconnecting, setDisconnecting] = useState(false);
   const [banner, setBanner] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
@@ -50,14 +61,14 @@ export default function CalendarSyncTab() {
     try {
       const res = await fetch('/api/integrations/google/disconnect', { method: 'POST' });
       if (!res.ok) throw new Error(`Status ${res.status}`);
-      refresh();
+      await refreshStatus();
     } catch (err) {
       console.error('Disconnect failed:', err);
       setBanner({ type: 'error', message: 'Disconnect failed. Please try again.' });
     } finally {
       setDisconnecting(false);
     }
-  }, [refresh]);
+  }, [refreshStatus]);
 
   const connected = !!integration;
 
@@ -97,10 +108,33 @@ export default function CalendarSyncTab() {
                   <p className="flex items-center gap-1.5 text-sm text-green-600">
                     <CheckCircle2 className="h-4 w-4" />
                     Connected
+                    <span className={`ml-1 rounded-full border px-2 py-0.5 text-xs font-medium ${BADGE_CLASSES[state]}`}>
+                      {STATUS_WORD[state]}
+                    </span>
                   </p>
                   <p className="text-xs text-gray-500">
                     Since {formatDateTime(integration!.connectedAt)}
                   </p>
+                  <p className="text-xs text-gray-500">
+                    {integration!.lastSyncedAt
+                      ? `Last synced ${formatDateTime(integration!.lastSyncedAt)}`
+                      : 'Never synced'}
+                  </p>
+                  {state === 'failed' && (integration!.lastError ?? lastClientError) && (
+                    <p
+                      className="truncate text-xs text-red-600"
+                      title={integration!.lastError ?? lastClientError ?? undefined}
+                    >
+                      {integration!.lastError ?? lastClientError}
+                    </p>
+                  )}
+                  {lastSyncResult && (
+                    <p className="text-xs text-gray-600">
+                      Synced — {lastSyncResult.pulled.inserted} imported,{' '}
+                      {lastSyncResult.pulled.updated} updated,{' '}
+                      {lastSyncResult.pushedDeletions} deletions pushed
+                    </p>
+                  )}
                   {integration!.scopes.length > 0 && (
                     <p className="text-xs text-gray-400 break-all">
                       Scopes: {integration!.scopes.join(', ')}
@@ -121,15 +155,46 @@ export default function CalendarSyncTab() {
           <div className="shrink-0 w-full sm:w-auto">
             {!loading && (
               connected ? (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="w-full sm:w-auto text-red-600 border-red-200 hover:bg-red-50"
-                  onClick={handleDisconnect}
-                  disabled={disconnecting}
-                >
-                  {disconnecting ? 'Disconnecting...' : 'Disconnect'}
-                </Button>
+                <div className="flex flex-col gap-2 w-full sm:w-auto">
+                  {state === 'auth_expired' ? (
+                    <Button
+                      size="sm"
+                      className="w-full sm:w-auto"
+                      onClick={() => {
+                        window.location.href = '/api/integrations/google/authorize';
+                      }}
+                    >
+                      Reconnect Google
+                    </Button>
+                  ) : (
+                    <Button
+                      size="sm"
+                      className="w-full sm:w-auto"
+                      disabled={isSyncing || state === 'offline'}
+                      onClick={() => {
+                        void syncNow();
+                      }}
+                    >
+                      {isSyncing ? (
+                        <>
+                          <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                          Syncing…
+                        </>
+                      ) : (
+                        'Sync now'
+                      )}
+                    </Button>
+                  )}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full sm:w-auto text-red-600 border-red-200 hover:bg-red-50"
+                    onClick={handleDisconnect}
+                    disabled={disconnecting}
+                  >
+                    {disconnecting ? 'Disconnecting...' : 'Disconnect'}
+                  </Button>
+                </div>
               ) : (
                 <a href="/api/integrations/google/authorize" className="block w-full sm:w-auto">
                   <Button size="sm" className="w-full sm:w-auto">Connect Google Tasks</Button>

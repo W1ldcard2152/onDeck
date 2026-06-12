@@ -15,7 +15,7 @@ interface SyncStatusIndicatorProps {
   onNavigateToSettings?: () => void
 }
 
-const STATUS_WORD: Record<GoogleSyncState, string> = {
+export const STATUS_WORD: Record<GoogleSyncState, string> = {
   not_connected: 'Not connected',
   syncing: 'Syncing…',
   offline: 'Offline',
@@ -25,7 +25,7 @@ const STATUS_WORD: Record<GoogleSyncState, string> = {
 }
 
 // Reuses the green/red banner palette from CalendarSyncTab for consistency.
-const BADGE_CLASSES: Record<GoogleSyncState, string> = {
+export const BADGE_CLASSES: Record<GoogleSyncState, string> = {
   not_connected: 'bg-gray-100 text-gray-600 border-gray-200',
   syncing: 'bg-blue-50 text-blue-800 border-blue-200',
   offline: 'bg-yellow-50 text-yellow-800 border-yellow-200',
