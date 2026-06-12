@@ -36,6 +36,75 @@ import {
 
 const MAX_PAGES = 10
 
+// ---- Sync status helpers (Phase 4 A2) ----
+//
+// The indicator UI is only as honest as user_integrations.sync_status, so
+// every sync path (pull, push, deletion drain) must end by writing it:
+// success → 'ok', transient failure → 'failed', dead refresh token →
+// 'auth_expired'. last_synced_at doubles as the pull watermark, so only
+// pullTasks may advance it; push success writes 'ok' with
+// touchLastSyncedAt: false.
+
+const MAX_LAST_ERROR_LENGTH = 500
+
+function truncateError(err: unknown): string {
+  const msg = err instanceof Error ? err.message : String(err)
+  return msg.length > MAX_LAST_ERROR_LENGTH ? msg.slice(0, MAX_LAST_ERROR_LENGTH) : msg
+}
+
+/**
+ * Best-effort status write: a failed status write must never convert a
+ * successful sync into a thrown error, nor mask the original failure.
+ */
+async function writeSyncStatusSafe(
+  supabase: SupabaseClient,
+  userId: string,
+  status: {
+    syncStatus: 'ok' | 'failed' | 'auth_expired'
+    lastError?: string | null
+    lastSyncedAt?: Date
+    touchLastSyncedAt?: boolean
+  }
+): Promise<void> {
+  try {
+    await updateSyncStatus(supabase, userId, 'google_tasks', status)
+  } catch (statusErr) {
+    console.error('[googleTasksSync] best-effort sync_status write failed:', statusErr)
+  }
+}
+
+/**
+ * Classify an error from the Google client chain for status purposes.
+ *  'auth_expired' — unrecoverable token (refresh rejected / persistent 401).
+ *  'failed'       — transient or unknown.
+ *  null           — not_connected: integration row is gone; nothing to write to.
+ */
+function statusForError(err: unknown): 'auth_expired' | 'failed' | null {
+  if (err instanceof GoogleAuthError) {
+    if (err.code === 'auth_expired') return 'auth_expired'
+    if (err.code === 'not_connected') return null
+    return 'failed' // 'network'
+  }
+  if (err instanceof GoogleTasksApiError && err.code === 'auth_expired') {
+    return 'auth_expired'
+  }
+  return 'failed'
+}
+
+/** Record an error on the integration row (no-op for not_connected). */
+async function recordSyncError(
+  supabase: SupabaseClient,
+  userId: string,
+  err: unknown
+): Promise<void> {
+  const status = statusForError(err)
+  if (!status) return
+  await writeSyncStatusSafe(supabase, userId, {
+    syncStatus: status,
+    lastError: truncateError(err),
+  })
+}
+
 // ---- Date helpers ----
 
 /** YYYY-MM-DD → RFC 3339 at midnight UTC. Returns null if input null/empty. */
@@ -82,6 +151,7 @@ export async function pushTask(
   try {
     listId = await getDefaultTaskListId(supabase, userId)
   } catch (err) {
+    await recordSyncError(supabase, userId, err)
     if (err instanceof GoogleAuthError) return false
     if (err instanceof GoogleTasksApiError && err.code === 'auth_expired') return false
     throw err
@@ -113,6 +183,7 @@ export async function pushTask(
           `pushTask: created Google task ${created.id} but failed to write back to local row ${task.id}: ${updateError.message}`
         )
       }
+      await writeOkAfterPush(supabase, userId)
       return true
     }
 
@@ -130,8 +201,10 @@ export async function pushTask(
         `pushTask: updated Google task ${task.google_task_id} but failed to write back to local row ${task.id}: ${updateError.message}`
       )
     }
+    await writeOkAfterPush(supabase, userId)
     return true
   } catch (err) {
+    await recordSyncError(supabase, userId, err)
     if (err instanceof GoogleAuthError) return false
     if (err instanceof GoogleTasksApiError) {
       if (err.code === 'auth_expired' || err.code === 'not_found') return false
@@ -139,6 +212,20 @@ export async function pushTask(
     }
     throw err
   }
+}
+
+/**
+ * Push-success status write: 'ok' + clear last_error, WITHOUT advancing
+ * last_synced_at — that timestamp is the pull watermark (pullTasks sends it
+ * to Google as updatedMin). Bumping it on a push would make the next pull
+ * skip Google-side changes made since the last actual pull.
+ */
+async function writeOkAfterPush(supabase: SupabaseClient, userId: string): Promise<void> {
+  await writeSyncStatusSafe(supabase, userId, {
+    syncStatus: 'ok',
+    lastError: null,
+    touchLastSyncedAt: false,
+  })
 }
 
 // ---- Configuration & background helpers (3b.3) ----
@@ -158,14 +245,11 @@ export async function isSyncConfigured(
 }
 
 /**
- * Fire-and-forget version of pushTask for use from inside taskService mutations.
+ * Fire-and-forget version of pushTask for use from server-side callers.
  * Never throws. Skips silently if sync is not configured.
  *
- * On thrown errors (transient), records sync_status='failed' on the integration
- * row with the error message. On clean returns from pushTask, leaves sync_status
- * untouched — pull cycles manage 'ok' transitions (writing 'ok' here would
- * also auto-bump last_synced_at via the integrations helper, which would cause
- * the next pull to miss intervening Google-side changes).
+ * Status writes (ok / failed / auth_expired) happen inside pushTask itself
+ * (A2); this wrapper only swallows and logs the thrown transients.
  */
 export function pushTaskInBackground(
   supabase: SupabaseClient,
@@ -177,31 +261,16 @@ export function pushTaskInBackground(
       const configured = await isSyncConfigured(supabase, userId)
       if (!configured) return
       await pushTask(supabase, userId, task)
-      // Note: deliberately not auto-clearing sync_status on success here.
-      // updateSyncStatus({syncStatus: 'ok'}) auto-sets last_synced_at = now,
-      // which would cause the next pull to use updatedMin=now and miss any
-      // Google-side changes between the last actual pull and this push.
-      // pullTasks handles the 'ok' transition correctly via its own watermark.
     } catch (err) {
-      try {
-        await updateSyncStatus(supabase, userId, 'google_tasks', {
-          syncStatus: 'failed',
-          lastError: err instanceof Error ? err.message : String(err),
-        })
-      } catch {
-        // Best-effort status write; don't escalate failures here.
-      }
       console.error('[pushTaskInBackground] push failed for task', task.id, err)
     }
   })()
 }
 
 /**
- * Fire-and-forget drain of pending deletion tombstones. Called after delete
- * mutations. Never throws. Skips silently if sync is not configured.
- *
- * Records sync_status='failed' on transient errors; otherwise leaves status
- * untouched (same reasoning as pushTaskInBackground).
+ * Fire-and-forget drain of pending deletion tombstones. Never throws.
+ * Skips silently if sync is not configured. Status writes happen inside
+ * pushPendingDeletions itself (A2).
  */
 export function pushPendingDeletionsInBackground(
   supabase: SupabaseClient,
@@ -213,14 +282,6 @@ export function pushPendingDeletionsInBackground(
       if (!configured) return
       await pushPendingDeletions(supabase, userId)
     } catch (err) {
-      try {
-        await updateSyncStatus(supabase, userId, 'google_tasks', {
-          syncStatus: 'failed',
-          lastError: err instanceof Error ? err.message : String(err),
-        })
-      } catch {
-        // Best-effort.
-      }
       console.error('[pushPendingDeletionsInBackground] drain failed', err)
     }
   })()
@@ -250,8 +311,14 @@ export async function pushPendingDeletions(
     .eq('user_id', userId)
     .is('pushed_at', null)
   if (queryError) {
-    throw new Error(`pushPendingDeletions: failed to read task_deletions: ${queryError.message}`)
+    const err = new Error(
+      `pushPendingDeletions: failed to read task_deletions: ${queryError.message}`
+    )
+    await recordSyncError(supabase, userId, err)
+    throw err
   }
+  // Nothing pending: leave sync_status untouched — an empty drain exercises
+  // nothing, so it shouldn't clear a real 'failed'/'auth_expired' state.
   if (!rows || rows.length === 0) return 0
 
   const pending = rows as PendingDeletionRow[]
@@ -260,6 +327,7 @@ export async function pushPendingDeletions(
   try {
     listId = await getDefaultTaskListId(supabase, userId)
   } catch (err) {
+    await recordSyncError(supabase, userId, err)
     if (err instanceof GoogleAuthError) return 0
     if (err instanceof GoogleTasksApiError && err.code === 'auth_expired') return 0
     throw err
@@ -271,6 +339,7 @@ export async function pushPendingDeletions(
       // googleDeleteTask returns void on success and treats 404 as success.
       await googleDeleteTask(supabase, userId, listId, row.google_task_id)
     } catch (err) {
+      await recordSyncError(supabase, userId, err)
       if (err instanceof GoogleAuthError) return pushed
       if (err instanceof GoogleTasksApiError && err.code === 'auth_expired') return pushed
       // Transient (rate_limited / server_error / network / unknown):
@@ -283,13 +352,16 @@ export async function pushPendingDeletions(
       .update({ pushed_at: new Date().toISOString() })
       .eq('id', row.id)
     if (markError) {
-      throw new Error(
+      const err = new Error(
         `pushPendingDeletions: deleted Google task ${row.google_task_id} but failed to mark tombstone ${row.id} as pushed: ${markError.message}`
       )
+      await recordSyncError(supabase, userId, err)
+      throw err
     }
     pushed++
   }
 
+  await writeOkAfterPush(supabase, userId)
   return pushed
 }
 
@@ -349,6 +421,7 @@ export async function pullTasks(
   try {
     listId = await getDefaultTaskListId(supabase, userId)
   } catch (err) {
+    await recordSyncError(supabase, userId, err)
     if (err instanceof GoogleAuthError) return result
     if (err instanceof GoogleTasksApiError && err.code === 'auth_expired') return result
     throw err
@@ -380,21 +453,20 @@ export async function pullTasks(
       pages++
     }
   } catch (err) {
+    await recordSyncError(supabase, userId, err)
     if (err instanceof GoogleAuthError) return result
     if (err instanceof GoogleTasksApiError && err.code === 'auth_expired') return result
     throw err
   }
 
-  // Bump the integration's last_synced_at so the next pull's updatedMin advances.
-  try {
-    await updateSyncStatus(supabase, userId, 'google_tasks', {
-      syncStatus: 'ok',
-      lastError: null,
-      lastSyncedAt: new Date(),
-    })
-  } catch {
-    // Non-fatal: pull data was applied; advancing the watermark is best-effort.
-  }
+  // Pull success: 'ok' + advance the watermark (last_synced_at) so the next
+  // pull's updatedMin moves forward. This is the ONLY place last_synced_at
+  // may be bumped — push successes write 'ok' with touchLastSyncedAt: false.
+  await writeSyncStatusSafe(supabase, userId, {
+    syncStatus: 'ok',
+    lastError: null,
+    lastSyncedAt: new Date(),
+  })
 
   return result
 }

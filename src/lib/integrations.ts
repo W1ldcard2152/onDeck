@@ -134,11 +134,26 @@ export async function updateIntegrationTokens(
   return rowToIntegration(data as DbRow)
 }
 
+/**
+ * Write sync_status / last_error (and optionally last_synced_at) on the
+ * integration row.
+ *
+ * last_synced_at doubles as the pull watermark (pullTasks passes it to Google
+ * as updatedMin), so only pull completions may move it forward. By default an
+ * 'ok' write auto-stamps last_synced_at = now (pull behavior); push paths must
+ * pass touchLastSyncedAt: false so a successful push doesn't advance the
+ * watermark and skip Google-side changes on the next pull.
+ */
 export async function updateSyncStatus(
   supabase: SupabaseClient,
   userId: string,
   provider: IntegrationProvider,
-  status: { syncStatus: 'ok' | 'failed' | 'auth_expired'; lastError?: string | null; lastSyncedAt?: Date }
+  status: {
+    syncStatus: 'ok' | 'failed' | 'auth_expired'
+    lastError?: string | null
+    lastSyncedAt?: Date
+    touchLastSyncedAt?: boolean
+  }
 ): Promise<void> {
   const update: Record<string, unknown> = {
     sync_status: status.syncStatus,
@@ -146,7 +161,7 @@ export async function updateSyncStatus(
   }
   if (status.lastSyncedAt !== undefined) {
     update.last_synced_at = status.lastSyncedAt.toISOString()
-  } else if (status.syncStatus === 'ok') {
+  } else if (status.syncStatus === 'ok' && status.touchLastSyncedAt !== false) {
     update.last_synced_at = new Date().toISOString()
   }
 
