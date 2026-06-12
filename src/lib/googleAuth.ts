@@ -37,6 +37,11 @@ interface GoogleRefreshResponse {
  * returns it as-is. If it's expired or about to expire, refreshes via Google's
  * token endpoint, updates the stored tokens, and returns the fresh access token.
  *
+ * options.forceRefresh skips the expiry check and goes straight to the
+ * refresh-token exchange. Used by the 401-retry in googleTasksClient: outside
+ * the 60s leeway the stored token that just 401'd would otherwise be returned
+ * unchanged, making the retry a no-op.
+ *
  * Throws GoogleAuthError on:
  *  - 'not_connected': no google_tasks integration row for this user. Caller should
  *    surface "Reconnect Google" UI.
@@ -51,7 +56,8 @@ interface GoogleRefreshResponse {
  */
 export async function getValidAccessToken(
   supabase: SupabaseClient,
-  userId: string
+  userId: string,
+  options?: { forceRefresh?: boolean }
 ): Promise<string> {
   const integration = await getIntegration(supabase, userId, 'google_tasks')
   if (!integration) {
@@ -61,10 +67,12 @@ export async function getValidAccessToken(
     )
   }
 
-  const nowMs = Date.now()
-  const expiresMs = integration.expiresAt.getTime()
-  if (expiresMs - nowMs > REFRESH_LEEWAY_SECONDS * 1000) {
-    return integration.accessToken
+  if (!options?.forceRefresh) {
+    const nowMs = Date.now()
+    const expiresMs = integration.expiresAt.getTime()
+    if (expiresMs - nowMs > REFRESH_LEEWAY_SECONDS * 1000) {
+      return integration.accessToken
+    }
   }
 
   const clientId = process.env.GOOGLE_TASKS_CLIENT_ID

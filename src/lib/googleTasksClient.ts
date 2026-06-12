@@ -101,11 +101,11 @@ function mapHttpToCode(status: number, body: unknown): GoogleTasksApiError['code
  * Issue an authenticated request to the Tasks API. Handles the 401-retry-with-
  * fresh-token flow specified in the build doc. Maps HTTP status to typed errors.
  *
- * Note on the 401 retry: getValidAccessToken returns the cached access token
- * unless it's within 60s of expiry. So the retry only meaningfully refreshes
- * when our cached token has crossed the leeway window between fetches.
- * Beyond that, if Google revoked the token mid-flight, the retry will hit 401
- * again and we throw auth_expired — caller decides what to do.
+ * Note on the 401 retry: the retry forces a refresh-token exchange
+ * (forceRefresh) so it always retries with a genuinely new access token. If
+ * the refresh grant itself is rejected (invalid_grant), getValidAccessToken
+ * throws GoogleAuthError('auth_expired'); if Google still 401s the fresh
+ * token, we throw GoogleTasksApiError('auth_expired') — caller decides.
  */
 async function authedRequest(
   supabase: SupabaseClient,
@@ -144,10 +144,12 @@ async function authedRequest(
     )
   }
 
-  // Single 401 retry with a fresh token attempt.
+  // Single 401 retry with a forced token refresh — without forceRefresh,
+  // a token outside the 60s expiry leeway would be returned from storage
+  // unchanged and the retry would replay the same credentials.
   if (response.status === 401) {
     try {
-      token = await getValidAccessToken(supabase, userId)
+      token = await getValidAccessToken(supabase, userId, { forceRefresh: true })
     } catch (err) {
       throw err
     }
