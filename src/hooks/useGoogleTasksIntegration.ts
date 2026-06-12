@@ -1,19 +1,9 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react';
+import type { GoogleTasksStatus } from '@/contexts/GoogleSyncContext';
 
-// Mirrors Integration fields minus tokens, with dates as ISO strings (JSON-serialized form)
-export interface GoogleTasksStatus {
-  id: string;
-  userId: string;
-  provider: string;
-  expiresAt: string;
-  scopes: string[];
-  connectedAt: string;
-  lastSyncedAt: string | null;
-  syncStatus: 'ok' | 'failed' | 'auth_expired' | null;
-  lastError: string | null;
-}
+export type { GoogleTasksStatus };
 
 interface UseGoogleTasksIntegrationResult {
   integration: GoogleTasksStatus | null;

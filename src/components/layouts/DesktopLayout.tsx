@@ -21,6 +21,7 @@ import { defaultSettingsTab } from '@/components/settings/settingsTabs';
 import UserMenu from '../UserMenu';
 import IntegratedSearch from '../IntegratedSearch';
 import ClientLayout from './ClientLayout';
+import { GoogleSyncProvider } from '@/contexts/GoogleSyncContext';
 import InstallPWA from '../InstallPWA';
 import OfflineNotification from '../OfflineNotification';
 import PWANavigationBar from '../PWANavigationBar';
@@ -260,6 +261,7 @@ const DesktopLayout = () => {
   };
 
   return (
+    <GoogleSyncProvider>
     <ClientLayout>
       <div className="min-h-screen bg-gray-50">
         {/* PWA Navigation Bar - shows only in PWA mode */}
@@ -363,6 +365,7 @@ const DesktopLayout = () => {
         onViewAllFeedback={() => setActiveSection('feedback')}
       />
     </ClientLayout>
+    </GoogleSyncProvider>
   );
 };
 
