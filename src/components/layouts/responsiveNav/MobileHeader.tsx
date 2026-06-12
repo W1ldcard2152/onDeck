@@ -4,6 +4,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import UserMenu from '@/components/UserMenu';
 import { SearchInput } from '@/components/SearchInput';
+import { SyncStatusIndicator } from '@/components/sync/SyncStatusIndicator';
 import type { SectionType } from './types';
 
 interface MobileHeaderProps {
@@ -11,13 +12,16 @@ interface MobileHeaderProps {
   onSectionChange?: (section: SectionType) => void;
   onFeedbackClick?: () => void;
   onSettingsClick?: () => void;
+  /** Navigate to Settings → Google Sync (used by the sync indicator popover). */
+  onSyncSettingsClick?: () => void;
 }
 
 export const MobileHeader: React.FC<MobileHeaderProps> = ({
   className,
   onSectionChange,
   onFeedbackClick,
-  onSettingsClick
+  onSettingsClick,
+  onSyncSettingsClick
 }) => {
   const [isSearchExpanded, setIsSearchExpanded] = useState(false);
 
@@ -64,6 +68,11 @@ export const MobileHeader: React.FC<MobileHeaderProps> = ({
         >
           <Search className="h-5 w-5 text-gray-600" />
         </Button>
+
+        <SyncStatusIndicator
+          variant="mobile"
+          onNavigateToSettings={onSyncSettingsClick}
+        />
 
         <Button
           variant="ghost"

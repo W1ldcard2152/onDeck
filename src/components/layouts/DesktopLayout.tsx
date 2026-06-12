@@ -22,6 +22,7 @@ import UserMenu from '../UserMenu';
 import IntegratedSearch from '../IntegratedSearch';
 import ClientLayout from './ClientLayout';
 import { GoogleSyncProvider } from '@/contexts/GoogleSyncContext';
+import { SyncStatusIndicator } from '@/components/sync/SyncStatusIndicator';
 import InstallPWA from '../InstallPWA';
 import OfflineNotification from '../OfflineNotification';
 import PWANavigationBar from '../PWANavigationBar';
@@ -283,6 +284,7 @@ const DesktopLayout = () => {
             onSectionChange={setActiveSection}
             onFeedbackClick={() => setIsFeedbackModalOpen(true)}
             onSettingsClick={() => navigateToSettings(defaultSettingsTab)}
+            onSyncSettingsClick={() => navigateToSettings('google-sync')}
           />
           
           {/* Install PWA Prompt - Only visible on mobile */}
@@ -305,7 +307,11 @@ const DesktopLayout = () => {
               <div className="hidden md:block w-auto mr-2">
                 <InstallPWA />
               </div>
-              <button 
+              <SyncStatusIndicator
+                variant="desktop"
+                onNavigateToSettings={() => navigateToSettings('google-sync')}
+              />
+              <button
                 type="button"
                 className="p-2 hover:bg-gray-100 rounded-lg"
                 onClick={() => setIsFeedbackModalOpen(true)}
