@@ -9,6 +9,25 @@ import * as taskService from '@/lib/taskService'
 
 export type { CreateTaskInput, UpdateTaskInput, TaskRow } from '@/lib/taskService'
 
+/**
+ * Shape returned by /api/sync/now's `pulled` field. Defined locally to keep
+ * useTasks free of any server-only sync-lib imports. The route's response
+ * matches this exactly; see src/lib/googleTasksSync.ts for the source.
+ */
+export interface PullResult {
+  inserted: number
+  updated: number
+  deleted: number
+  conflicts_resolved: number
+}
+
+const EMPTY_PULL_RESULT: PullResult = {
+  inserted: 0,
+  updated: 0,
+  deleted: 0,
+  conflicts_resolved: 0,
+}
+
 export function useTasks(
   userId: string | undefined,
   limit: number = 50,
@@ -24,6 +43,10 @@ export function useTasks(
   const isFetchingRef = useRef(false)
   // Track last refresh time to avoid duplicate fetches in short time periods
   const lastRefreshTimeRef = useRef<number>(0)
+  // Sync concurrency guard + last-synced-userId so the mount-time sync runs
+  // exactly once per (sign-in) session, not per filter/dep change.
+  const syncInFlightRef = useRef(false)
+  const lastSyncedUserIdRef = useRef<string | null>(null)
 
   const fetchTasks = useCallback(async () => {
     // Prevent fetch if already in progress
@@ -347,6 +370,89 @@ export function useTasks(
     [userId]
   )
 
+  /**
+   * Manual / mount-time Google Tasks sync via the server-side route.
+   *
+   * Hits POST /api/sync/now, which server-side:
+   *   1. Drains unprocessed deletion tombstones.
+   *   2. Pulls Google changes and reconciles locally.
+   * Then we refetch local task state so the UI reflects what changed.
+   *
+   * A 409 response means the user hasn't connected Google Tasks yet — treat
+   * as a silent success (return zeros + refresh local state).
+   * A 401 with body { error: 'auth_expired' } means the refresh token was
+   * rejected; the route already marked sync_status. Caller may surface UI.
+   * Other failures throw.
+   */
+  const syncNow = useCallback(
+    async (): Promise<{ pulled: PullResult; pushedDeletions: number }> => {
+      if (!userId) {
+        throw new Error('useTasks: cannot syncNow without authenticated user')
+      }
+      const res = await fetch('/api/sync/now', { method: 'POST' })
+
+      if (res.status === 409) {
+        // Not configured — treat as a silent no-op success.
+        await fetchTasks()
+        return { pulled: EMPTY_PULL_RESULT, pushedDeletions: 0 }
+      }
+
+      if (!res.ok) {
+        let detail = ''
+        try {
+          const body = await res.json()
+          if (body?.error) detail = `: ${body.error}`
+        } catch {
+          // ignore
+        }
+        throw new Error(`Sync failed (${res.status})${detail}`)
+      }
+
+      const data = (await res.json()) as {
+        pulled: PullResult
+        pushedDeletions: number
+      }
+      await fetchTasks()
+      return data
+    },
+    [userId, fetchTasks]
+  )
+
+  // Mount-time sync trigger. Fires once per userId (sign-in) session — runs
+  // when userId becomes defined and again only if userId changes (sign-out
+  // then sign-in as someone else). lastSyncedUserIdRef is set *after* a
+  // successful sync (not synchronously up front) so the StrictMode dev-mode
+  // mount → cleanup → mount sequence retries on the second mount instead of
+  // gating itself out. syncInFlightRef still prevents overlap within a real
+  // run. Skips silently if sync isn't configured (the route returns 409, which
+  // syncNow treats as a no-op). Runs concurrent with the regular fetchTasks
+  // read path so it doesn't block initial render.
+  useEffect(() => {
+    if (!userId) return
+    if (lastSyncedUserIdRef.current === userId) return
+    if (syncInFlightRef.current) return
+
+    let cancelled = false
+    syncInFlightRef.current = true
+
+    ;(async () => {
+      try {
+        await syncNow()
+        if (!cancelled) lastSyncedUserIdRef.current = userId
+      } catch (err) {
+        if (!cancelled) {
+          console.error('[useTasks] mount-time sync failed:', err)
+        }
+      } finally {
+        syncInFlightRef.current = false
+      }
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [userId, syncNow])
+
   return {
     tasks,
     isLoading,
@@ -364,5 +470,6 @@ export function useTasks(
     deleteIncompleteHabitTasks,
     deleteIncompleteProjectTasks,
     countTasksByContext,
+    syncNow,
   }
 }

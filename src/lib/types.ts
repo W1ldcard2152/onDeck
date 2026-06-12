@@ -74,6 +74,11 @@ export interface TaskWithDetails {
   daily_context?: string | null; // JSON array of context UUIDs, or null for all-day
   sort_order: number; // Manual sort order within context
   checklist_template_id: string | null;
+  // Google Tasks sync columns (added by google-tasks-sync-migration.sql).
+  // All three null until the row has been reconciled with Google at least once.
+  google_task_id?: string | null;
+  google_etag?: string | null;
+  last_synced_at?: string | null;
   item: Item;
   _pending?: boolean; // true for offline-queued items not yet synced
 }

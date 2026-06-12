@@ -1,3 +1,9 @@
+import 'server-only'
+
+// SERVER-ONLY: this module reads INTEGRATION_ENCRYPTION_KEY via encryption.ts
+// to decrypt stored OAuth tokens. Do not import from 'use client' files.
+// Use the /api/sync/* or /api/integrations/* routes instead.
+
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { encryptToken, decryptToken } from './encryption'
 

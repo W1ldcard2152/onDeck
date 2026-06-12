@@ -2,6 +2,45 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import type { TaskWithDetails, Item } from '@/lib/types'
 import { nowISO } from '@/lib/timezone'
 
+// ---- Background sync triggers (Phase 3b.4) ----
+//
+// Sync execution lives behind /api/sync/* routes (server-only, has env vars
+// and Google network egress). taskService runs on both client and server, so
+// the triggers below fire fetch() against the route from whichever context
+// invoked the mutation. The route returns immediately; the actual Google API
+// call happens server-side.
+//
+// We don't await the fetch — these are fire-and-forget. Errors are logged
+// only; they never affect the local write's success.
+
+function pushTaskInBackground(taskId: string): void {
+  // No-op on server side: there's no relative-fetch context, and server-side
+  // mutations (sync routes) deliberately bypass this trigger anyway.
+  if (typeof window === 'undefined') return
+  void (async () => {
+    try {
+      await fetch('/api/sync/push-task', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ taskId }),
+      })
+    } catch (err) {
+      console.error('[taskService] background push failed:', err)
+    }
+  })()
+}
+
+function pushPendingDeletionsInBackground(): void {
+  if (typeof window === 'undefined') return
+  void (async () => {
+    try {
+      await fetch('/api/sync/push-deletions', { method: 'POST' })
+    } catch (err) {
+      console.error('[taskService] background deletion drain failed:', err)
+    }
+  })()
+}
+
 // ---- Types ----
 
 export interface CreateTaskInput {
@@ -44,7 +83,7 @@ function serializeDailyContext(value: string[] | null | undefined): string | nul
   return JSON.stringify(value)
 }
 
-async function fetchTaskWithDetails(
+export async function fetchTaskWithDetails(
   supabase: SupabaseClient,
   userId: string,
   taskId: string
@@ -153,7 +192,9 @@ export async function createTask(
     throw taskError
   }
 
-  return fetchTaskWithDetails(supabase, input.userId, item.id)
+  const result = await fetchTaskWithDetails(supabase, input.userId, item.id)
+  pushTaskInBackground(result.id)
+  return result
 }
 
 export async function deleteTask(
@@ -161,6 +202,27 @@ export async function deleteTask(
   userId: string,
   taskId: string
 ): Promise<void> {
+  // Read google_task_id before delete so we can write a sync tombstone.
+  const { data: existing, error: selectError } = await supabase
+    .from('tasks')
+    .select('google_task_id')
+    .eq('id', taskId)
+    .maybeSingle()
+  if (selectError) throw selectError
+  const googleTaskId =
+    (existing as { google_task_id: string | null } | null)?.google_task_id ?? null
+
+  // Tombstone first: if it succeeds but the local delete fails, the next push
+  // will delete the Google row, and the next pull will reconcile the local
+  // (it'll still exist locally, but Google will report it deleted via
+  // showDeleted=true). Eventually consistent. The reverse order would be worse.
+  if (googleTaskId) {
+    const { error: tombstoneError } = await supabase
+      .from('task_deletions')
+      .insert({ user_id: userId, google_task_id: googleTaskId })
+    if (tombstoneError) throw tombstoneError
+  }
+
   const { error: taskError } = await supabase
     .from('tasks')
     .delete()
@@ -173,6 +235,10 @@ export async function deleteTask(
     .eq('id', taskId)
     .eq('user_id', userId)
   if (itemError) throw itemError
+
+  if (googleTaskId) {
+    pushPendingDeletionsInBackground()
+  }
 }
 
 export async function deleteTasks(
@@ -181,6 +247,26 @@ export async function deleteTasks(
   taskIds: string[]
 ): Promise<void> {
   if (taskIds.length === 0) return
+
+  // Read google_task_ids before delete so we can write sync tombstones.
+  const { data: existing, error: selectError } = await supabase
+    .from('tasks')
+    .select('id, google_task_id')
+    .in('id', taskIds)
+  if (selectError) throw selectError
+
+  const tombstones = ((existing ?? []) as Array<{ id: string; google_task_id: string | null }>)
+    .filter(r => r.google_task_id)
+    .map(r => ({ user_id: userId, google_task_id: r.google_task_id as string }))
+
+  // Tombstone first (same reasoning as deleteTask: orphan tombstones are
+  // recoverable via pull; orphan google rows after a partial delete are not).
+  if (tombstones.length > 0) {
+    const { error: tombstoneError } = await supabase
+      .from('task_deletions')
+      .insert(tombstones)
+    if (tombstoneError) throw tombstoneError
+  }
 
   const errors: string[] = []
 
@@ -199,6 +285,10 @@ export async function deleteTasks(
 
   if (errors.length > 0) {
     throw new Error(`deleteTasks(${taskIds.length} ids): ${errors.join('; ')}`)
+  }
+
+  if (tombstones.length > 0) {
+    pushPendingDeletionsInBackground()
   }
 }
 
@@ -250,7 +340,9 @@ export async function updateTask(
     .eq('user_id', userId)
   if (itemError) throw itemError
 
-  return fetchTaskWithDetails(supabase, userId, taskId)
+  const result = await fetchTaskWithDetails(supabase, userId, taskId)
+  pushTaskInBackground(result.id)
+  return result
 }
 
 export async function updateTaskStatus(
@@ -282,6 +374,9 @@ export async function updateTaskPriority(
  * pair in an inconsistent ordering. Acceptable for now since both touch a single
  * integer column and the worst-case repair is one more user click. If this proves
  * problematic, replace with a Postgres function (RPC) in a follow-up migration.
+ *
+ * No Google Tasks push: sort_order is a Praxis-only ordering concept; Google
+ * Tasks has its own ordering (`position`) that we deliberately don't sync.
  */
 export async function swapTaskOrder(
   supabase: SupabaseClient,
@@ -315,6 +410,9 @@ export async function swapTaskOrder(
  * Each row needs its own sort_order, so this is N parallel UPDATEs (no .in()
  * batch path). Per-row failures are aggregated; partial success can leave
  * inconsistent ordering. Like swapTaskOrder, non-transactional — a future
+ *
+ * No Google Tasks push: sort_order is Praxis-only (see swapTaskOrder note).
+ * Future
  * Postgres function could make this atomic; documented as a known limitation.
  *
  * The items.updated_at bump is one IN-clause UPDATE for all affected ids
@@ -364,6 +462,10 @@ export async function reorderTasks(
  * Update a single field across all incomplete tasks for a habit.
  * Used when a habit's checklist_template_id changes — propagates to all open
  * habit-generated tasks. Restricted to checklist_template_id; do not generalize.
+ *
+ * No Google Tasks push: checklist_template_id is a Praxis-internal field that
+ * doesn't map to anything in Google Tasks. (If this method is ever generalized
+ * to user-visible fields like title or status, add a per-row push here.)
  */
 export async function updateHabitTasksField(
   supabase: SupabaseClient,
